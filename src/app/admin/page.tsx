@@ -6,13 +6,14 @@ import { useRouter } from "next/navigation";
 import { WhitelistManager } from "@/components/admin/WhitelistManager";
 import { UserStats } from "@/components/admin/UserStats";
 import { PromptManager } from "@/components/admin/PromptManager";
+import { AdminUtilities } from "@/components/admin/AdminUtilities";
 import { LoadingPage } from "@/components/ui/loading";
 import { WhitelistEntryClient, UserStats as UserStatsType } from "@/types";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
-type Tab = "whitelist" | "users" | "prompts";
+type Tab = "whitelist" | "users" | "prompts" | "utilities";
 
 export default function AdminPage() {
   const { data: session, status } = useSession();
@@ -138,6 +139,16 @@ export default function AdminPage() {
             >
               User Statistics
             </button>
+            <button
+              onClick={() => setActiveTab("utilities")}
+              className={`${
+                activeTab === "utilities"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+            >
+              Utilities
+            </button>
           </nav>
         </div>
 
@@ -148,6 +159,7 @@ export default function AdminPage() {
             <WhitelistManager initialWhitelist={whitelist} onUpdate={loadData} />
           )}
           {activeTab === "users" && <UserStats users={userStats} />}
+          {activeTab === "utilities" && <AdminUtilities />}
         </div>
       </main>
     </div>

@@ -32,12 +32,7 @@ export default function ChatPage() {
     }
   }, [session]);
 
-  // Create a new conversation on mount if none exist
-  useEffect(() => {
-    if (session?.user && conversations.length === 0 && !conversationId) {
-      createConversation();
-    }
-  }, [session, conversations, conversationId]);
+  // Don't auto-create conversations - wait for user to send first message
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -62,25 +57,11 @@ export default function ChatPage() {
     }
   };
 
-  const createConversation = async () => {
-    try {
-      const response = await fetch("/api/conversations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: "New Conversation",
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setConversationId(data.id);
-        setMessages([]);
-        await loadConversations();
-      }
-    } catch (error) {
-      console.error("Failed to create conversation:", error);
-    }
+  const createConversation = () => {
+    // Reset to new conversation state without creating in database
+    // Conversation will be created when first message is sent
+    setConversationId(null);
+    setMessages([]);
   };
 
   const loadConversation = async (id: string) => {
@@ -126,7 +107,31 @@ export default function ChatPage() {
   };
 
   const handleSendMessage = async (content: string) => {
-    if (!conversationId) return;
+    // Create conversation if it doesn't exist
+    let currentConversationId = conversationId;
+    if (!currentConversationId) {
+      try {
+        const response = await fetch("/api/conversations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: "New Conversation",
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          currentConversationId = data.id;
+          setConversationId(data.id);
+        } else {
+          console.error("Failed to create conversation");
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to create conversation:", error);
+        return;
+      }
+    }
 
     // Add user message immediately
     const userMessage: MessageClient = {
@@ -153,7 +158,7 @@ export default function ChatPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          conversationId,
+          conversationId: currentConversationId,
           message: content,
         }),
       });
