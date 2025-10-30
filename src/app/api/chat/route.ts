@@ -1,8 +1,10 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db, COLLECTIONS } from "@/lib/firebase-admin";
-import { streamGeminiResponse, MODEL_NAME, generateConversationTitle } from "@/lib/gemini";
+import { generateConversationTitle } from "@/lib/gemini";
 import { getActivePrompt, processPromptVariables } from "@/lib/prompts";
+import { ProviderFactory } from "@/lib/providers/provider-factory";
+import { AIMessage } from "@/types/ai-providers";
 import { NextRequest } from "next/server";
 
 export async function POST(req: NextRequest) {
@@ -49,8 +51,8 @@ export async function POST(req: NextRequest) {
       .orderBy("created_at", "asc")
       .get();
 
-    const messages = messagesSnapshot.docs.map((doc) => ({
-      role: doc.data().role,
+    const messages: AIMessage[] = messagesSnapshot.docs.map((doc) => ({
+      role: doc.data().role as "user" | "assistant",
       content: doc.data().content,
     }));
 
@@ -73,14 +75,17 @@ export async function POST(req: NextRequest) {
       currentTime: new Date().toLocaleTimeString(),
     });
 
-    // Stream response from Gemini
+    // Create AI provider instance
+    const provider = ProviderFactory.createDefaultProvider();
+
+    // Stream response from AI provider
     const encoder = new TextEncoder();
     let fullResponse = "";
 
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const chunk of streamGeminiResponse(
+          for await (const chunk of provider.streamResponse(
             messages,
             processedPrompt,
             promptConfig.temperature
