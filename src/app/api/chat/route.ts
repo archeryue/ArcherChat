@@ -6,6 +6,7 @@ import { getActivePrompt, processPromptVariables } from "@/lib/prompts";
 import { ProviderFactory } from "@/lib/providers/provider-factory";
 import { AIMessage } from "@/types/ai-providers";
 import { NextRequest } from "next/server";
+import { loadMemoryForChat, processConversationMemory, cleanupUserMemory } from "@/lib/memory";
 
 export async function POST(req: NextRequest) {
   try {
@@ -75,6 +76,12 @@ export async function POST(req: NextRequest) {
       currentTime: new Date().toLocaleTimeString(),
     });
 
+    // Load user's memory and append to system prompt
+    const memoryContext = await loadMemoryForChat(session.user.id);
+    const finalPrompt = memoryContext
+      ? `${processedPrompt}\n\n${memoryContext}`
+      : processedPrompt;
+
     // Create AI provider instance
     const provider = ProviderFactory.createDefaultProvider();
 
@@ -87,7 +94,7 @@ export async function POST(req: NextRequest) {
         try {
           for await (const chunk of provider.streamResponse(
             messages,
-            processedPrompt,
+            finalPrompt,
             promptConfig.temperature
           )) {
             fullResponse += chunk;
@@ -112,6 +119,12 @@ export async function POST(req: NextRequest) {
           await conversationRef.update({
             updated_at: new Date(),
           });
+
+          // Trigger memory extraction in background (don't await)
+          // Pass user message to enable keyword-based triggering
+          processConversationMemory(conversationId, session.user.id, message)
+            .then(() => cleanupUserMemory(session.user.id))
+            .catch((err) => console.error("Memory processing error:", err));
 
           controller.close();
         } catch (error) {

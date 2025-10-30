@@ -1,5 +1,8 @@
 import { Timestamp } from "firebase-admin/firestore";
 
+// Re-export memory types
+export * from "./memory";
+
 export interface User {
   email: string;
   name: string;
