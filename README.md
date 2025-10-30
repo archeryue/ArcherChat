@@ -152,7 +152,7 @@ For family use (5-10 users, ~1000 messages/month):
 
 ## Deployment
 
-See [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) Phase 10 for deployment instructions.
+For complete deployment instructions to Google Cloud Run, see [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md).
 
 ## Troubleshooting
 
