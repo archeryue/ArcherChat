@@ -98,14 +98,16 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
     const lastMessage = messages[messages.length - 1];
     const isImageRequest = this.isImageGenerationRequest(lastMessage.content);
 
-    // For image requests, use the same model but with image response modalities
-    // Gemini 2.0 Flash Experimental supports both text and image generation natively
-    const modelName = this.modelName; // Always use gemini-2.0-flash-exp
+    // Use dedicated image generation model for better quality
+    const modelName = isImageRequest
+      ? "gemini-2.0-flash-preview-image-generation"
+      : this.modelName;
 
     // Configure for image generation if needed
     const generationConfig: any = {
       temperature: temperature ?? 0.7,
-      maxOutputTokens: isImageRequest ? 2048 : undefined,
+      // Don't limit tokens for image generation to get better quality
+      maxOutputTokens: isImageRequest ? 8192 : undefined,
     };
 
     // Add response modalities for image generation
@@ -159,6 +161,7 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
               hasImage = true;
               const imageData = part.inlineData.data;
               const mimeType = part.inlineData.mimeType || 'image/png';
+              console.log(`Image generated! MimeType: ${mimeType}, Data length: ${imageData?.length || 0} chars`);
               yield `\n\n![Generated Image](data:${mimeType};base64,${imageData})\n\n`;
             }
           }
@@ -229,13 +232,16 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
     const lastMessage = messages[messages.length - 1];
     const isImageRequest = this.isImageGenerationRequest(lastMessage.content);
 
-    // Use the same model with proper configuration
-    const modelName = this.modelName;
+    // Use dedicated image generation model for better quality
+    const modelName = isImageRequest
+      ? "gemini-2.0-flash-preview-image-generation"
+      : this.modelName;
 
     // Configure for image generation if needed
     const generationConfig: any = {
       temperature: temperature ?? 0.7,
-      maxOutputTokens: isImageRequest ? 2048 : undefined,
+      // Don't limit tokens for image generation to get better quality
+      maxOutputTokens: isImageRequest ? 8192 : undefined,
     };
 
     // Add response modalities for image generation
@@ -396,6 +402,7 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
       supportsStreaming: true,
       supportedModels: [
         "gemini-2.0-flash-exp",
+        "gemini-2.0-flash-preview-image-generation",
         "gemini-1.5-pro",
         "gemini-1.5-flash",
       ],

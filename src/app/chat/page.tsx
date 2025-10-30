@@ -182,11 +182,27 @@ export default function ChatPage() {
           const chunk = decoder.decode(value);
           assistantContent += chunk;
 
+          // Extract image data if present and store separately
+          const imageMatch = assistantContent.match(/!\[Generated Image\]\(data:(image\/[^;]+);base64,([A-Za-z0-9+/=]+)\)/);
+
+          let contentToDisplay = assistantContent;
+          let imageData = undefined;
+
+          if (imageMatch) {
+            // Extract image data and remove from content
+            imageData = imageMatch[2];
+            contentToDisplay = assistantContent.replace(/!\[Generated Image\]\(data:image\/[^;]+;base64,[A-Za-z0-9+/=]+\)/, '');
+          }
+
           // Update assistant message with streamed content
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === assistantMessageId
-                ? { ...msg, content: assistantContent }
+                ? {
+                    ...msg,
+                    content: contentToDisplay.trim(),
+                    image_data: imageData
+                  }
                 : msg
             )
           );

@@ -95,9 +95,16 @@ export async function POST(req: NextRequest) {
           }
 
           // Save assistant message
+          // Strip base64 image data to avoid Firestore size limits (1MB max)
+          // Images will display during session but won't persist after reload
+          const contentToSave = fullResponse.replace(
+            /data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g,
+            'data:image/png;base64,[image-data-removed-due-to-size]'
+          );
+
           await conversationRef.collection(COLLECTIONS.MESSAGES).add({
             role: "assistant",
-            content: fullResponse,
+            content: contentToSave,
             created_at: new Date(),
           });
 
