@@ -21,7 +21,7 @@ export function ChatSidebar({
   onDeleteConversation,
 }: ChatSidebarProps) {
   return (
-    <div className="w-64 bg-white border-r flex flex-col h-full">
+    <div className="w-64 flex-shrink-0 bg-white border-r flex flex-col h-full">
       {/* Header */}
       <div className="p-4 border-b">
         <Button

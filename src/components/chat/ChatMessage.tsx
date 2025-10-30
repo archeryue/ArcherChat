@@ -43,11 +43,11 @@ export function ChatMessage({ message, userName, userAvatar }: ChatMessageProps)
         )}
       </div>
 
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 overflow-hidden">
         <div className="font-semibold text-sm mb-1">
           {isUser ? userName || "You" : "Assistant"}
         </div>
-        <div className="prose prose-sm max-w-none">
+        <div className="prose prose-sm max-w-none break-words overflow-x-auto">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             rehypePlugins={[rehypeHighlight]}
@@ -65,6 +65,13 @@ export function ChatMessage({ message, userName, userAvatar }: ChatMessageProps)
                   >
                     {children}
                   </code>
+                );
+              },
+              pre({ children, ...props }) {
+                return (
+                  <pre className="overflow-x-auto" {...props}>
+                    {children}
+                  </pre>
                 );
               },
             }}
