@@ -92,8 +92,9 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
     const lastMessage = messages[messages.length - 1];
     const isImageRequest = this.isImageGenerationRequest(lastMessage.content);
 
-    // Use image generation model for image requests
-    const modelName = isImageRequest ? "gemini-2.5-flash-image" : this.modelName;
+    // Try image generation model first, fallback to standard model with descriptive prompt
+    let useImageModel = isImageRequest;
+    let modelName = isImageRequest ? "gemini-2.5-flash-image" : this.modelName;
 
     // Configure for image generation if needed
     const generationConfig: any = {
@@ -102,32 +103,37 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
     };
 
     // Add response modalities for image generation
-    if (isImageRequest) {
+    if (isImageRequest && useImageModel) {
       generationConfig.responseModalities = ["TEXT", "IMAGE"];
     }
 
     // Use special prompt for image generation requests
-    const effectivePrompt = isImageRequest
-      ? "You are an AI that can generate images. When asked to create an image, describe it and generate it."
-      : systemPrompt;
-
-    const model = this.client.getGenerativeModel({
-      model: modelName,
-      systemInstruction: effectivePrompt,
-      generationConfig,
-    });
-
-    // Convert messages to Gemini format
-    const history = messages.slice(0, -1).map((msg) => ({
-      role: msg.role === "user" ? "user" : ("model" as const),
-      parts: [{ text: msg.content }],
-    }));
-
-    const chat = model.startChat({
-      history: history,
-    });
+    let effectivePrompt = systemPrompt;
+    if (isImageRequest) {
+      if (useImageModel) {
+        effectivePrompt = "You are an AI that can generate images. When asked to create an image, describe it and generate it.";
+      } else {
+        effectivePrompt = this.getImageGenerationPrompt();
+      }
+    }
 
     try {
+      const model = this.client.getGenerativeModel({
+        model: modelName,
+        systemInstruction: effectivePrompt,
+        generationConfig,
+      });
+
+      // Convert messages to Gemini format
+      const history = messages.slice(0, -1).map((msg) => ({
+        role: msg.role === "user" ? "user" : ("model" as const),
+        parts: [{ text: msg.content }],
+      }));
+
+      const chat = model.startChat({
+        history: history,
+      });
+
       const result = await chat.sendMessageStream(lastMessage.content);
       let hasImage = false;
 
@@ -153,13 +159,55 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
           if (text) yield text;
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Gemini API Error:", error);
-      // If image generation fails, provide helpful feedback
-      if (isImageRequest) {
-        yield "\n\n*Note: Image generation requires the Gemini 2.5 Flash Image model. Please ensure your API key has access to this model. Cost is approximately $0.039 per image.*";
+
+      // If image model fails, retry with standard model
+      if (isImageRequest && useImageModel) {
+        console.log("Image model not available, falling back to descriptive mode");
+
+        // Fallback to standard model with descriptive prompt
+        const fallbackModel = this.client.getGenerativeModel({
+          model: this.modelName,
+          systemInstruction: this.getImageGenerationPrompt(),
+          generationConfig: {
+            temperature: temperature ?? 0.7,
+            maxOutputTokens: 2048,
+          },
+        });
+
+        const history = messages.slice(0, -1).map((msg) => ({
+          role: msg.role === "user" ? "user" : ("model" as const),
+          parts: [{ text: msg.content }],
+        }));
+
+        const chat = fallbackModel.startChat({
+          history: history,
+        });
+
+        try {
+          const result = await chat.sendMessageStream(lastMessage.content);
+
+          yield "**Note:** Image generation model is not available. I'll provide a detailed description instead.\n\n";
+          yield "---\n\n";
+
+          for await (const chunk of result.stream) {
+            const text = chunk.text();
+            if (text) yield text;
+          }
+
+          yield "\n\n---\n\n";
+          yield "*To enable actual image generation:*\n";
+          yield "1. Ensure your Google AI API key has access to `gemini-2.5-flash-image` model\n";
+          yield "2. Image generation costs $0.039 per image\n";
+          yield "3. You may need to enable this feature in Google AI Studio\n";
+        } catch (fallbackError) {
+          console.error("Fallback error:", fallbackError);
+          throw fallbackError;
+        }
+      } else {
+        throw error;
       }
-      throw error;
     }
   }
 
@@ -171,8 +219,9 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
     const lastMessage = messages[messages.length - 1];
     const isImageRequest = this.isImageGenerationRequest(lastMessage.content);
 
-    // Use image generation model for image requests
-    const modelName = isImageRequest ? "gemini-2.5-flash-image" : this.modelName;
+    // Try image generation model first, fallback to standard model
+    let useImageModel = isImageRequest;
+    let modelName = isImageRequest ? "gemini-2.5-flash-image" : this.modelName;
 
     // Configure for image generation if needed
     const generationConfig: any = {
@@ -181,32 +230,35 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
     };
 
     // Add response modalities for image generation
-    if (isImageRequest) {
+    if (isImageRequest && useImageModel) {
       generationConfig.responseModalities = ["TEXT", "IMAGE"];
     }
 
     // Use special prompt for image generation requests
-    const effectivePrompt = isImageRequest
-      ? "You are an AI that can generate images. When asked to create an image, describe it and generate it."
-      : systemPrompt;
-
-    const model = this.client.getGenerativeModel({
-      model: modelName,
-      systemInstruction: effectivePrompt,
-      generationConfig,
-    });
-
-    // Convert messages to Gemini format
-    const history = messages.slice(0, -1).map((msg) => ({
-      role: msg.role === "user" ? "user" : ("model" as const),
-      parts: [{ text: msg.content }],
-    }));
-
-    const chat = model.startChat({
-      history: history,
-    });
+    let effectivePrompt = systemPrompt;
+    if (isImageRequest) {
+      effectivePrompt = useImageModel
+        ? "You are an AI that can generate images. When asked to create an image, describe it and generate it."
+        : this.getImageGenerationPrompt();
+    }
 
     try {
+      const model = this.client.getGenerativeModel({
+        model: modelName,
+        systemInstruction: effectivePrompt,
+        generationConfig,
+      });
+
+      // Convert messages to Gemini format
+      const history = messages.slice(0, -1).map((msg) => ({
+        role: msg.role === "user" ? "user" : ("model" as const),
+        parts: [{ text: msg.content }],
+      }));
+
+      const chat = model.startChat({
+        history: history,
+      });
+
       const result = await chat.sendMessage(lastMessage.content);
       const response = result.response;
       let fullContent = "";
@@ -233,24 +285,70 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
         content: fullContent,
         finishReason: "stop",
         usage: {
-          // Gemini doesn't provide token counts in free tier
           promptTokens: 0,
           completionTokens: 0,
           totalTokens: 0,
         },
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error("Gemini API Error:", error);
-      if (isImageRequest) {
-        return {
-          content: "I apologize, but I cannot generate images at this moment. Image generation requires the Gemini 2.5 Flash Image model which may not be available with your current API key. Please ensure your API key has access to this model (cost is approximately $0.039 per image).",
-          finishReason: "stop",
-          usage: {
-            promptTokens: 0,
-            completionTokens: 0,
-            totalTokens: 0,
-          },
-        };
+
+      // If image model fails, retry with standard model
+      if (isImageRequest && useImageModel) {
+        console.log("Image model not available, falling back to descriptive mode");
+
+        try {
+          // Fallback to standard model with descriptive prompt
+          const fallbackModel = this.client.getGenerativeModel({
+            model: this.modelName,
+            systemInstruction: this.getImageGenerationPrompt(),
+            generationConfig: {
+              temperature: temperature ?? 0.7,
+              maxOutputTokens: 2048,
+            },
+          });
+
+          const history = messages.slice(0, -1).map((msg) => ({
+            role: msg.role === "user" ? "user" : ("model" as const),
+            parts: [{ text: msg.content }],
+          }));
+
+          const chat = fallbackModel.startChat({
+            history: history,
+          });
+
+          const result = await chat.sendMessage(lastMessage.content);
+          const response = result.response;
+
+          let fallbackContent = "**Note:** Image generation model is not available. I'll provide a detailed description instead.\n\n---\n\n";
+          fallbackContent += response.text();
+          fallbackContent += "\n\n---\n\n";
+          fallbackContent += "*To enable actual image generation:*\n";
+          fallbackContent += "1. Ensure your Google AI API key has access to `gemini-2.5-flash-image` model\n";
+          fallbackContent += "2. Image generation costs $0.039 per image\n";
+          fallbackContent += "3. You may need to enable this feature in Google AI Studio\n";
+
+          return {
+            content: fallbackContent,
+            finishReason: "stop",
+            usage: {
+              promptTokens: 0,
+              completionTokens: 0,
+              totalTokens: 0,
+            },
+          };
+        } catch (fallbackError) {
+          console.error("Fallback error:", fallbackError);
+          return {
+            content: "I apologize, but I cannot process this image generation request at the moment. Please try again later.",
+            finishReason: "stop",
+            usage: {
+              promptTokens: 0,
+              completionTokens: 0,
+              totalTokens: 0,
+            },
+          };
+        }
       }
       throw error;
     }
