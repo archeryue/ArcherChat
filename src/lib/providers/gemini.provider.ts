@@ -92,19 +92,29 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
     const lastMessage = messages[messages.length - 1];
     const isImageRequest = this.isImageGenerationRequest(lastMessage.content);
 
+    // Use image generation model for image requests
+    const modelName = isImageRequest ? "gemini-2.5-flash-image" : this.modelName;
+
+    // Configure for image generation if needed
+    const generationConfig: any = {
+      temperature: temperature ?? 0.7,
+      maxOutputTokens: isImageRequest ? 2048 : undefined,
+    };
+
+    // Add response modalities for image generation
+    if (isImageRequest) {
+      generationConfig.responseModalities = ["TEXT", "IMAGE"];
+    }
+
     // Use special prompt for image generation requests
     const effectivePrompt = isImageRequest
-      ? this.getImageGenerationPrompt()
+      ? "You are an AI that can generate images. When asked to create an image, describe it and generate it."
       : systemPrompt;
 
-    // Use gemini-2.0-flash-exp which has native image generation
     const model = this.client.getGenerativeModel({
-      model: this.modelName,
+      model: modelName,
       systemInstruction: effectivePrompt,
-      generationConfig: {
-        temperature: temperature ?? 0.7,
-        maxOutputTokens: isImageRequest ? 2048 : undefined,
-      },
+      generationConfig,
     });
 
     // Convert messages to Gemini format
@@ -119,13 +129,36 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
 
     try {
       const result = await chat.sendMessageStream(lastMessage.content);
+      let hasImage = false;
 
       for await (const chunk of result.stream) {
-        const text = chunk.text();
-        yield text;
+        // Check if chunk contains image data
+        const response = chunk;
+        if (response.candidates?.[0]?.content?.parts) {
+          for (const part of response.candidates[0].content.parts) {
+            if (part.text) {
+              yield part.text;
+            }
+            if (part.inlineData && !hasImage) {
+              // Handle image data - convert to base64 URL
+              hasImage = true;
+              const imageData = part.inlineData.data;
+              const mimeType = part.inlineData.mimeType || 'image/png';
+              yield `\n\n![Generated Image](data:${mimeType};base64,${imageData})\n\n`;
+            }
+          }
+        } else {
+          // Fallback to text-only handling
+          const text = chunk.text();
+          if (text) yield text;
+        }
       }
     } catch (error) {
       console.error("Gemini API Error:", error);
+      // If image generation fails, provide helpful feedback
+      if (isImageRequest) {
+        yield "\n\n*Note: Image generation requires the Gemini 2.5 Flash Image model. Please ensure your API key has access to this model. Cost is approximately $0.039 per image.*";
+      }
       throw error;
     }
   }
@@ -138,19 +171,29 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
     const lastMessage = messages[messages.length - 1];
     const isImageRequest = this.isImageGenerationRequest(lastMessage.content);
 
+    // Use image generation model for image requests
+    const modelName = isImageRequest ? "gemini-2.5-flash-image" : this.modelName;
+
+    // Configure for image generation if needed
+    const generationConfig: any = {
+      temperature: temperature ?? 0.7,
+      maxOutputTokens: isImageRequest ? 2048 : undefined,
+    };
+
+    // Add response modalities for image generation
+    if (isImageRequest) {
+      generationConfig.responseModalities = ["TEXT", "IMAGE"];
+    }
+
     // Use special prompt for image generation requests
     const effectivePrompt = isImageRequest
-      ? this.getImageGenerationPrompt()
+      ? "You are an AI that can generate images. When asked to create an image, describe it and generate it."
       : systemPrompt;
 
-    // Use gemini-2.0-flash-exp which has native image generation
     const model = this.client.getGenerativeModel({
-      model: this.modelName,
+      model: modelName,
       systemInstruction: effectivePrompt,
-      generationConfig: {
-        temperature: temperature ?? 0.7,
-        maxOutputTokens: isImageRequest ? 2048 : undefined,
-      },
+      generationConfig,
     });
 
     // Convert messages to Gemini format
@@ -166,10 +209,28 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
     try {
       const result = await chat.sendMessage(lastMessage.content);
       const response = result.response;
-      const text = response.text();
+      let fullContent = "";
+
+      // Handle response with potential image data
+      if (response.candidates?.[0]?.content?.parts) {
+        for (const part of response.candidates[0].content.parts) {
+          if (part.text) {
+            fullContent += part.text;
+          }
+          if (part.inlineData) {
+            // Convert image data to markdown
+            const imageData = part.inlineData.data;
+            const mimeType = part.inlineData.mimeType || 'image/png';
+            fullContent += `\n\n![Generated Image](data:${mimeType};base64,${imageData})\n\n`;
+          }
+        }
+      } else {
+        // Fallback to text-only
+        fullContent = response.text();
+      }
 
       return {
-        content: text,
+        content: fullContent,
         finishReason: "stop",
         usage: {
           // Gemini doesn't provide token counts in free tier
@@ -180,6 +241,17 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
       };
     } catch (error) {
       console.error("Gemini API Error:", error);
+      if (isImageRequest) {
+        return {
+          content: "I apologize, but I cannot generate images at this moment. Image generation requires the Gemini 2.5 Flash Image model which may not be available with your current API key. Please ensure your API key has access to this model (cost is approximately $0.039 per image).",
+          finishReason: "stop",
+          usage: {
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+          },
+        };
+      }
       throw error;
     }
   }
@@ -206,11 +278,12 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
       name: "gemini",
       displayName: "Google Gemini",
       type: "gemini",
-      description: "Google's Gemini AI models (2.0 Flash)",
+      description: "Google's Gemini AI models with native image generation",
       requiresApiKey: true,
       supportsStreaming: true,
       supportedModels: [
         "gemini-2.0-flash-exp",
+        "gemini-2.5-flash-image",
         "gemini-1.5-pro",
         "gemini-1.5-flash",
       ],
