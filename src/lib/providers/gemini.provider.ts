@@ -92,9 +92,9 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
     const lastMessage = messages[messages.length - 1];
     const isImageRequest = this.isImageGenerationRequest(lastMessage.content);
 
-    // Try image generation model first, fallback to standard model with descriptive prompt
-    let useImageModel = isImageRequest;
-    let modelName = isImageRequest ? "gemini-2.5-flash-image" : this.modelName;
+    // For image requests, use the same model but with image response modalities
+    // Gemini 2.0 Flash Experimental supports both text and image generation natively
+    const modelName = this.modelName; // Always use gemini-2.0-flash-exp
 
     // Configure for image generation if needed
     const generationConfig: any = {
@@ -103,18 +103,14 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
     };
 
     // Add response modalities for image generation
-    if (isImageRequest && useImageModel) {
+    if (isImageRequest) {
       generationConfig.responseModalities = ["TEXT", "IMAGE"];
     }
 
     // Use special prompt for image generation requests
     let effectivePrompt = systemPrompt;
     if (isImageRequest) {
-      if (useImageModel) {
-        effectivePrompt = "You are an AI that can generate images. When asked to create an image, describe it and generate it.";
-      } else {
-        effectivePrompt = this.getImageGenerationPrompt();
-      }
+      effectivePrompt = "You are an AI with native image generation capabilities. When asked to create an image, generate it directly using your built-in image generation feature.";
     }
 
     try {
@@ -162,9 +158,9 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
     } catch (error: any) {
       console.error("Gemini API Error:", error);
 
-      // If image model fails, retry with standard model
-      if (isImageRequest && useImageModel) {
-        console.log("Image model not available, falling back to descriptive mode");
+      // If image generation fails, retry without image modalities
+      if (isImageRequest) {
+        console.log("Image generation not available, falling back to descriptive mode");
 
         // Fallback to standard model with descriptive prompt
         const fallbackModel = this.client.getGenerativeModel({
@@ -173,6 +169,7 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
           generationConfig: {
             temperature: temperature ?? 0.7,
             maxOutputTokens: 2048,
+            // No responseModalities for fallback
           },
         });
 
@@ -188,7 +185,7 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
         try {
           const result = await chat.sendMessageStream(lastMessage.content);
 
-          yield "**Note:** Image generation model is not available. I'll provide a detailed description instead.\n\n";
+          yield "**Note:** Image generation is not available with your current API configuration. I'll provide a detailed description instead.\n\n";
           yield "---\n\n";
 
           for await (const chunk of result.stream) {
@@ -198,9 +195,9 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
 
           yield "\n\n---\n\n";
           yield "*To enable actual image generation:*\n";
-          yield "1. Ensure your Google AI API key has access to `gemini-2.5-flash-image` model\n";
-          yield "2. Image generation costs $0.039 per image\n";
-          yield "3. You may need to enable this feature in Google AI Studio\n";
+          yield "1. Ensure your Google AI API key has billing enabled and proper access\n";
+          yield "2. Image generation with Gemini 2.0 Flash requires a paid API plan\n";
+          yield "3. Check your quota limits at https://ai.dev/usage\n";
         } catch (fallbackError) {
           console.error("Fallback error:", fallbackError);
           throw fallbackError;
@@ -219,9 +216,8 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
     const lastMessage = messages[messages.length - 1];
     const isImageRequest = this.isImageGenerationRequest(lastMessage.content);
 
-    // Try image generation model first, fallback to standard model
-    let useImageModel = isImageRequest;
-    let modelName = isImageRequest ? "gemini-2.5-flash-image" : this.modelName;
+    // Use the same model with proper configuration
+    const modelName = this.modelName;
 
     // Configure for image generation if needed
     const generationConfig: any = {
@@ -230,16 +226,14 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
     };
 
     // Add response modalities for image generation
-    if (isImageRequest && useImageModel) {
+    if (isImageRequest) {
       generationConfig.responseModalities = ["TEXT", "IMAGE"];
     }
 
     // Use special prompt for image generation requests
     let effectivePrompt = systemPrompt;
     if (isImageRequest) {
-      effectivePrompt = useImageModel
-        ? "You are an AI that can generate images. When asked to create an image, describe it and generate it."
-        : this.getImageGenerationPrompt();
+      effectivePrompt = "You are an AI with native image generation capabilities. When asked to create an image, generate it directly using your built-in image generation feature.";
     }
 
     try {
@@ -293,9 +287,9 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
     } catch (error: any) {
       console.error("Gemini API Error:", error);
 
-      // If image model fails, retry with standard model
-      if (isImageRequest && useImageModel) {
-        console.log("Image model not available, falling back to descriptive mode");
+      // If image generation fails, retry without image modalities
+      if (isImageRequest) {
+        console.log("Image generation not available, falling back to descriptive mode");
 
         try {
           // Fallback to standard model with descriptive prompt
@@ -305,6 +299,7 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
             generationConfig: {
               temperature: temperature ?? 0.7,
               maxOutputTokens: 2048,
+              // No responseModalities for fallback
             },
           });
 
@@ -320,13 +315,13 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
           const result = await chat.sendMessage(lastMessage.content);
           const response = result.response;
 
-          let fallbackContent = "**Note:** Image generation model is not available. I'll provide a detailed description instead.\n\n---\n\n";
+          let fallbackContent = "**Note:** Image generation is not available with your current API configuration. I'll provide a detailed description instead.\n\n---\n\n";
           fallbackContent += response.text();
           fallbackContent += "\n\n---\n\n";
           fallbackContent += "*To enable actual image generation:*\n";
-          fallbackContent += "1. Ensure your Google AI API key has access to `gemini-2.5-flash-image` model\n";
-          fallbackContent += "2. Image generation costs $0.039 per image\n";
-          fallbackContent += "3. You may need to enable this feature in Google AI Studio\n";
+          fallbackContent += "1. Ensure your Google AI API key has billing enabled and proper access\n";
+          fallbackContent += "2. Image generation with Gemini 2.0 Flash requires a paid API plan\n";
+          fallbackContent += "3. Check your quota limits at https://ai.dev/usage\n";
 
           return {
             content: fallbackContent,
@@ -376,12 +371,11 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
       name: "gemini",
       displayName: "Google Gemini",
       type: "gemini",
-      description: "Google's Gemini AI models with native image generation",
+      description: "Google's Gemini AI models (image generation requires paid plan)",
       requiresApiKey: true,
       supportsStreaming: true,
       supportedModels: [
         "gemini-2.0-flash-exp",
-        "gemini-2.5-flash-image",
         "gemini-1.5-pro",
         "gemini-1.5-flash",
       ],
