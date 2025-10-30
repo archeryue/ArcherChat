@@ -19,33 +19,33 @@ export function ChatTopBar({
   isAdmin,
 }: ChatTopBarProps) {
   return (
-    <div className="bg-white border-b px-6 py-3 flex items-center justify-between">
+    <div className="bg-white border-b px-4 py-2 flex items-center justify-between">
       {/* Logo/Title */}
       <div className="flex items-center gap-3">
-        <h1 className="text-xl font-bold">ArcherChat</h1>
+        <h1 className="text-lg font-bold">ArcherChat</h1>
       </div>
 
       {/* User Info & Actions */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         {isAdmin && (
           <Link href="/admin">
             <Button variant="ghost" size="sm">
-              <Settings className="w-4 h-4 mr-2" />
+              <Settings className="w-4 h-4 mr-1" />
               Admin
             </Button>
           </Link>
         )}
 
         {/* User Menu */}
-        <div className="flex items-center gap-3 px-3 py-1.5 rounded-lg hover:bg-gray-50">
+        <div className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-gray-50">
           {userAvatar ? (
             <img
               src={userAvatar}
               alt={userName || "User"}
-              className="w-8 h-8 rounded-full"
+              className="w-7 h-7 rounded-full"
             />
           ) : (
-            <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm font-medium">
+            <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-medium">
               {userName?.charAt(0).toUpperCase() || "U"}
             </div>
           )}
@@ -59,7 +59,7 @@ export function ChatTopBar({
           size="sm"
           onClick={() => signOut({ callbackUrl: "/" })}
         >
-          <LogOut className="w-4 h-4 mr-2" />
+          <LogOut className="w-4 h-4 mr-1" />
           Logout
         </Button>
       </div>
