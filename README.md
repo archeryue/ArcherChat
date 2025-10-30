@@ -107,31 +107,31 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Project Structure
 
-\`\`\`
+```
 src/
-├── app/
-│   ├── api/              # API routes
-│   │   ├── auth/         # NextAuth endpoints
-│   │   ├── chat/         # Chat endpoint
-│   │   ├── conversations/# Conversation management
-│   │   └── admin/        # Admin endpoints
-│   ├── chat/             # Main chat interface
-│   ├── admin/            # Admin panel
-│   ├── login/            # Login page
-│   └── layout.tsx
-├── components/
-│   ├── chat/             # Chat components
-│   ├── admin/            # Admin components
-│   ├── ui/               # UI components
-│   └── providers/        # Context providers
-├── lib/
-│   ├── firebase-admin.ts # Firestore setup
-│   ├── gemini.ts         # Gemini API client
-│   ├── auth.ts           # NextAuth config
-│   └── utils.ts          # Utility functions
-└── types/
-    └── index.ts          # TypeScript types
-\`\`\`
+  app/
+    api/                  # API routes
+      auth/               # NextAuth endpoints
+      chat/               # Chat endpoint
+      conversations/      # Conversation management
+      admin/              # Admin endpoints
+    chat/                 # Main chat interface
+    admin/                # Admin panel
+    login/                # Login page
+    layout.tsx            # Root layout
+  components/
+    chat/                 # Chat components
+    admin/                # Admin components
+    ui/                   # UI components
+    providers/            # Context providers
+  lib/
+    firebase-admin.ts     # Firestore setup
+    gemini.ts             # Gemini API client
+    auth.ts               # NextAuth config
+    utils.ts              # Utility functions
+  types/
+    index.ts              # TypeScript types
+```
 
 ## Admin Features
 
