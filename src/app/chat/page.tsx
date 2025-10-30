@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
+import { ChatTopBar } from "@/components/chat/ChatTopBar";
 import { LoadingPage } from "@/components/ui/loading";
 import { MessageClient, ConversationClient } from "@/types";
 
@@ -212,53 +213,60 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="h-screen flex">
-      {/* Sidebar */}
-      <ChatSidebar
-        conversations={conversations}
-        activeConversationId={conversationId || undefined}
-        onNewConversation={createConversation}
-        onSelectConversation={loadConversation}
-        onDeleteConversation={deleteConversation}
+    <div className="h-screen flex flex-col">
+      {/* Top Bar */}
+      <ChatTopBar
         userName={session.user.name || undefined}
         userEmail={session.user.email || undefined}
         userAvatar={session.user.image || undefined}
         isAdmin={session.user.isAdmin}
       />
 
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto bg-gray-100">
-          {messages.length === 0 ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center space-y-3">
-                <div className="text-6xl">👋</div>
-                <h2 className="text-2xl font-bold text-gray-900">
-                  Welcome to ArcherChat!
-                </h2>
-                <p className="text-gray-600">
-                  Start a conversation by typing a message below
-                </p>
-              </div>
-            </div>
-          ) : (
-            <>
-              {messages.map((message) => (
-                <ChatMessage
-                  key={message.id}
-                  message={message}
-                  userName={session.user.name || undefined}
-                  userAvatar={session.user.image || undefined}
-                />
-              ))}
-              <div ref={messagesEndRef} />
-            </>
-          )}
-        </div>
+      {/* Main Content Area */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar */}
+        <ChatSidebar
+          conversations={conversations}
+          activeConversationId={conversationId || undefined}
+          onNewConversation={createConversation}
+          onSelectConversation={loadConversation}
+          onDeleteConversation={deleteConversation}
+        />
 
-        {/* Input */}
-        <ChatInput onSendMessage={handleSendMessage} disabled={isLoading} />
+        {/* Main Chat Area */}
+        <div className="flex-1 flex flex-col">
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto bg-gray-100">
+            {messages.length === 0 ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center space-y-3">
+                  <div className="text-6xl">👋</div>
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    Welcome to ArcherChat!
+                  </h2>
+                  <p className="text-gray-600">
+                    Start a conversation by typing a message below
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {messages.map((message) => (
+                  <ChatMessage
+                    key={message.id}
+                    message={message}
+                    userName={session.user.name || undefined}
+                    userAvatar={session.user.image || undefined}
+                  />
+                ))}
+                <div ref={messagesEndRef} />
+              </>
+            )}
+          </div>
+
+          {/* Input */}
+          <ChatInput onSendMessage={handleSendMessage} disabled={isLoading} />
+        </div>
       </div>
     </div>
   );
