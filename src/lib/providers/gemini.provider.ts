@@ -120,11 +120,18 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
     }
 
     try {
-      const model = this.client.getGenerativeModel({
+      // Don't use systemInstruction for image generation - it's not supported
+      const modelConfig: any = {
         model: modelName,
-        systemInstruction: effectivePrompt,
         generationConfig,
-      });
+      };
+
+      // Only add systemInstruction for non-image requests
+      if (!isImageRequest) {
+        modelConfig.systemInstruction = effectivePrompt;
+      }
+
+      const model = this.client.getGenerativeModel(modelConfig);
 
       // Convert messages to Gemini format
       const history = messages.slice(0, -1).map((msg) => ({
@@ -243,11 +250,18 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
     }
 
     try {
-      const model = this.client.getGenerativeModel({
+      // Don't use systemInstruction for image generation - it's not supported
+      const modelConfig: any = {
         model: modelName,
-        systemInstruction: effectivePrompt,
         generationConfig,
-      });
+      };
+
+      // Only add systemInstruction for non-image requests
+      if (!isImageRequest) {
+        modelConfig.systemInstruction = effectivePrompt;
+      }
+
+      const model = this.client.getGenerativeModel(modelConfig);
 
       // Convert messages to Gemini format
       const history = messages.slice(0, -1).map((msg) => ({
