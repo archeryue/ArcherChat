@@ -4,7 +4,12 @@ This guide explains how to add support for new AI providers to ArcherChat.
 
 ## Architecture Overview
 
-ArcherChat uses a provider abstraction layer to support multiple AI providers. All providers implement the `IAIProvider` interface, which ensures a consistent API regardless of which AI service is used.
+ArcherChat uses a provider abstraction layer to support three types of AI providers:
+- **gemini** - Google Gemini API
+- **openai** - OpenAI API (GPT models)
+- **inhouse** - Self-hosted models (Ollama, LM Studio, etc.)
+
+All providers implement the `IAIProvider` interface, which ensures a consistent API regardless of which AI service is used.
 
 ## Provider Interface
 
@@ -131,11 +136,13 @@ export class ProviderFactory {
 
 ### 3. Update Type Definitions
 
-Add your provider type to `src/types/ai-providers.ts`:
+The supported provider types are defined in `src/types/ai-providers.ts`:
 
 ```typescript
-export type AIProviderType = "gemini" | "openai" | "claude" | "ollama" | "your-provider";
+export type AIProviderType = "gemini" | "openai" | "inhouse";
 ```
+
+For self-hosted models, use the "inhouse" type.
 
 ### 4. Configure Environment Variables
 
@@ -143,11 +150,19 @@ Add the necessary environment variables to `.env.local`:
 
 ```bash
 # AI Provider Configuration
-AI_PROVIDER=openai  # or gemini, claude, etc.
+AI_PROVIDER=openai  # gemini | openai | inhouse
 
 # OpenAI Configuration
 OPENAI_API_KEY=your_api_key_here
 OPENAI_MODEL=gpt-4-turbo-preview
+
+# OR for Gemini
+GEMINI_API_KEY=your_api_key_here
+GEMINI_MODEL=gemini-2.0-flash-exp
+
+# OR for In-house (self-hosted)
+INHOUSE_BASE_URL=http://localhost:11434
+INHOUSE_MODEL=llama2
 ```
 
 ## Message Format
@@ -220,22 +235,23 @@ See `src/lib/providers/gemini.provider.ts` for a complete, working example of a 
 
 ```bash
 # Global AI Settings
-AI_PROVIDER=gemini          # Which provider to use
+AI_PROVIDER=gemini          # gemini | openai | inhouse
 AI_TEMPERATURE=0.7          # Default temperature (0-1)
 AI_MAX_TOKENS=4096          # Maximum tokens for response
 
 # Provider-Specific Settings
+
+# Gemini (Google AI)
 GEMINI_API_KEY=your_key
 GEMINI_MODEL=gemini-2.0-flash-exp
 
+# OpenAI
 OPENAI_API_KEY=your_key
 OPENAI_MODEL=gpt-4-turbo-preview
 
-CLAUDE_API_KEY=your_key
-CLAUDE_MODEL=claude-3-opus-20240229
-
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama2
+# In-house (self-hosted models like Ollama, LM Studio, etc.)
+INHOUSE_BASE_URL=http://localhost:11434
+INHOUSE_MODEL=llama2
 ```
 
 ## Troubleshooting

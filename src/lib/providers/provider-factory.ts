@@ -22,14 +22,9 @@ export class ProviderFactory {
           "OpenAI provider not yet implemented. Coming soon!"
         );
 
-      case "claude":
+      case "inhouse":
         throw new Error(
-          "Claude provider not yet implemented. Coming soon!"
-        );
-
-      case "ollama":
-        throw new Error(
-          "Ollama provider not yet implemented. Coming soon!"
+          "In-house provider not yet implemented. Coming soon!"
         );
 
       default:
@@ -69,14 +64,9 @@ export class ProviderFactory {
         config.model = process.env.OPENAI_MODEL || "gpt-4-turbo-preview";
         break;
 
-      case "claude":
-        config.apiKey = process.env.CLAUDE_API_KEY;
-        config.model = process.env.CLAUDE_MODEL || "claude-3-opus-20240229";
-        break;
-
-      case "ollama":
-        config.baseUrl = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
-        config.model = process.env.OLLAMA_MODEL || "llama2";
+      case "inhouse":
+        config.baseUrl = process.env.INHOUSE_BASE_URL || "http://localhost:11434";
+        config.model = process.env.INHOUSE_MODEL || "llama2";
         break;
     }
 
@@ -88,7 +78,7 @@ export class ProviderFactory {
    * @returns Array of supported provider types
    */
   static getSupportedProviders(): AIProviderType[] {
-    return ["gemini", "openai", "claude", "ollama"];
+    return ["gemini", "openai", "inhouse"];
   }
 
   /**

@@ -1,5 +1,5 @@
 // Supported AI provider types
-export type AIProviderType = "gemini" | "openai" | "claude" | "ollama";
+export type AIProviderType = "gemini" | "openai" | "inhouse";
 
 // Configuration for each provider
 export interface AIProviderConfig {
