@@ -5,9 +5,17 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 export const MODEL_NAME = "gemini-2.0-flash-exp";
 
 export async function* streamGeminiResponse(
-  messages: { role: string; content: string }[]
+  messages: { role: string; content: string }[],
+  systemPrompt?: string,
+  temperature?: number
 ) {
-  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+  const model = genAI.getGenerativeModel({
+    model: MODEL_NAME,
+    systemInstruction: systemPrompt,
+    generationConfig: {
+      temperature: temperature ?? 0.7,
+    },
+  });
 
   // Convert messages to Gemini format
   const history = messages.slice(0, -1).map((msg) => ({

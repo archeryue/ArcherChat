@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db, COLLECTIONS } from "@/lib/firebase-admin";
 import { streamGeminiResponse, MODEL_NAME, generateConversationTitle } from "@/lib/gemini";
+import { getActivePrompt, processPromptVariables } from "@/lib/prompts";
 import { NextRequest } from "next/server";
 
 export async function POST(req: NextRequest) {
@@ -62,6 +63,16 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Get active prompt configuration
+    const promptConfig = await getActivePrompt();
+
+    // Process prompt variables
+    const processedPrompt = processPromptVariables(promptConfig.systemPrompt, {
+      userName: session.user.name || "User",
+      currentDate: new Date().toLocaleDateString(),
+      currentTime: new Date().toLocaleTimeString(),
+    });
+
     // Stream response from Gemini
     const encoder = new TextEncoder();
     let fullResponse = "";
@@ -69,7 +80,11 @@ export async function POST(req: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const chunk of streamGeminiResponse(messages)) {
+          for await (const chunk of streamGeminiResponse(
+            messages,
+            processedPrompt,
+            promptConfig.temperature
+          )) {
             fullResponse += chunk;
             controller.enqueue(encoder.encode(chunk));
           }

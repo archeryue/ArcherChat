@@ -25,4 +25,5 @@ export const COLLECTIONS = {
   CONVERSATIONS: "conversations",
   MESSAGES: "messages",
   WHITELIST: "whitelist",
+  PROMPTS: "prompts",
 } as const;

@@ -5,15 +5,19 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { WhitelistManager } from "@/components/admin/WhitelistManager";
 import { UserStats } from "@/components/admin/UserStats";
+import { PromptManager } from "@/components/admin/PromptManager";
 import { LoadingPage } from "@/components/ui/loading";
 import { WhitelistEntryClient, UserStats as UserStatsType } from "@/types";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
+type Tab = "whitelist" | "users" | "prompts";
+
 export default function AdminPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<Tab>("prompts");
   const [whitelist, setWhitelist] = useState<WhitelistEntryClient[]>([]);
   const [userStats, setUserStats] = useState<UserStatsType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -100,9 +104,51 @@ export default function AdminPage() {
       </header>
 
       {/* Content */}
-      <main className="max-w-7xl mx-auto px-4 py-8 space-y-8">
-        <WhitelistManager initialWhitelist={whitelist} onUpdate={loadData} />
-        <UserStats users={userStats} />
+      <main className="max-w-7xl mx-auto px-4 py-8">
+        {/* Tabs */}
+        <div className="border-b border-gray-200 mb-6">
+          <nav className="-mb-px flex space-x-8">
+            <button
+              onClick={() => setActiveTab("prompts")}
+              className={`${
+                activeTab === "prompts"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+            >
+              Prompt Engineering
+            </button>
+            <button
+              onClick={() => setActiveTab("whitelist")}
+              className={`${
+                activeTab === "whitelist"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+            >
+              Whitelist
+            </button>
+            <button
+              onClick={() => setActiveTab("users")}
+              className={`${
+                activeTab === "users"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+            >
+              User Statistics
+            </button>
+          </nav>
+        </div>
+
+        {/* Tab Content */}
+        <div className="mt-6">
+          {activeTab === "prompts" && <PromptManager />}
+          {activeTab === "whitelist" && (
+            <WhitelistManager initialWhitelist={whitelist} onUpdate={loadData} />
+          )}
+          {activeTab === "users" && <UserStats users={userStats} />}
+        </div>
       </main>
     </div>
   );
