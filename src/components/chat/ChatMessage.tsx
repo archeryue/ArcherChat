@@ -78,6 +78,18 @@ export function ChatMessage({ message, userName, userAvatar }: ChatMessageProps)
           >
             {message.content}
           </ReactMarkdown>
+
+          {/* Display image if present */}
+          {(message.image_url || message.image_data) && (
+            <div className="mt-4">
+              <img
+                src={message.image_url || `data:image/png;base64,${message.image_data}`}
+                alt="Generated image"
+                className="rounded-lg max-w-full h-auto shadow-lg"
+                style={{ maxHeight: '500px' }}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -20,6 +20,8 @@ export interface Conversation {
 export interface Message {
   role: 'user' | 'assistant';
   content: string;
+  image_url?: string;  // URL for generated/external images
+  image_data?: string;  // Base64 encoded image data
   created_at: Timestamp;
 }
 
@@ -52,6 +54,8 @@ export interface MessageClient {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  image_url?: string;  // URL for generated/external images
+  image_data?: string;  // Base64 encoded image data
   created_at: Date;
 }
 

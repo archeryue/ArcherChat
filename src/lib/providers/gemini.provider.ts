@@ -20,6 +20,66 @@ export class GeminiProvider implements IAIProvider {
     this.modelName = model || "gemini-2.0-flash-exp";
   }
 
+  private isImageGenerationRequest(content: string): boolean {
+    const imageKeywords = [
+      'generate image',
+      'create image',
+      'draw',
+      'paint',
+      'picture of',
+      'image of',
+      'illustration of',
+      'sketch',
+      'design',
+      'create a visual',
+      'make an image',
+      'generate a picture',
+      'visualize',
+      'render',
+      'artwork',
+      'graphic'
+    ];
+
+    const lowerContent = content.toLowerCase();
+    return imageKeywords.some(keyword => lowerContent.includes(keyword));
+  }
+
+  private getImageGenerationPrompt(): string {
+    return `You are an AI assistant with advanced image generation capabilities through Google's Gemini 2.0 Flash native image generation (also known as "Nano Banana" internally at Google).
+
+When a user requests an image, you should:
+
+1. First, acknowledge their request and describe what you'll create in vivid detail
+2. Generate the image using your native capabilities
+3. Provide the generated image along with your description
+
+For image generation requests, use this format in your response:
+
+**Image Description:** [Detailed description of what will be generated]
+
+**Generating Image...**
+
+[The actual image would appear here]
+
+**Image Details:**
+- Style: [art style, photorealistic, illustration, etc.]
+- Colors: [dominant colors and palette]
+- Composition: [layout and focal points]
+- Additional notes: [any special features or techniques]
+
+You can generate various types of images including:
+- Photorealistic scenes
+- Artistic illustrations
+- Technical diagrams
+- Character designs
+- Landscapes and environments
+- Abstract art
+- Product visualizations
+- And much more!
+
+Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so you can create images directly in response to user requests.`;
+  }
+
   getName(): string {
     return "gemini";
   }
@@ -29,11 +89,21 @@ export class GeminiProvider implements IAIProvider {
     systemPrompt?: string,
     temperature?: number
   ): AsyncGenerator<string, void, unknown> {
+    const lastMessage = messages[messages.length - 1];
+    const isImageRequest = this.isImageGenerationRequest(lastMessage.content);
+
+    // Use special prompt for image generation requests
+    const effectivePrompt = isImageRequest
+      ? this.getImageGenerationPrompt()
+      : systemPrompt;
+
+    // Use gemini-2.0-flash-exp which has native image generation
     const model = this.client.getGenerativeModel({
       model: this.modelName,
-      systemInstruction: systemPrompt,
+      systemInstruction: effectivePrompt,
       generationConfig: {
         temperature: temperature ?? 0.7,
+        maxOutputTokens: isImageRequest ? 2048 : undefined,
       },
     });
 
@@ -42,8 +112,6 @@ export class GeminiProvider implements IAIProvider {
       role: msg.role === "user" ? "user" : ("model" as const),
       parts: [{ text: msg.content }],
     }));
-
-    const lastMessage = messages[messages.length - 1];
 
     const chat = model.startChat({
       history: history,
@@ -67,11 +135,21 @@ export class GeminiProvider implements IAIProvider {
     systemPrompt?: string,
     temperature?: number
   ): Promise<AIResponse> {
+    const lastMessage = messages[messages.length - 1];
+    const isImageRequest = this.isImageGenerationRequest(lastMessage.content);
+
+    // Use special prompt for image generation requests
+    const effectivePrompt = isImageRequest
+      ? this.getImageGenerationPrompt()
+      : systemPrompt;
+
+    // Use gemini-2.0-flash-exp which has native image generation
     const model = this.client.getGenerativeModel({
       model: this.modelName,
-      systemInstruction: systemPrompt,
+      systemInstruction: effectivePrompt,
       generationConfig: {
         temperature: temperature ?? 0.7,
+        maxOutputTokens: isImageRequest ? 2048 : undefined,
       },
     });
 
@@ -80,8 +158,6 @@ export class GeminiProvider implements IAIProvider {
       role: msg.role === "user" ? "user" : ("model" as const),
       parts: [{ text: msg.content }],
     }));
-
-    const lastMessage = messages[messages.length - 1];
 
     const chat = model.startChat({
       history: history,
