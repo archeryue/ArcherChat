@@ -1,0 +1,9 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:latest'
+      - '.'
+images:
+  - 'us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:latest'
