@@ -52,8 +52,9 @@ export function ChatMessage({ message, userName, userAvatar }: ChatMessageProps)
             remarkPlugins={[remarkGfm]}
             rehypePlugins={[rehypeHighlight]}
             components={{
-              code({ node, inline, className, children, ...props }) {
+              code({ node, className, children, ...props }: any) {
                 const match = /language-(\w+)/.exec(className || "");
+                const inline = !match;
                 return !inline ? (
                   <code className={className} {...props}>
                     {children}

@@ -3,6 +3,8 @@ import { authOptions } from "@/lib/auth";
 import { db, COLLECTIONS } from "@/lib/firebase-admin";
 import { NextRequest } from "next/server";
 
+export const dynamic = 'force-dynamic';
+
 // GET - List all users with stats
 export async function GET(req: NextRequest) {
   try {
