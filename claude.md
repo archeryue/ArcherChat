@@ -6,6 +6,68 @@ This document outlines the core principles and guidelines for developing ArcherC
 
 **Mission**: Build a clean, professional AI chatbot that serves both English and Chinese-speaking family members with intelligent memory and personalization.
 
+---
+
+## 🔴 CRITICAL RULES - NEVER VIOLATE THESE
+
+### 1. 🔐 SECURITY: Never Share Private Keys
+- **NEVER** commit API keys, private keys, or credentials to the repository
+- **NEVER** expose sensitive environment variables in client-side code
+- **NEVER** log or display private keys, passwords, or tokens
+- **ALWAYS** use environment variables for all sensitive configuration
+- **ALWAYS** add sensitive files to `.gitignore` before committing
+- **ALWAYS** rotate keys immediately if accidentally exposed
+- **ALWAYS** use Firebase Admin SDK only on the server-side, never client-side
+
+**Examples of what NEVER to commit:**
+- `FIREBASE_PRIVATE_KEY`
+- `GEMINI_API_KEY`
+- `NEXTAUTH_SECRET`
+- Service account JSON files
+- `.env` files with real values
+
+### 2. 📁 DOCUMENTATION: Only README.md and claude.md in Root
+- **ALWAYS** place documentation in the `docs/` directory
+- **EXCEPTION**: Only `README.md` and `claude.md` belong in the project root
+- **NEVER** create `*.md` files in the root directory (except the two exceptions above)
+- **ALWAYS** move documentation files to `docs/` immediately after creation
+- **ALWAYS** update `docs/README.md` when adding new documentation
+
+### 3. 💰 COST EFFICIENCY: Choose Affordable Solutions
+- **ALWAYS** consider cost implications when choosing services or features
+- **PREFER** free tier services when possible (Firebase Spark plan, Gemini free tier)
+- **OPTIMIZE** API calls to minimize costs:
+  - Cache responses when appropriate
+  - Batch operations to reduce request counts
+  - Use cheaper models for simple tasks (e.g., Gemini Flash vs Pro)
+- **MONITOR** usage regularly to avoid surprise bills
+- **SET** spending limits on all cloud services
+- **AVOID** expensive features unless critical for user experience
+- **EXAMPLE**: Use Gemini 2.0 Flash (free tier) instead of GPT-4 (expensive)
+
+### 4. 🛡️ SECURITY: Always Protect the Website
+- **AUTHENTICATION**: Always verify user authentication before accessing protected resources
+- **AUTHORIZATION**: Implement proper authorization checks (e.g., admin-only routes)
+- **INPUT VALIDATION**: Validate and sanitize all user inputs before processing
+- **OUTPUT ENCODING**: Prevent XSS by properly encoding outputs
+- **RATE LIMITING**: Implement rate limiting on API endpoints to prevent abuse
+- **FIRESTORE RULES**: Maintain strict Firestore security rules
+- **HTTPS ONLY**: Enforce HTTPS in production environments
+- **CSRF PROTECTION**: Use NextAuth's built-in CSRF protection
+- **CONTENT SECURITY POLICY**: Set appropriate CSP headers
+- **DEPENDENCY UPDATES**: Regularly update dependencies to patch security vulnerabilities
+
+**Security Checklist for New Features:**
+- [ ] Does this expose any sensitive data?
+- [ ] Is authentication required and enforced?
+- [ ] Are inputs validated and sanitized?
+- [ ] Are API endpoints rate-limited?
+- [ ] Are Firestore rules updated if needed?
+- [ ] Can this be exploited for DoS attacks?
+- [ ] Are error messages safe (no stack traces to users)?
+
+---
+
 ## Core Principles
 
 ### 1. Clean and Professional UI
@@ -94,10 +156,12 @@ This document outlines the core principles and guidelines for developing ArcherC
 - Excellent responsive design utilities
 
 ### Why Google Gemini?
-- Native image generation capabilities (Gemini 2.0 Flash)
-- Competitive pricing for high-volume usage
-- Multimodal support (text + images)
-- Fast inference times
+- **Cost-effective**: Free tier with generous limits (60 requests/minute for Gemini 2.0 Flash)
+- **Native image generation**: Gemini 2.0 Flash has built-in image generation capabilities
+- **Competitive pricing**: Much cheaper than GPT-4 for paid usage ($0.075/1M input tokens vs $2.50/1M)
+- **Multimodal support**: Single API for text + images
+- **Fast inference times**: Quick responses for real-time chat
+- **No vendor lock-in**: Easy to add other providers later thanks to abstraction layer
 
 ## Common Patterns
 
@@ -124,14 +188,39 @@ This document outlines the core principles and guidelines for developing ArcherC
 
 ## Anti-Patterns to Avoid
 
+### 🔴 CRITICAL Anti-Patterns (Security & Cost)
+
+❌ **Don't**: Commit API keys or private keys to the repository
+✅ **Do**: Use environment variables and add sensitive files to `.gitignore`
+
+❌ **Don't**: Expose Firebase Admin SDK credentials client-side
+✅ **Do**: Only use Firebase Admin SDK in server-side API routes
+
+❌ **Don't**: Create markdown documentation files in the root directory
+✅ **Do**: Place all documentation in `docs/` (except `README.md` and `claude.md`)
+
+❌ **Don't**: Choose expensive services without considering alternatives
+✅ **Do**: Evaluate cost-effective options (e.g., Gemini Flash over GPT-4)
+
+❌ **Don't**: Make unlimited API calls without rate limiting
+✅ **Do**: Implement rate limiting and caching to control costs
+
+❌ **Don't**: Skip authentication checks on API endpoints
+✅ **Do**: Always verify authentication and authorization before processing requests
+
+❌ **Don't**: Display detailed error messages to users
+✅ **Do**: Log errors server-side and show user-friendly messages
+
+❌ **Don't**: Trust user input without validation
+✅ **Do**: Validate and sanitize all inputs before processing
+
+### General Anti-Patterns
+
 ❌ **Don't**: Initialize services at module import time if they need runtime config
 ✅ **Do**: Use lazy initialization with Proxy patterns
 
 ❌ **Don't**: Hardcode keywords throughout the codebase
 ✅ **Do**: Centralize keywords in `src/config/keywords.ts`
-
-❌ **Don't**: Create documentation files in the root directory
-✅ **Do**: Place all documentation in `docs/`
 
 ❌ **Don't**: Make UI elements overly prominent or flashy
 ✅ **Do**: Keep UI clean, professional, and subtle
