@@ -148,6 +148,23 @@ export default function ProfilePage() {
 
       {/* Content */}
       <main className="max-w-4xl mx-auto px-4 py-8">
+        {/* Language Preference */}
+        {memory?.language_preference && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🌐</span>
+              <div>
+                <p className="text-sm font-medium text-slate-700">Language Preference</p>
+                <p className="text-lg font-bold text-slate-900">
+                  {memory.language_preference === "english" && "English"}
+                  {memory.language_preference === "chinese" && "中文 (Chinese)"}
+                  {memory.language_preference === "hybrid" && "English / 中文 (Hybrid)"}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-8">
           <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">

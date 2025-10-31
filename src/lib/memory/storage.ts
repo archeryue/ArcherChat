@@ -64,10 +64,9 @@ export async function saveUserMemory(
   facts: MemoryFact[],
   languagePreference?: LanguagePreference
 ): Promise<void> {
-  const memory: UserMemory = {
+  const memory: any = {
     user_id: userId,
     facts,
-    language_preference: languagePreference,
     stats: {
       total_facts: facts.length,
       token_usage: estimateTokenUsage(facts),
@@ -75,6 +74,11 @@ export async function saveUserMemory(
     },
     updated_at: new Date(),
   };
+
+  // Only include language_preference if it's defined (Firestore doesn't accept undefined)
+  if (languagePreference) {
+    memory.language_preference = languagePreference;
+  }
 
   await db
     .collection(COLLECTIONS.USERS)
