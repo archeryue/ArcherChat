@@ -76,9 +76,9 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <header className="bg-white border-b">
+      <header className="bg-white border-b border-slate-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -88,10 +88,10 @@ export default function AdminPage() {
                   Back to Chat
                 </Button>
               </Link>
-              <h1 className="text-2xl font-bold">Admin Panel</h1>
+              <h1 className="text-2xl font-bold text-slate-900">Admin Panel</h1>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-sm text-gray-600">{session.user.email}</span>
+              <span className="text-sm text-slate-600">{session.user.email}</span>
               {session.user.image && (
                 <img
                   src={session.user.image}
@@ -107,14 +107,14 @@ export default function AdminPage() {
       {/* Content */}
       <main className="max-w-7xl mx-auto px-4 py-8">
         {/* Tabs */}
-        <div className="border-b border-gray-200 mb-6">
+        <div className="border-b border-slate-200 mb-6">
           <nav className="-mb-px flex space-x-8">
             <button
               onClick={() => setActiveTab("prompts")}
               className={`${
                 activeTab === "prompts"
                   ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
               } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
             >
               Prompt Engineering
@@ -124,7 +124,7 @@ export default function AdminPage() {
               className={`${
                 activeTab === "whitelist"
                   ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
               } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
             >
               Whitelist
@@ -134,7 +134,7 @@ export default function AdminPage() {
               className={`${
                 activeTab === "users"
                   ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
               } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
             >
               User Statistics
@@ -144,7 +144,7 @@ export default function AdminPage() {
               className={`${
                 activeTab === "utilities"
                   ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
               } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
             >
               Utilities

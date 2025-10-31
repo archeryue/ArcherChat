@@ -30,16 +30,16 @@ export function ChatTopBar({
   const [imageError, setImageError] = useState(false);
 
   return (
-    <div className="bg-white border-b px-4 py-1 flex items-center justify-between">
+    <div className="bg-white border-b border-slate-200 px-4 py-1 flex items-center justify-between shadow-sm">
       {/* Logo/Title */}
       <div className="flex items-center gap-2">
-        <h1 className="text-base font-bold">ArcherChat</h1>
+        <h1 className="text-base font-bold text-slate-800">ArcherChat</h1>
       </div>
 
       {/* User Menu Dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <button className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors">
             {userAvatar && !imageError ? (
               <Image
                 src={userAvatar}
@@ -50,11 +50,11 @@ export function ChatTopBar({
                 onError={() => setImageError(true)}
               />
             ) : (
-              <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-medium">
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-xs font-semibold shadow-sm">
                 {userName?.charAt(0).toUpperCase() || "U"}
               </div>
             )}
-            <span className="font-medium text-sm">{userName}</span>
+            <span className="font-medium text-sm text-slate-700">{userName}</span>
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">

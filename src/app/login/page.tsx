@@ -12,8 +12,8 @@ function LoginContent() {
   return (
     <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full space-y-6">
       <div className="text-center">
-        <h1 className="text-3xl font-bold text-gray-900">Welcome to ArcherChat</h1>
-        <p className="text-gray-600 mt-2">Sign in to start chatting with AI</p>
+        <h1 className="text-3xl font-bold text-slate-900">Welcome to ArcherChat</h1>
+        <p className="text-slate-600 mt-2">Sign in to start chatting with AI</p>
       </div>
 
       {error === "not_whitelisted" && (
@@ -55,7 +55,7 @@ function LoginContent() {
         Sign in with Google
       </Button>
 
-      <p className="text-xs text-gray-500 text-center">
+      <p className="text-xs text-slate-500 text-center">
         Only whitelisted users can access this application
       </p>
     </div>
@@ -68,8 +68,8 @@ export default function LoginPage() {
       <Suspense fallback={
         <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full space-y-6">
           <div className="text-center">
-            <h1 className="text-3xl font-bold text-gray-900">Welcome to ArcherChat</h1>
-            <p className="text-gray-600 mt-2">Sign in to start chatting with AI</p>
+            <h1 className="text-3xl font-bold text-slate-900">Welcome to ArcherChat</h1>
+            <p className="text-slate-600 mt-2">Sign in to start chatting with AI</p>
           </div>
         </div>
       }>

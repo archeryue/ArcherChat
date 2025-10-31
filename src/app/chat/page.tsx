@@ -252,16 +252,16 @@ export default function ChatPage() {
         {/* Main Chat Area */}
         <div className="flex-1 min-w-0 flex flex-col">
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto bg-gray-100">
+          <div className="flex-1 overflow-y-auto bg-slate-50">
             {messages.length === 0 ? (
               <div className="flex items-center justify-center h-full">
-                <div className="text-center space-y-3">
-                  <div className="text-6xl">👋</div>
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    Welcome to ArcherChat!
+                <div className="text-center space-y-4 px-6">
+                  <div className="text-6xl mb-2">💬</div>
+                  <h2 className="text-2xl font-bold text-slate-900">
+                    Welcome to ArcherChat
                   </h2>
-                  <p className="text-gray-600">
-                    Start a conversation by typing a message below
+                  <p className="text-slate-600 max-w-md mx-auto">
+                    Start a conversation with AI. I can help answer questions, generate images, and remember your preferences.
                   </p>
                 </div>
               </div>

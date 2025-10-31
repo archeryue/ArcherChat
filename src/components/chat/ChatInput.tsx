@@ -41,29 +41,29 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProps) {
   }, [message]);
 
   return (
-    <form onSubmit={handleSubmit} className="border-t bg-white p-4">
-      <div className="flex gap-2 max-w-4xl mx-auto">
+    <form onSubmit={handleSubmit} className="border-t border-slate-200 bg-white p-6">
+      <div className="flex gap-3 max-w-4xl mx-auto">
         <textarea
           ref={textareaRef}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type your message... (Shift+Enter for new line)"
+          placeholder="Type your message..."
           disabled={disabled}
           rows={1}
-          className="flex-1 resize-none rounded-lg border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed min-h-[52px] max-h-[200px]"
+          className="flex-1 resize-none rounded-xl border-2 border-slate-200 px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400 min-h-[52px] max-h-[200px] transition-all shadow-sm"
         />
         <Button
           type="submit"
           disabled={disabled || !message.trim()}
           size="icon"
-          className="h-[52px] w-[52px]"
+          className="h-[52px] w-[52px] rounded-xl shadow-sm hover:shadow-md transition-all"
         >
           <Send className="h-5 w-5" />
         </Button>
       </div>
-      <p className="text-xs text-gray-500 text-center mt-2">
-        Press Enter to send, Shift+Enter for new line
+      <p className="text-xs text-slate-500 text-center mt-3">
+        Press Enter to send • Shift+Enter for new line
       </p>
     </form>
   );

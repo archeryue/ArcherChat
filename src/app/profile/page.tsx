@@ -81,7 +81,7 @@ export default function ProfilePage() {
       case "context":
         return "bg-green-100 text-green-800";
       default:
-        return "bg-gray-100 text-gray-800";
+        return "bg-slate-100 text-slate-800";
     }
   };
 
@@ -116,9 +116,9 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <header className="bg-white border-b sticky top-0 z-10">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -130,7 +130,7 @@ export default function ProfilePage() {
               </Link>
               <div className="flex items-center gap-2">
                 <Brain className="w-6 h-6 text-blue-600" />
-                <h1 className="text-2xl font-bold">Memory Profile</h1>
+                <h1 className="text-2xl font-bold text-slate-900">Memory Profile</h1>
               </div>
             </div>
             <Button
@@ -150,19 +150,19 @@ export default function ProfilePage() {
       <main className="max-w-4xl mx-auto px-4 py-8">
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-8">
-          <div className="bg-white p-4 rounded-lg border">
-            <p className="text-sm text-gray-600">Total Memories</p>
-            <p className="text-2xl font-bold text-gray-900">{memory?.stats.total_facts || 0}</p>
+          <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+            <p className="text-sm text-slate-600">Total Memories</p>
+            <p className="text-2xl font-bold text-slate-900">{memory?.stats.total_facts || 0}</p>
           </div>
-          <div className="bg-white p-4 rounded-lg border">
-            <p className="text-sm text-gray-600">Token Usage</p>
-            <p className="text-2xl font-bold text-gray-900">
-              {memory?.stats.token_usage || 0} <span className="text-sm text-gray-500">/ 500</span>
+          <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+            <p className="text-sm text-slate-600">Token Usage</p>
+            <p className="text-2xl font-bold text-slate-900">
+              {memory?.stats.token_usage || 0} <span className="text-sm text-slate-500">/ 500</span>
             </p>
           </div>
-          <div className="bg-white p-4 rounded-lg border">
-            <p className="text-sm text-gray-600">Last Cleanup</p>
-            <p className="text-sm font-medium text-gray-900">
+          <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+            <p className="text-sm text-slate-600">Last Cleanup</p>
+            <p className="text-sm font-medium text-slate-900">
               {memory?.stats.last_cleanup
                 ? new Date(memory.stats.last_cleanup).toLocaleDateString()
                 : "Never"}
@@ -172,10 +172,10 @@ export default function ProfilePage() {
 
         {/* Memory Facts */}
         {!memory || memory.facts.length === 0 ? (
-          <div className="bg-white p-12 rounded-lg border text-center">
-            <Brain className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">No Memories Yet</h2>
-            <p className="text-gray-600 mb-4">
+          <div className="bg-white p-12 rounded-lg border border-slate-200 text-center shadow-sm">
+            <Brain className="w-16 h-16 text-slate-400 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-slate-900 mb-2">No Memories Yet</h2>
+            <p className="text-slate-600 mb-4">
               As you chat, I'll automatically learn about your preferences and remember important facts.
             </p>
             <Link href="/chat">
@@ -189,39 +189,39 @@ export default function ProfilePage() {
               if (facts.length === 0) return null;
 
               return (
-                <div key={category} className="bg-white rounded-lg border">
-                  <div className="p-4 border-b bg-gray-50">
-                    <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <div key={category} className="bg-white rounded-lg border border-slate-200 shadow-sm">
+                  <div className="p-4 border-b border-slate-200 bg-slate-50">
+                    <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
                       <span>{getCategoryIcon(category as MemoryCategory)}</span>
                       {name}
-                      <span className="text-sm font-normal text-gray-500">({facts.length})</span>
+                      <span className="text-sm font-normal text-slate-500">({facts.length})</span>
                     </h2>
                   </div>
-                  <div className="divide-y">
+                  <div className="divide-y divide-slate-200">
                     {facts.map((fact) => (
-                      <div key={fact.id} className="p-4 hover:bg-gray-50 transition-colors">
+                      <div key={fact.id} className="p-4 hover:bg-slate-50 transition-colors">
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1">
-                            <p className="text-gray-900 mb-2">{fact.content}</p>
+                            <p className="text-slate-900 mb-2">{fact.content}</p>
                             <div className="flex items-center gap-2 text-xs">
                               <span className={`px-2 py-1 rounded-full font-medium ${getTierColor(fact.tier)}`}>
                                 {fact.tier.toUpperCase()}
                               </span>
-                              <span className="text-gray-500">
+                              <span className="text-slate-500">
                                 Confidence: {(fact.confidence * 100).toFixed(0)}%
                               </span>
-                              <span className="text-gray-500">•</span>
-                              <span className="text-gray-500">
+                              <span className="text-slate-500">•</span>
+                              <span className="text-slate-500">
                                 Used {fact.use_count} times
                               </span>
-                              <span className="text-gray-500">•</span>
-                              <span className="text-gray-500">
+                              <span className="text-slate-500">•</span>
+                              <span className="text-slate-500">
                                 {new Date(fact.created_at).toLocaleDateString()}
                               </span>
                               {fact.expires_at && (
                                 <>
-                                  <span className="text-gray-500">•</span>
-                                  <span className="text-gray-500">
+                                  <span className="text-slate-500">•</span>
+                                  <span className="text-slate-500">
                                     Expires: {new Date(fact.expires_at).toLocaleDateString()}
                                   </span>
                                 </>

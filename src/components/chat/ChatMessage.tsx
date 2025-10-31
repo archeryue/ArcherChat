@@ -19,8 +19,8 @@ export function ChatMessage({ message, userName, userAvatar }: ChatMessageProps)
   return (
     <div
       className={cn(
-        "flex gap-3 p-4",
-        isUser ? "bg-gray-50" : "bg-white"
+        "flex gap-4 px-6 py-6 transition-colors",
+        isUser ? "bg-slate-50/50" : "bg-white hover:bg-slate-50/30"
       )}
     >
       <div className="flex-shrink-0">
@@ -29,25 +29,25 @@ export function ChatMessage({ message, userName, userAvatar }: ChatMessageProps)
             <img
               src={userAvatar}
               alt={userName || "User"}
-              className="w-8 h-8 rounded-full"
+              className="w-9 h-9 rounded-full ring-2 ring-slate-200"
             />
           ) : (
-            <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm font-medium">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-sm font-semibold shadow-sm">
               {userName?.charAt(0).toUpperCase() || "U"}
             </div>
           )
         ) : (
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-sm font-bold">
+          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-white text-sm font-bold shadow-md">
             AI
           </div>
         )}
       </div>
 
       <div className="flex-1 min-w-0 overflow-hidden">
-        <div className="font-semibold text-sm mb-1">
+        <div className="font-semibold text-sm mb-2 text-slate-700">
           {isUser ? userName || "You" : "Assistant"}
         </div>
-        <div className="prose prose-sm max-w-none break-words overflow-x-auto">
+        <div className="prose prose-slate prose-sm max-w-none break-words overflow-x-auto">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             rehypePlugins={[rehypeHighlight]}
@@ -61,7 +61,7 @@ export function ChatMessage({ message, userName, userAvatar }: ChatMessageProps)
                   </code>
                 ) : (
                   <code
-                    className="bg-gray-100 rounded px-1 py-0.5 text-sm"
+                    className="bg-slate-100 text-slate-800 rounded px-1.5 py-0.5 text-sm font-mono"
                     {...props}
                   >
                     {children}

@@ -21,12 +21,13 @@ export function ChatSidebar({
   onDeleteConversation,
 }: ChatSidebarProps) {
   return (
-    <div className="w-64 flex-shrink-0 bg-white border-r flex flex-col h-full">
+    <div className="w-64 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col h-full">
       {/* Header */}
-      <div className="p-4 border-b">
+      <div className="p-4 border-b border-slate-200">
         <Button
           onClick={onNewConversation}
-          className="w-full"
+          variant="outline"
+          className="w-full border-slate-300 hover:bg-slate-50 transition-colors"
           size="sm"
         >
           <PlusCircle className="w-4 h-4 mr-2" />
@@ -35,7 +36,7 @@ export function ChatSidebar({
       </div>
 
       {/* Conversations List */}
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="flex-1 overflow-y-auto p-3">
         <ConversationList
           conversations={conversations}
           activeConversationId={activeConversationId}
