@@ -40,7 +40,7 @@ export async function getUserMemory(userId: string): Promise<UserMemory> {
   const data = memoryDoc.data()!;
 
   // Convert Firestore timestamps to Dates
-  return {
+  const memory: UserMemory = {
     user_id: userId,
     facts: (data.facts || []).map((f: any) => ({
       ...f,
@@ -54,6 +54,13 @@ export async function getUserMemory(userId: string): Promise<UserMemory> {
     },
     updated_at: data.updated_at?.toDate() || new Date(),
   };
+
+  // Include language_preference if it exists
+  if (data.language_preference) {
+    memory.language_preference = data.language_preference as LanguagePreference;
+  }
+
+  return memory;
 }
 
 /**
@@ -155,7 +162,8 @@ export async function addMemoryFacts(
   // Add only unique facts
   memory.facts.push(...uniqueNewFacts);
 
-  await saveUserMemory(userId, memory.facts);
+  // Preserve language preference when saving
+  await saveUserMemory(userId, memory.facts, memory.language_preference);
 }
 
 /**
@@ -167,14 +175,17 @@ export async function deleteMemoryFact(
 ): Promise<void> {
   const memory = await getUserMemory(userId);
   memory.facts = memory.facts.filter((f) => f.id !== factId);
-  await saveUserMemory(userId, memory.facts);
+  // Preserve language preference when deleting a fact
+  await saveUserMemory(userId, memory.facts, memory.language_preference);
 }
 
 /**
  * Clear all memory for a user
  */
 export async function clearUserMemory(userId: string): Promise<void> {
-  await saveUserMemory(userId, []);
+  const memory = await getUserMemory(userId);
+  // Clear facts but preserve language preference
+  await saveUserMemory(userId, [], memory.language_preference);
 }
 
 /**
@@ -197,7 +208,8 @@ export async function markMemoryUsed(
     return fact;
   });
 
-  await saveUserMemory(userId, memory.facts);
+  // Preserve language preference when marking facts as used
+  await saveUserMemory(userId, memory.facts, memory.language_preference);
 }
 
 /**

@@ -223,7 +223,17 @@ function parseExtractionResult(text: string): ExtractionResult {
       );
     });
 
-    return { facts: validFacts };
+    // Extract language preference if present and valid
+    let languagePreference: LanguagePreference | null = null;
+    if (parsed.language_preference &&
+        Object.values(LanguagePreference).includes(parsed.language_preference)) {
+      languagePreference = parsed.language_preference;
+    }
+
+    return {
+      facts: validFacts,
+      language_preference: languagePreference
+    };
   } catch (error) {
     console.error("Failed to parse extraction result:", error);
     return { facts: [] };
