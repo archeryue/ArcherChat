@@ -29,9 +29,16 @@ export interface MemoryFact {
   auto_extracted: boolean;      // true = AI extracted, false = user created
 }
 
+export enum LanguagePreference {
+  ENGLISH = "english",
+  CHINESE = "chinese",
+  HYBRID = "hybrid", // Can understand and use both
+}
+
 export interface UserMemory {
   user_id: string;
   facts: MemoryFact[];
+  language_preference?: LanguagePreference; // User's preferred language
   stats: {
     total_facts: number;
     token_usage: number;        // Estimated tokens
@@ -75,6 +82,7 @@ export interface MemoryFactClient {
 export interface UserMemoryClient {
   user_id: string;
   facts: MemoryFactClient[];
+  language_preference?: LanguagePreference;
   stats: {
     total_facts: number;
     token_usage: number;

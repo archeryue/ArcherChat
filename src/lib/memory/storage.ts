@@ -4,6 +4,7 @@ import {
   MemoryFact,
   MemoryTier,
   MEMORY_LIMITS,
+  LanguagePreference,
 } from "@/types/memory";
 import { v4 as uuidv4 } from "uuid";
 
@@ -60,11 +61,13 @@ export async function getUserMemory(userId: string): Promise<UserMemory> {
  */
 export async function saveUserMemory(
   userId: string,
-  facts: MemoryFact[]
+  facts: MemoryFact[],
+  languagePreference?: LanguagePreference
 ): Promise<void> {
   const memory: UserMemory = {
     user_id: userId,
     facts,
+    language_preference: languagePreference,
     stats: {
       total_facts: facts.length,
       token_usage: estimateTokenUsage(facts),

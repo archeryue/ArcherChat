@@ -21,33 +21,8 @@ export class GeminiProvider implements IAIProvider {
   }
 
   private isImageGenerationRequest(content: string): boolean {
-    const imageKeywords = [
-      'generate image',
-      'generate a image',
-      'generate an image',
-      'create image',
-      'create a image',
-      'create an image',
-      'draw',
-      'paint',
-      'picture of',
-      'image of',
-      'image about',
-      'illustration of',
-      'sketch',
-      'design',
-      'create a visual',
-      'make an image',
-      'make a image',
-      'generate a picture',
-      'visualize',
-      'render',
-      'artwork',
-      'graphic'
-    ];
-
-    const lowerContent = content.toLowerCase();
-    return imageKeywords.some(keyword => lowerContent.includes(keyword));
+    const { IMAGE_GENERATION_KEYWORDS, containsKeywords } = require('@/config/keywords');
+    return containsKeywords(content, IMAGE_GENERATION_KEYWORDS);
   }
 
   private getImageGenerationPrompt(): string {

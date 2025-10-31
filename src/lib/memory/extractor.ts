@@ -4,11 +4,14 @@ import {
   MemoryFact,
   MemoryCategory,
   MemoryTier,
+  LanguagePreference,
 } from "@/types/memory";
 import {
   generateMemoryId,
   calculateExpiry,
   addMemoryFacts,
+  getUserMemory,
+  saveUserMemory,
 } from "./storage";
 
 const EXTRACTION_PROMPT = `You are a memory extraction system. Analyze this conversation and extract ONLY important, lasting facts about the user.
@@ -31,6 +34,13 @@ TIERS (retention period):
 - important: Long-term preferences and technical info - 90 days
 - context: Current projects and temporary context - 30 days
 
+LANGUAGE PREFERENCE DETECTION:
+Based on the conversation, determine the user's language preference:
+- "english": User primarily uses English
+- "chinese": User primarily uses Chinese (中文)
+- "hybrid": User mixes both English and Chinese
+If you cannot determine, set to null.
+
 CONVERSATION:
 {conversation_text}
 
@@ -43,7 +53,8 @@ Return ONLY valid JSON in this exact format:
       "confidence": 0.6-1.0,
       "tier": "core|important|context"
     }
-  ]
+  ],
+  "language_preference": "english|chinese|hybrid|null"
 }
 
 Return empty facts array if nothing important to extract.`;
@@ -57,34 +68,16 @@ interface ExtractedFact {
 
 interface ExtractionResult {
   facts: ExtractedFact[];
+  language_preference?: LanguagePreference | null;
 }
 
-/**
- * Keywords that trigger immediate memory extraction
- */
-const MEMORY_TRIGGER_KEYWORDS = [
-  "remember that",
-  "my name is",
-  "i prefer",
-  "i work as",
-  "i'm a",
-  "i am a",
-  "don't forget",
-  "keep in mind",
-  "for future reference",
-  "just so you know",
-  "i like",
-  "i don't like",
-  "i hate",
-  "i love",
-];
+import { MEMORY_TRIGGER_KEYWORDS, containsKeywords } from "@/config/keywords";
 
 /**
  * Check if a message contains memory trigger keywords
  */
 export function hasMemoryTriggerKeywords(message: string): boolean {
-  const lowerMessage = message.toLowerCase();
-  return MEMORY_TRIGGER_KEYWORDS.some(keyword => lowerMessage.includes(keyword));
+  return containsKeywords(message, MEMORY_TRIGGER_KEYWORDS);
 }
 
 /**
@@ -109,18 +102,18 @@ export function shouldExtractMemory(
 }
 
 /**
- * Extract memory facts from a conversation using Gemini
+ * Extract memory facts and language preference from a conversation using Gemini
  */
-export async function extractMemoriesFromConversation(
+async function extractMemoriesAndLanguage(
   conversationId: string,
   userId: string
-): Promise<MemoryFact[]> {
+): Promise<{ facts: MemoryFact[], languagePreference?: LanguagePreference }> {
   try {
     // 1. Get conversation messages
     const messages = await getConversationMessages(conversationId);
 
     if (messages.length === 0) {
-      return [];
+      return { facts: [] };
     }
 
     // 2. Format conversation text
@@ -154,11 +147,26 @@ export async function extractMemoriesFromConversation(
       auto_extracted: true,
     }));
 
-    return facts;
+    return {
+      facts,
+      languagePreference: extracted.language_preference || undefined
+    };
   } catch (error) {
     console.error("Error extracting memories:", error);
-    return [];
+    return { facts: [] };
   }
+}
+
+/**
+ * Update user's language preference
+ */
+async function updateLanguagePreference(
+  userId: string,
+  preference: LanguagePreference
+): Promise<void> {
+  const memory = await getUserMemory(userId);
+  memory.language_preference = preference;
+  await saveUserMemory(userId, memory.facts, preference);
 }
 
 /**
@@ -262,21 +270,29 @@ export async function processConversationMemory(
       return 0;
     }
 
-    // 3. Extract memories
-    const newFacts = await extractMemoriesFromConversation(conversationId, userId);
+    // 4. Extract memories and language preference
+    const result = await extractMemoriesAndLanguage(conversationId, userId);
 
-    if (newFacts.length === 0) {
+    if (result.facts.length === 0 && !result.languagePreference) {
       return 0;
     }
 
-    // 4. Add to user's memory
-    await addMemoryFacts(userId, newFacts);
+    // 5. Add facts to user's memory
+    if (result.facts.length > 0) {
+      await addMemoryFacts(userId, result.facts);
+    }
+
+    // 6. Update language preference if detected
+    if (result.languagePreference) {
+      await updateLanguagePreference(userId, result.languagePreference);
+      console.log(`[Memory] Updated language preference to: ${result.languagePreference}`);
+    }
 
     console.log(
-      `[Memory] Extracted ${newFacts.length} facts from conversation ${conversationId}`
+      `[Memory] Extracted ${result.facts.length} facts from conversation ${conversationId}`
     );
 
-    return newFacts.length;
+    return result.facts.length;
   } catch (error) {
     console.error("Error processing conversation memory:", error);
     return 0;
