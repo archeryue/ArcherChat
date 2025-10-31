@@ -188,33 +188,7 @@ This document outlines the core principles and guidelines for developing ArcherC
 
 ## Anti-Patterns to Avoid
 
-### 🔴 CRITICAL Anti-Patterns (Security & Cost)
-
-❌ **Don't**: Commit API keys or private keys to the repository
-✅ **Do**: Use environment variables and add sensitive files to `.gitignore`
-
-❌ **Don't**: Expose Firebase Admin SDK credentials client-side
-✅ **Do**: Only use Firebase Admin SDK in server-side API routes
-
-❌ **Don't**: Create markdown documentation files in the root directory
-✅ **Do**: Place all documentation in `docs/` (except `README.md` and `claude.md`)
-
-❌ **Don't**: Choose expensive services without considering alternatives
-✅ **Do**: Evaluate cost-effective options (e.g., Gemini Flash over GPT-4)
-
-❌ **Don't**: Make unlimited API calls without rate limiting
-✅ **Do**: Implement rate limiting and caching to control costs
-
-❌ **Don't**: Skip authentication checks on API endpoints
-✅ **Do**: Always verify authentication and authorization before processing requests
-
-❌ **Don't**: Display detailed error messages to users
-✅ **Do**: Log errors server-side and show user-friendly messages
-
-❌ **Don't**: Trust user input without validation
-✅ **Do**: Validate and sanitize all inputs before processing
-
-### General Anti-Patterns
+> **Note**: Critical security and cost anti-patterns are covered in the [CRITICAL RULES](#-critical-rules---never-violate-these) section above.
 
 ❌ **Don't**: Initialize services at module import time if they need runtime config
 ✅ **Do**: Use lazy initialization with Proxy patterns
