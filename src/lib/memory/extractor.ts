@@ -35,11 +35,17 @@ TIERS (retention period):
 - context: Current projects and temporary context - 30 days
 
 LANGUAGE PREFERENCE DETECTION:
-Based on the conversation, determine the user's language preference:
-- "english": User primarily uses English
-- "chinese": User primarily uses Chinese (中文)
-- "hybrid": User mixes both English and Chinese
-If you cannot determine, set to null.
+Determine the user's language preference based on:
+1. EXPLICIT STATEMENTS (highest priority): "I prefer English/Chinese", "Use English/Chinese", etc.
+2. Usage patterns (secondary): What language they primarily use in the conversation
+
+Options:
+- "english": User prefers or primarily uses English
+- "chinese": User prefers or primarily uses Chinese (中文)
+- "hybrid": User prefers or uses both English and Chinese
+- null: Cannot determine
+
+IMPORTANT: If the user explicitly states a language preference, ALWAYS honor that over usage patterns.
 
 CONVERSATION:
 {conversation_text}

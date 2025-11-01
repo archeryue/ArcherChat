@@ -32,6 +32,14 @@ export const MEMORY_TRIGGER_KEYWORDS = {
     "i love",
     "i tend to",
     "i usually",
+
+    // Language preferences
+    "prefer english",
+    "prefer chinese",
+    "use english",
+    "use chinese",
+    "speak english",
+    "speak chinese",
   ],
   chinese: [
     // Memory-related (记住相关)
@@ -57,6 +65,16 @@ export const MEMORY_TRIGGER_KEYWORDS = {
     "我偏好",
     "我倾向于",
     "我习惯",
+
+    // Language preferences (语言偏好)
+    "用英文",
+    "用中文",
+    "说英文",
+    "说中文",
+    "英语",
+    "中文",
+    "偏好英文",
+    "偏好中文",
 
     // Future reference (提醒)
     "以后",
