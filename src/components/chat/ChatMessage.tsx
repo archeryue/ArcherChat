@@ -32,11 +32,10 @@ function CodeBlock({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="relative group" style={{ border: 'none' }}>
+    <div className="relative group">
       <button
         onClick={handleCopy}
         className="absolute top-2 right-2 p-2 rounded-md bg-slate-700 hover:bg-slate-600 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10"
-        style={{ border: 'none' }}
         title={copied ? "Copied!" : "Copy code"}
       >
         {copied ? (
@@ -45,7 +44,7 @@ function CodeBlock({ children }: { children: React.ReactNode }) {
           <Copy className="w-4 h-4" />
         )}
       </button>
-      <pre className="overflow-x-auto" style={{ border: 'none' }}>{children}</pre>
+      <pre className="overflow-x-auto">{children}</pre>
     </div>
   );
 }
