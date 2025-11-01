@@ -59,16 +59,16 @@ export const FILE_EXTENSIONS = {
  * Get file type from MIME type
  */
 export function getFileTypeFromMime(mimeType: string): FileType | null {
-  if (SUPPORTED_MIME_TYPES[FileType.IMAGE].includes(mimeType)) {
+  if ((SUPPORTED_MIME_TYPES[FileType.IMAGE] as readonly string[]).includes(mimeType)) {
     return FileType.IMAGE;
   }
-  if (SUPPORTED_MIME_TYPES[FileType.PDF].includes(mimeType)) {
+  if ((SUPPORTED_MIME_TYPES[FileType.PDF] as readonly string[]).includes(mimeType)) {
     return FileType.PDF;
   }
-  if (SUPPORTED_MIME_TYPES[FileType.AUDIO].includes(mimeType)) {
+  if ((SUPPORTED_MIME_TYPES[FileType.AUDIO] as readonly string[]).includes(mimeType)) {
     return FileType.AUDIO;
   }
-  if (SUPPORTED_MIME_TYPES[FileType.VIDEO].includes(mimeType)) {
+  if ((SUPPORTED_MIME_TYPES[FileType.VIDEO] as readonly string[]).includes(mimeType)) {
     return FileType.VIDEO;
   }
   return null;
@@ -88,7 +88,7 @@ export function validateFileMimeType(file: File): FileType | null {
   const fileType = getFileTypeFromMime(file.type);
   if (!fileType) return null;
 
-  return SUPPORTED_MIME_TYPES[fileType].includes(file.type) ? fileType : null;
+  return (SUPPORTED_MIME_TYPES[fileType] as readonly string[]).includes(file.type) ? fileType : null;
 }
 
 /**
