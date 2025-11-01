@@ -6,8 +6,9 @@ import { getActivePrompt, processPromptVariables } from "@/lib/prompts";
 import { ProviderFactory } from "@/lib/providers/provider-factory";
 import { AIMessage } from "@/types/ai-providers";
 import { NextRequest } from "next/server";
-import { loadMemoryForChat, processConversationMemory, cleanupUserMemory } from "@/lib/memory";
+import { loadMemoryForChat, cleanupUserMemory } from "@/lib/memory";
 import { FileAttachment } from "@/types/file";
+import { keywordSystem, KeywordTriggerType } from "@/lib/keywords/triggers";
 
 export async function POST(req: NextRequest) {
   try {
@@ -148,11 +149,23 @@ export async function POST(req: NextRequest) {
             updated_at: new Date(),
           });
 
-          // Trigger memory extraction in background (don't await)
-          // Pass user message to enable keyword-based triggering
-          processConversationMemory(conversationId, session.user.id, message)
-            .then(() => cleanupUserMemory(session.user.id))
-            .catch((err) => console.error("Memory processing error:", err));
+          // Check for keyword triggers in user message
+          const keywordResults = keywordSystem.check(message);
+          const hasMemoryTrigger = keywordResults.some(
+            (r) => r.matched && r.type === KeywordTriggerType.MEMORY_GENERAL
+          );
+
+          // Execute keyword-triggered actions in background (don't await)
+          if (hasMemoryTrigger) {
+            keywordSystem
+              .execute(KeywordTriggerType.MEMORY_GENERAL, {
+                conversationId,
+                userId: session.user.id,
+                message,
+              })
+              .then(() => cleanupUserMemory(session.user.id))
+              .catch((err) => console.error("Keyword action error:", err));
+          }
 
           controller.close();
         } catch (error) {

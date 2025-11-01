@@ -77,30 +77,18 @@ interface ExtractionResult {
   language_preference?: LanguagePreference | null;
 }
 
-import { MEMORY_TRIGGER_KEYWORDS, containsKeywords } from "@/config/keywords";
-
-/**
- * Check if a message contains memory trigger keywords
- */
-export function hasMemoryTriggerKeywords(message: string): boolean {
-  return containsKeywords(message, MEMORY_TRIGGER_KEYWORDS);
-}
-
 /**
  * Check if a conversation should trigger memory extraction
- * Uses hybrid strategy: keyword-based OR conversation-based
+ * Based on conversation length and duration
+ *
+ * Note: Keyword-based triggering is now handled by the centralized
+ * keyword system in src/lib/keywords/system.ts
  */
 export function shouldExtractMemory(
   messageCount: number,
-  durationMs: number,
-  hasKeywordTrigger: boolean = false
+  durationMs: number
 ): boolean {
-  // Strategy 1: Immediate extraction if keyword detected
-  if (hasKeywordTrigger) {
-    return true;
-  }
-
-  // Strategy 2: Automatic extraction after long conversation
+  // Automatic extraction after long conversation
   const MIN_MESSAGES = 5;
   const MIN_DURATION_MS = 2 * 60 * 1000; // 2 minutes
 
@@ -247,8 +235,16 @@ function parseExtractionResult(text: string): ExtractionResult {
 }
 
 /**
- * Extract and save memories after a conversation ends
- * This is the main entry point called from the chat API
+ * Extract and save memories from a conversation
+ *
+ * This function is called either:
+ * 1. By the keyword system when memory trigger keywords are detected
+ * 2. Automatically for long conversations (5+ messages, 2+ minutes)
+ *
+ * @param conversationId - The conversation to extract memories from
+ * @param userId - The user whose memories to update
+ * @param lastUserMessage - Optional: the message that triggered extraction
+ * @returns Number of facts extracted
  */
 export async function processConversationMemory(
   conversationId: string,
@@ -272,33 +268,29 @@ export async function processConversationMemory(
       conversationData.updated_at.toDate().getTime() -
       conversationData.created_at.toDate().getTime();
 
-    // 2. Check for keyword trigger in last message
-    const hasKeywordTrigger = lastUserMessage
-      ? hasMemoryTriggerKeywords(lastUserMessage)
-      : false;
-
-    if (hasKeywordTrigger) {
-      console.log("[Memory] Keyword trigger detected, extracting immediately");
+    // 2. If not triggered by keyword, check conversation length/duration
+    // Note: Keyword triggering bypasses this check
+    if (!lastUserMessage || !shouldExtractMemory(messageCount, duration)) {
+      // If triggered by keyword, proceed regardless of conversation length
+      // Otherwise, only proceed if conversation is long enough
+      if (!lastUserMessage) {
+        return 0;
+      }
     }
 
-    // 3. Check if should extract (hybrid strategy)
-    if (!shouldExtractMemory(messageCount, duration, hasKeywordTrigger)) {
-      return 0;
-    }
-
-    // 4. Extract memories and language preference
+    // 3. Extract memories and language preference
     const result = await extractMemoriesAndLanguage(conversationId, userId);
 
     if (result.facts.length === 0 && !result.languagePreference) {
       return 0;
     }
 
-    // 5. Add facts to user's memory
+    // 4. Add facts to user's memory
     if (result.facts.length > 0) {
       await addMemoryFacts(userId, result.facts);
     }
 
-    // 6. Update language preference if detected
+    // 5. Update language preference if detected
     if (result.languagePreference) {
       await updateLanguagePreference(userId, result.languagePreference);
       console.log(`[Memory] Updated language preference to: ${result.languagePreference}`);
