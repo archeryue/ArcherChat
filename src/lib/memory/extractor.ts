@@ -152,15 +152,38 @@ async function extractMemoriesAndLanguage(
 }
 
 /**
- * Update user's language preference
+ * Update user's language preference and remove old language preference facts
  */
 async function updateLanguagePreference(
   userId: string,
   preference: LanguagePreference
 ): Promise<void> {
   const memory = await getUserMemory(userId);
+
+  // Remove old language preference facts
+  // Look for facts containing language-related keywords
+  const languageKeywords = [
+    'language', 'english', 'chinese', 'communicate',
+    '语言', '英文', '中文', '沟通'
+  ];
+
+  const cleanedFacts = memory.facts.filter(fact => {
+    const lowerContent = fact.content.toLowerCase();
+    // Remove facts that mention language preferences
+    const hasLanguageKeyword = languageKeywords.some(keyword =>
+      lowerContent.includes(keyword.toLowerCase())
+    );
+    // Keep facts that don't mention language preferences
+    return !hasLanguageKeyword;
+  });
+
+  const removedCount = memory.facts.length - cleanedFacts.length;
+  if (removedCount > 0) {
+    console.log(`[Memory] Removed ${removedCount} old language preference facts`);
+  }
+
   memory.language_preference = preference;
-  await saveUserMemory(userId, memory.facts, preference);
+  await saveUserMemory(userId, cleanedFacts, preference);
 }
 
 /**
