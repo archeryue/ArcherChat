@@ -127,23 +127,21 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
       generationConfig.responseModalities = ["TEXT", "IMAGE"];
     }
 
-    // Use special prompt for image generation requests
+    // Use special prompt for image generation requests, but keep formatting instructions
     let effectivePrompt = systemPrompt;
     if (isImageRequest) {
-      effectivePrompt = "You are an AI with native image generation capabilities. When asked to create an image, generate it directly using your built-in image generation feature.";
+      // Prepend image generation instructions while keeping the original formatting rules
+      const imagePrompt = "You are an AI with native image generation capabilities. When asked to create an image, generate it directly using your built-in image generation feature.\n\n";
+      effectivePrompt = imagePrompt + (systemPrompt || "");
     }
 
     try {
-      // Don't use systemInstruction for image generation - it's not supported
+      // Configure model with system instructions (works for all requests now)
       const modelConfig: any = {
         model: modelName,
         generationConfig,
+        systemInstruction: effectivePrompt, // Always include system instructions
       };
-
-      // Only add systemInstruction for non-image requests
-      if (!isImageRequest) {
-        modelConfig.systemInstruction = effectivePrompt;
-      }
 
       const model = this.client.getGenerativeModel(modelConfig);
 
@@ -268,23 +266,21 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
       generationConfig.responseModalities = ["TEXT", "IMAGE"];
     }
 
-    // Use special prompt for image generation requests
+    // Use special prompt for image generation requests, but keep formatting instructions
     let effectivePrompt = systemPrompt;
     if (isImageRequest) {
-      effectivePrompt = "You are an AI with native image generation capabilities. When asked to create an image, generate it directly using your built-in image generation feature.";
+      // Prepend image generation instructions while keeping the original formatting rules
+      const imagePrompt = "You are an AI with native image generation capabilities. When asked to create an image, generate it directly using your built-in image generation feature.\n\n";
+      effectivePrompt = imagePrompt + (systemPrompt || "");
     }
 
     try {
-      // Don't use systemInstruction for image generation - it's not supported
+      // Configure model with system instructions (works for all requests now)
       const modelConfig: any = {
         model: modelName,
         generationConfig,
+        systemInstruction: effectivePrompt, // Always include system instructions
       };
-
-      // Only add systemInstruction for non-image requests
-      if (!isImageRequest) {
-        modelConfig.systemInstruction = effectivePrompt;
-      }
 
       const model = this.client.getGenerativeModel(modelConfig);
 

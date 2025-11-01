@@ -35,3 +35,19 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Override Tailwind Typography's code block borders and font size */
+.prose :where(pre):not(:where([class~="not-prose"] *)) {
+  border: 0 !important;
+  border-width: 0 !important;
+  box-shadow: none !important;
+  background-color: #282c34 !important;
+  font-size: 0.95rem !important; /* Increased from default ~0.875rem */
+  line-height: 1.6 !important;
+}
+
+/* Make the code inside pre blocks larger too */
+.prose :where(pre code):not(:where([class~="not-prose"] *)) {
+  font-size: 0.95rem !important;
+}
+
