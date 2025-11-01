@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     const memory = await getUserMemory(session.user.id);
 
     // Convert to client-safe format
-    const clientMemory = {
+    const clientMemory: any = {
       user_id: memory.user_id,
       facts: memory.facts.map((fact) => ({
         ...fact,
@@ -31,6 +31,11 @@ export async function GET(req: NextRequest) {
       },
       updated_at: memory.updated_at.toISOString(),
     };
+
+    // Include language_preference if it exists
+    if (memory.language_preference) {
+      clientMemory.language_preference = memory.language_preference;
+    }
 
     return Response.json(clientMemory);
   } catch (error) {
