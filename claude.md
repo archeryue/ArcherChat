@@ -10,7 +10,26 @@ This document outlines the core principles and guidelines for developing ArcherC
 
 ## 🔴 CRITICAL RULES - NEVER VIOLATE THESE
 
-### 1. 🔐 SECURITY: Never Share Private Keys
+### 1. 🚀 DEPLOYMENT: Never Deploy Without Explicit Permission
+- **NEVER** deploy code to production (Google Cloud Run) unless the user explicitly asks
+- **ALWAYS** wait for user to say "deploy", "ship online", or similar explicit commands
+- **NEVER** assume deployment is wanted after committing code
+- **ALWAYS** ask for confirmation before deploying if unclear
+- **EXCEPTION**: Only deploy when user explicitly requests it
+
+**Valid deployment requests:**
+- "deploy to production"
+- "ship the code online"
+- "push to cloud run"
+- "deploy the latest changes"
+
+**NOT valid (do NOT deploy):**
+- "commit the changes"
+- "push to github"
+- "looks good"
+- General approval without deployment keyword
+
+### 2. 🔐 SECURITY: Never Share Private Keys
 - **NEVER** commit API keys, private keys, or credentials to the repository
 - **NEVER** expose sensitive environment variables in client-side code
 - **NEVER** log or display private keys, passwords, or tokens
@@ -26,14 +45,14 @@ This document outlines the core principles and guidelines for developing ArcherC
 - Service account JSON files
 - `.env` files with real values
 
-### 2. 📁 DOCUMENTATION: Only README.md and claude.md in Root
+### 3. 📁 DOCUMENTATION: Only README.md and claude.md in Root
 - **ALWAYS** place documentation in the `docs/` directory
 - **EXCEPTION**: Only `README.md` and `claude.md` belong in the project root
 - **NEVER** create `*.md` files in the root directory (except the two exceptions above)
 - **ALWAYS** move documentation files to `docs/` immediately after creation
 - **ALWAYS** update `docs/README.md` when adding new documentation
 
-### 3. 💰 COST EFFICIENCY: Choose Affordable Solutions
+### 4. 💰 COST EFFICIENCY: Choose Affordable Solutions
 - **ALWAYS** consider cost implications when choosing services or features
 - **PREFER** free tier services when possible (Firebase Spark plan, Gemini free tier)
 - **OPTIMIZE** API calls to minimize costs:
@@ -45,7 +64,7 @@ This document outlines the core principles and guidelines for developing ArcherC
 - **AVOID** expensive features unless critical for user experience
 - **EXAMPLE**: Use Gemini 2.0 Flash (free tier) instead of GPT-4 (expensive)
 
-### 4. 🛡️ SECURITY: Always Protect the Website
+### 5. 🛡️ SECURITY: Always Protect the Website
 - **AUTHENTICATION**: Always verify user authentication before accessing protected resources
 - **AUTHORIZATION**: Implement proper authorization checks (e.g., admin-only routes)
 - **INPUT VALIDATION**: Validate and sanitize all user inputs before processing
