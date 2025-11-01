@@ -33,9 +33,9 @@ This document outlines the core principles and guidelines for developing ArcherC
 - Service account JSON files
 - `.env` files with real values
 
-### 3. 📁 DOCUMENTATION: Only README.md and claude.md in Root
+### 3. 📁 DOCUMENTATION: Only README.md and CLAUDE.md in Root
 - **ALWAYS** place documentation in the `docs/` directory
-- **EXCEPTION**: Only `README.md` and `claude.md` belong in the project root
+- **EXCEPTION**: Only `README.md` and `CLAUDE.md` belong in the project root
 - **NEVER** create `*.md` files in the root directory (except the two exceptions above)
 - **ALWAYS** move documentation files to `docs/` immediately after creation
 - **ALWAYS** update `docs/README.md` when adding new documentation
@@ -72,6 +72,20 @@ This document outlines the core principles and guidelines for developing ArcherC
 - [ ] Are Firestore rules updated if needed?
 - [ ] Can this be exploited for DoS attacks?
 - [ ] Are error messages safe (no stack traces to users)?
+
+### 6. 🤖 MODEL CONFIGURATION: Never Change Models Without Permission
+- **NEVER** change the AI model configuration (Gemini models, model tiers) unless the user explicitly asks
+- **NEVER** modify `src/config/models.ts` without explicit user request
+- **NEVER** suggest switching to different models without user asking first
+- **ALWAYS** trust that the current model configuration is intentional and tested
+- **ALWAYS** ask for permission before proposing model changes
+- **EXCEPTION**: Only change models when user explicitly requests it
+
+**Examples of what NOT to do:**
+- Don't change `gemini-2.5-flash-image` to another model name
+- Don't suggest "upgrading" or "fixing" model configurations
+- Don't assume a model name is wrong without user confirmation
+- Don't modify model tier assignments without permission
 
 ---
 
