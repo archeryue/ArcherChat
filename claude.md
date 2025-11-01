@@ -17,18 +17,6 @@ This document outlines the core principles and guidelines for developing ArcherC
 - **ALWAYS** ask for confirmation before deploying if unclear
 - **EXCEPTION**: Only deploy when user explicitly requests it
 
-**Valid deployment requests:**
-- "deploy to production"
-- "ship the code online"
-- "push to cloud run"
-- "deploy the latest changes"
-
-**NOT valid (do NOT deploy):**
-- "commit the changes"
-- "push to github"
-- "looks good"
-- General approval without deployment keyword
-
 ### 2. 🔐 SECURITY: Never Share Private Keys
 - **NEVER** commit API keys, private keys, or credentials to the repository
 - **NEVER** expose sensitive environment variables in client-side code
