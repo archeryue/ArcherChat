@@ -8,7 +8,8 @@ import { AIMessage } from "@/types/ai-providers";
 import { NextRequest } from "next/server";
 import { loadMemoryForChat, cleanupUserMemory } from "@/lib/memory";
 import { FileAttachment } from "@/types/file";
-import { keywordSystem, KeywordTriggerType } from "@/lib/keywords/triggers";
+import { keywordSystem } from "@/lib/keywords/triggers";
+import { KeywordTriggerType } from "@/lib/keywords/system";
 
 export async function POST(req: NextRequest) {
   try {
