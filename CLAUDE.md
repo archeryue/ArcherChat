@@ -76,16 +76,20 @@ This document outlines the core principles and guidelines for developing ArcherC
 ### 6. 🤖 MODEL CONFIGURATION: Never Change Models Without Permission
 - **NEVER** change the AI model configuration (Gemini models, model tiers) unless the user explicitly asks
 - **NEVER** modify `src/config/models.ts` without explicit user request
-- **NEVER** suggest switching to different models without user asking first
+- **CAN** suggest model improvements if there's a good reason, but always ask before implementing
 - **ALWAYS** trust that the current model configuration is intentional and tested
-- **ALWAYS** ask for permission before proposing model changes
+- **ALWAYS** wait for explicit permission before making any model changes
 - **EXCEPTION**: Only change models when user explicitly requests it
 
 **Examples of what NOT to do:**
-- Don't change `gemini-2.5-flash-image` to another model name
-- Don't suggest "upgrading" or "fixing" model configurations
-- Don't assume a model name is wrong without user confirmation
+- Don't change `gemini-2.5-flash-image` to another model name without asking
+- Don't assume a model name is wrong and "fix" it
 - Don't modify model tier assignments without permission
+
+**What you CAN do:**
+- Suggest alternative models if there's a performance or cost benefit
+- Ask if the user wants to try a different model configuration
+- Explain trade-offs between different model options
 
 ---
 
