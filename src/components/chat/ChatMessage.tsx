@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -7,12 +8,45 @@ import "highlight.js/styles/github.css";
 import { MessageClient } from "@/types";
 import { cn } from "@/lib/utils";
 import { FileType, formatFileSize } from "@/types/file";
-import { FileText, Image as ImageIcon } from "lucide-react";
+import { FileText, Image as ImageIcon, Copy, Check } from "lucide-react";
 
 interface ChatMessageProps {
   message: MessageClient;
   userName?: string;
   userAvatar?: string;
+}
+
+// Code block component with copy functionality
+function CodeBlock({ children }: { children: React.ReactNode }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    // Extract text content from children
+    const codeElement = children as any;
+    const codeText = codeElement?.props?.children?.[0] || '';
+
+    navigator.clipboard.writeText(codeText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div className="relative group">
+      <button
+        onClick={handleCopy}
+        className="absolute top-2 right-2 p-2 rounded-md bg-slate-700 hover:bg-slate-600 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10"
+        title={copied ? "Copied!" : "Copy code"}
+      >
+        {copied ? (
+          <Check className="w-4 h-4" />
+        ) : (
+          <Copy className="w-4 h-4" />
+        )}
+      </button>
+      <pre className="overflow-x-auto">{children}</pre>
+    </div>
+  );
 }
 
 export function ChatMessage({ message, userName, userAvatar }: ChatMessageProps) {
@@ -71,11 +105,7 @@ export function ChatMessage({ message, userName, userAvatar }: ChatMessageProps)
                 );
               },
               pre({ children, ...props }) {
-                return (
-                  <pre className="overflow-x-auto" {...props}>
-                    {children}
-                  </pre>
-                );
+                return <CodeBlock>{children}</CodeBlock>;
               },
             }}
           >
