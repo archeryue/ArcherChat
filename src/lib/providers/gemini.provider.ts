@@ -5,6 +5,8 @@ import {
   AIResponse,
   ProviderMetadata,
 } from "@/types/ai-providers";
+import { GEMINI_MODELS, ModelTier } from "@/config/models";
+import { FileAttachment, FileType } from "@/types/file";
 
 export class GeminiProvider implements IAIProvider {
   private client: GoogleGenerativeAI;
@@ -17,12 +19,45 @@ export class GeminiProvider implements IAIProvider {
     }
 
     this.client = new GoogleGenerativeAI(key);
-    this.modelName = model || "gemini-2.0-flash-exp";
+    this.modelName = model || GEMINI_MODELS[ModelTier.MAIN];
   }
 
   private isImageGenerationRequest(content: string): boolean {
     const { IMAGE_GENERATION_KEYWORDS, containsKeywords } = require('@/config/keywords');
     return containsKeywords(content, IMAGE_GENERATION_KEYWORDS);
+  }
+
+  /**
+   * Convert FileAttachment to Gemini's inline data format
+   */
+  private fileToGeminiPart(file: FileAttachment) {
+    return {
+      inlineData: {
+        mimeType: file.mimeType,
+        data: file.data, // base64 string
+      },
+    };
+  }
+
+  /**
+   * Build parts for the last message including text and files
+   */
+  private buildMessageParts(content: string, files?: FileAttachment[]) {
+    const parts: any[] = [];
+
+    // Add text content if present
+    if (content) {
+      parts.push({ text: content });
+    }
+
+    // Add files if present
+    if (files && files.length > 0) {
+      for (const file of files) {
+        parts.push(this.fileToGeminiPart(file));
+      }
+    }
+
+    return parts;
   }
 
   private getImageGenerationPrompt(): string {
@@ -68,14 +103,16 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
   async *streamResponse(
     messages: AIMessage[],
     systemPrompt?: string,
-    temperature?: number
+    temperature?: number,
+    files?: FileAttachment[]
   ): AsyncGenerator<string, void, unknown> {
     const lastMessage = messages[messages.length - 1];
+    const hasFiles = files && files.length > 0;
     const isImageRequest = this.isImageGenerationRequest(lastMessage.content);
 
     // Use dedicated image generation model for better quality
     const modelName = isImageRequest
-      ? "gemini-2.0-flash-preview-image-generation"
+      ? GEMINI_MODELS[ModelTier.IMAGE]
       : this.modelName;
 
     // Configure for image generation if needed
@@ -120,7 +157,12 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
         history: history,
       });
 
-      const result = await chat.sendMessageStream(lastMessage.content);
+      // Send message with multimodal support if files are present
+      const messageInput = hasFiles
+        ? this.buildMessageParts(lastMessage.content, files)
+        : lastMessage.content;
+
+      const result = await chat.sendMessageStream(messageInput);
       let hasImage = false;
 
       for await (const chunk of result.stream) {
@@ -202,14 +244,16 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
   async generateResponse(
     messages: AIMessage[],
     systemPrompt?: string,
-    temperature?: number
+    temperature?: number,
+    files?: FileAttachment[]
   ): Promise<AIResponse> {
     const lastMessage = messages[messages.length - 1];
+    const hasFiles = files && files.length > 0;
     const isImageRequest = this.isImageGenerationRequest(lastMessage.content);
 
     // Use dedicated image generation model for better quality
     const modelName = isImageRequest
-      ? "gemini-2.0-flash-preview-image-generation"
+      ? GEMINI_MODELS[ModelTier.IMAGE]
       : this.modelName;
 
     // Configure for image generation if needed
@@ -254,7 +298,12 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
         history: history,
       });
 
-      const result = await chat.sendMessage(lastMessage.content);
+      // Send message with multimodal support if files are present
+      const messageInput = hasFiles
+        ? this.buildMessageParts(lastMessage.content, files)
+        : lastMessage.content;
+
+      const result = await chat.sendMessage(messageInput);
       const response = result.response;
       let fullContent = "";
 
@@ -372,14 +421,13 @@ Remember: Gemini 2.0 Flash has native image generation capabilities built-in, so
       name: "gemini",
       displayName: "Google Gemini",
       type: "gemini",
-      description: "Google's Gemini AI models (image generation requires paid plan)",
+      description: "Google's Gemini 2.5 models with cost-optimized tiering",
       requiresApiKey: true,
       supportsStreaming: true,
       supportedModels: [
-        "gemini-2.0-flash-exp",
-        "gemini-2.0-flash-preview-image-generation",
-        "gemini-1.5-pro",
-        "gemini-1.5-flash",
+        GEMINI_MODELS[ModelTier.MAIN],
+        GEMINI_MODELS[ModelTier.IMAGE],
+        GEMINI_MODELS[ModelTier.LITE],
       ],
     };
   }

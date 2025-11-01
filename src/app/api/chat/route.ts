@@ -7,6 +7,7 @@ import { ProviderFactory } from "@/lib/providers/provider-factory";
 import { AIMessage } from "@/types/ai-providers";
 import { NextRequest } from "next/server";
 import { loadMemoryForChat, processConversationMemory, cleanupUserMemory } from "@/lib/memory";
+import { FileAttachment } from "@/types/file";
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,9 +17,9 @@ export async function POST(req: NextRequest) {
       return new Response("Unauthorized", { status: 401 });
     }
 
-    const { conversationId, message } = await req.json();
+    const { conversationId, message, files } = await req.json();
 
-    if (!message || !conversationId) {
+    if (!conversationId || (!message && (!files || files.length === 0))) {
       return new Response("Missing required fields", { status: 400 });
     }
 
@@ -38,13 +39,38 @@ export async function POST(req: NextRequest) {
     }
 
     // Save user message
+    // Store file metadata without base64 data to avoid Firestore size limits
+    // Fixed: Conditionally include thumbnail field to prevent undefined values
+    const fileMetadata = files?.map((file: FileAttachment) => {
+      const metadata: any = {
+        id: file.id,
+        name: file.name,
+        type: file.type,
+        mimeType: file.mimeType,
+        size: file.size,
+      };
+
+      // Only include thumbnail if it exists (images have thumbnails, PDFs don't)
+      if (file.thumbnail) {
+        metadata.thumbnail = file.thumbnail;
+      }
+
+      return metadata;
+    });
+
+    const userMessageData: any = {
+      role: "user",
+      content: message || "",
+      created_at: new Date(),
+    };
+
+    if (fileMetadata && fileMetadata.length > 0) {
+      userMessageData.files = fileMetadata;
+    }
+
     const userMessageRef = await conversationRef
       .collection(COLLECTIONS.MESSAGES)
-      .add({
-        role: "user",
-        content: message,
-        created_at: new Date(),
-      });
+      .add(userMessageData);
 
     // Get all messages for context
     const messagesSnapshot = await conversationRef
@@ -86,6 +112,7 @@ export async function POST(req: NextRequest) {
     const provider = ProviderFactory.createDefaultProvider();
 
     // Stream response from AI provider
+    // Pass files from current request (with full base64 data) for AI processing
     const encoder = new TextEncoder();
     let fullResponse = "";
 
@@ -95,7 +122,8 @@ export async function POST(req: NextRequest) {
           for await (const chunk of provider.streamResponse(
             messages,
             finalPrompt,
-            promptConfig.temperature
+            promptConfig.temperature,
+            files // Pass files with full base64 data to AI
           )) {
             fullResponse += chunk;
             controller.enqueue(encoder.encode(chunk));

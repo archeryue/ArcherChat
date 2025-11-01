@@ -9,6 +9,7 @@ import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { ChatTopBar } from "@/components/chat/ChatTopBar";
 import { LoadingPage } from "@/components/ui/loading";
 import { MessageClient, ConversationClient } from "@/types";
+import { FileAttachment } from "@/types/file";
 
 export default function ChatPage() {
   const { data: session, status } = useSession();
@@ -107,7 +108,7 @@ export default function ChatPage() {
     }
   };
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, files?: FileAttachment[]) => {
     // Create conversation if it doesn't exist
     let currentConversationId = conversationId;
     if (!currentConversationId) {
@@ -140,6 +141,7 @@ export default function ChatPage() {
       role: "user",
       content,
       created_at: new Date(),
+      files,
     };
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
@@ -161,6 +163,7 @@ export default function ChatPage() {
         body: JSON.stringify({
           conversationId: currentConversationId,
           message: content,
+          files,
         }),
       });
 

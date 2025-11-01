@@ -1,13 +1,22 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GEMINI_MODELS, ModelTier } from "@/config/models";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-export const MODEL_NAME = "gemini-2.0-flash-exp";
+export const MODEL_NAME = GEMINI_MODELS[ModelTier.MAIN];
 
 // Get Gemini model instance for direct API calls (e.g., memory extraction)
+// Uses Flash-Lite for cost-optimized background processing
 export function getGeminiModel() {
   return genAI.getGenerativeModel({
-    model: MODEL_NAME,
+    model: GEMINI_MODELS[ModelTier.LITE],
+  });
+}
+
+// Get main Gemini model for user-facing interactions
+export function getGeminiModelMain() {
+  return genAI.getGenerativeModel({
+    model: GEMINI_MODELS[ModelTier.MAIN],
   });
 }
 

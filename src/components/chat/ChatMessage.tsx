@@ -6,6 +6,8 @@ import rehypeHighlight from "rehype-highlight";
 import "highlight.js/styles/github.css";
 import { MessageClient } from "@/types";
 import { cn } from "@/lib/utils";
+import { FileType, formatFileSize } from "@/types/file";
+import { FileText, Image as ImageIcon } from "lucide-react";
 
 interface ChatMessageProps {
   message: MessageClient;
@@ -79,6 +81,46 @@ export function ChatMessage({ message, userName, userAvatar }: ChatMessageProps)
           >
             {message.content}
           </ReactMarkdown>
+
+          {/* Display uploaded file attachments */}
+          {message.files && message.files.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {message.files.map((file) => (
+                <div
+                  key={file.id}
+                  className="flex items-center gap-2 bg-slate-100 rounded-lg px-3 py-2 max-w-xs"
+                >
+                  {/* File Icon/Thumbnail */}
+                  {file.type === FileType.IMAGE && file.thumbnail ? (
+                    <div className="w-10 h-10 rounded overflow-hidden bg-slate-200 flex-shrink-0">
+                      <img
+                        src={file.thumbnail}
+                        alt={file.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ) : file.type === FileType.IMAGE ? (
+                    <div className="w-10 h-10 rounded bg-blue-100 flex items-center justify-center flex-shrink-0">
+                      <ImageIcon className="w-5 h-5 text-blue-600" />
+                    </div>
+                  ) : (
+                    <div className="w-10 h-10 rounded bg-red-100 flex items-center justify-center flex-shrink-0">
+                      <FileText className="w-5 h-5 text-red-600" />
+                    </div>
+                  )}
+                  {/* File Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-700 truncate">
+                      {file.name}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {formatFileSize(file.size)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Display image if present */}
           {(message.image_url || message.image_data) && (

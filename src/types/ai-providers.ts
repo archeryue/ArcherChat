@@ -1,3 +1,5 @@
+import { FileAttachment } from "./file";
+
 // Supported AI provider types
 export type AIProviderType = "gemini" | "openai" | "inhouse";
 
@@ -43,14 +45,16 @@ export interface IAIProvider {
   streamResponse(
     messages: AIMessage[],
     systemPrompt?: string,
-    temperature?: number
+    temperature?: number,
+    files?: FileAttachment[]
   ): AsyncGenerator<string, void, unknown>;
 
   // Non-streaming response (for simple requests)
   generateResponse(
     messages: AIMessage[],
     systemPrompt?: string,
-    temperature?: number
+    temperature?: number,
+    files?: FileAttachment[]
   ): Promise<AIResponse>;
 
   // Check if provider is available (API key set, etc.)

@@ -1,7 +1,10 @@
 import { Timestamp } from "firebase-admin/firestore";
+import { FileAttachment } from "./file";
 
 // Re-export memory types
 export * from "./memory";
+// Re-export file types
+export * from "./file";
 
 export interface User {
   email: string;
@@ -25,6 +28,7 @@ export interface Message {
   content: string;
   image_url?: string;  // URL for generated/external images
   image_data?: string;  // Base64 encoded image data
+  files?: FileAttachment[];  // Uploaded file attachments
   created_at: Timestamp;
 }
 
@@ -59,6 +63,7 @@ export interface MessageClient {
   content: string;
   image_url?: string;  // URL for generated/external images
   image_data?: string;  // Base64 encoded image data
+  files?: FileAttachment[];  // Uploaded file attachments
   created_at: Date;
 }
 
