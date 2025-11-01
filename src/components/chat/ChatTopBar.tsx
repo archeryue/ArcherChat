@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
-import { LogOut, Settings, Brain, User } from "lucide-react";
+import { LogOut, Settings, Brain, User, Target } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -33,7 +33,11 @@ export function ChatTopBar({
     <div className="bg-white border-b border-slate-200 px-4 py-1 flex items-center justify-between shadow-sm">
       {/* Logo/Title */}
       <div className="flex items-center gap-2">
-        <h1 className="text-base font-bold text-slate-800">ArcherChat</h1>
+        <Target className="w-7 h-7 text-blue-600" strokeWidth={1.5} />
+        <h1 className="text-base font-bold">
+          <span className="text-blue-600">Archer</span>
+          <span className="text-slate-800">Chat</span>
+        </h1>
       </div>
 
       {/* User Menu Dropdown */}
