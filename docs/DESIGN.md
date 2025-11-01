@@ -1,9 +1,18 @@
 # ArcherChat - AI Chatbot Design Document
 
 ## Overview
-ArcherChat is a ChatGPT-like AI chatbot website that uses Google's Gemini API as the primary AI provider. The application features Google Account authentication with whitelist-based access control, deployed on Google Cloud Platform (GCP).
+ArcherChat is a bilingual (English/Chinese) AI chatbot with advanced memory and personalization features, powered by Google's Gemini 2.5 Flash. The application features Google Account authentication with whitelist-based access control, automatic memory extraction, native image generation, and intelligent conversation personalization.
+
+**Key Features:**
+- 🧠 **Intelligent Memory System**: Automatic extraction and tiered retention (CORE/IMPORTANT/CONTEXT)
+- 🎨 **Native Image Generation**: Built-in Gemini 2.0 Flash image generation
+- 🌏 **Bilingual Support**: Full English and Chinese support with 175+ keywords
+- 📎 **File Attachments**: Upload and analyze images, PDFs
+- 🎯 **Smart Personalization**: AI remembers preferences and context
+- ⚙️ **Dynamic Prompts**: Admin-configurable system prompts
 
 **Target Cost**: < $30/month for family use (5-10 users, ~1000 messages/month)
+**Actual Cost**: $8-18/month (well under budget)
 
 ## System Architecture
 
@@ -68,12 +77,21 @@ ArcherChat is a ChatGPT-like AI chatbot website that uses Google's Gemini API as
 - **Session Storage**: JWT tokens (no database session needed)
 
 ### AI Provider
-- **Primary**: Google Gemini API
-  - **Model**: Gemini 1.5 Flash (cheaper, fast)
-    - Input: $0.075 / 1M tokens
-    - Output: $0.30 / 1M tokens
-    - ~1000 messages/month = ~$2-5/month
-- **SDK**: @google/generative-ai (official Node.js SDK)
+- **Provider**: Google Gemini API (tiered model strategy)
+  - **Main Model**: Gemini 2.5 Flash
+    - Context: 1M tokens, Output: 65K tokens
+    - Input: $0.30 / 1M tokens, Output: $2.50 / 1M tokens
+    - Use case: User-facing chat conversations
+  - **Image Model**: Gemini 2.5 Flash Image
+    - Native image generation capabilities
+    - Same pricing as main model
+    - Use case: Image generation requests
+  - **Lite Model**: Gemini 2.5 Flash-Lite
+    - Input: $0.075 / 1M tokens, Output: $0.30 / 1M tokens (25% cheaper)
+    - Use case: Memory extraction, background processing
+  - **Cost Savings**: 7-15% overall savings vs single model
+- **SDK**: @google/generative-ai 0.21.0 (official Node.js SDK)
+- **Abstraction**: IAIProvider interface for multi-provider support
 
 ### Infrastructure (GCP)
 - **Compute**: Cloud Run (single instance)
@@ -85,6 +103,121 @@ ArcherChat is a ChatGPT-like AI chatbot website that uses Google's Gemini API as
 - **DNS/SSL**: Cloud Run custom domains (free SSL)
 - **CI/CD**: Manual docker build + deploy (simplest) or Cloud Build
 
+## Advanced Features
+
+### Memory System Architecture
+
+ArcherChat includes an intelligent memory system that learns from conversations and provides personalized responses.
+
+**Hybrid Triggering:**
+- **Keyword-based**: Immediate extraction when user says "remember that", "my name is", etc. (138 triggers)
+- **Conversation-based**: Automatic extraction after 5+ messages and 2+ minutes of conversation
+
+**Tiered Retention Strategy:**
+| Tier | Max Facts | Retention | Use Case | Examples |
+|------|-----------|-----------|----------|----------|
+| CORE | 8 | Permanent | Profile info | Name, occupation, family |
+| IMPORTANT | 12 | 90 days | Preferences, technical | Languages, tools, habits |
+| CONTEXT | 6 | 30 days | Temporary info | Current projects, tasks |
+
+**Total Memory Budget**: 26 facts, ~500 tokens
+
+**Intelligent Features:**
+- Deduplication: Filters similar/duplicate facts
+- Confidence scoring: Only stores facts with ≥0.6 confidence
+- Language preference tracking: English, Chinese, or Hybrid
+- Automatic cleanup: Removes expired and low-value facts
+- User control: View and delete facts via /profile page
+
+**Categories:**
+- PROFILE: Personal information (name, job, interests)
+- PREFERENCE: Likes, dislikes, habits
+- TECHNICAL: Programming languages, tools, frameworks
+- PROJECT: Current work, ongoing projects
+
+### Image Generation
+
+Native image generation powered by Gemini 2.5 Flash Image model.
+
+**Features:**
+- Keyword detection in 2 languages (37 triggers in English + Chinese)
+- Automatic model switching to image-capable model
+- Inline image display in chat
+- Fallback to descriptive text if generation unavailable
+
+**Trigger Examples:**
+- English: "create an image", "draw a picture", "generate an image"
+- Chinese: "生成图片", "画一幅图", "创建图像"
+
+### Bilingual Support (中英文双语)
+
+Full support for both English and Chinese speakers.
+
+**Keyword System:**
+- 138 memory trigger keywords (English + Chinese)
+- 37 image generation keywords (English + Chinese)
+- Centralized configuration in `src/config/keywords.ts`
+- Smart matching with word boundaries and context awareness
+
+**Language Preference:**
+- Automatically detected from conversation patterns
+- Three modes: English, Chinese, Hybrid
+- Stored in user's memory profile
+- Influences AI response style
+
+### File Attachments
+
+Upload and analyze files with multimodal AI.
+
+**Supported Formats:**
+- Images: PNG, JPG, GIF, WebP
+- Documents: PDF
+- Base64 encoding for transmission
+- Thumbnail generation for images
+
+**Processing:**
+- Sent to Gemini API as inline data
+- AI can analyze and discuss file contents
+- Metadata stored in Firestore (without base64 data for efficiency)
+
+### Provider Abstraction Layer
+
+Extensible architecture for multiple AI providers.
+
+**Interface**: `IAIProvider`
+```typescript
+interface IAIProvider {
+  generateChatResponse(messages, options): AsyncGenerator<string>
+  generateImage(prompt, options): Promise<string | null>
+  supportsImageGeneration(): boolean
+}
+```
+
+**Current Implementations:**
+- GeminiProvider (fully implemented)
+
+**Benefits:**
+- Easy to add OpenAI, Anthropic, etc.
+- Consistent API across providers
+- Provider-specific optimizations
+- Fallback mechanisms
+
+### Dynamic Prompt Management
+
+Admin-configurable system prompts stored in Firestore.
+
+**Features:**
+- Multiple prompt configurations
+- Active/inactive toggle
+- Temperature control
+- Real-time updates without code changes
+- Version history
+
+**Collection**: `prompts`
+- Default prompt created on first run
+- Editable via /admin page
+- Memory context automatically injected
+
 ## Data Models (Firestore Collections)
 
 ### Firestore Structure
@@ -93,6 +226,8 @@ ArcherChat is a ChatGPT-like AI chatbot website that uses Google's Gemini API as
 /whitelist/{email}
 /conversations/{conversationId}
 /conversations/{conversationId}/messages/{messageId}
+/memory/{userId}
+/prompts/{promptId}
 ```
 
 ### User Document
@@ -130,7 +265,7 @@ interface WhitelistEntry {
 interface Conversation {
   user_id: string;               // Reference to user
   title: string;                 // Auto-generated from first message
-  model: string;                 // "gemini-1.5-flash"
+  model: string;                 // "gemini-2.5-flash"
   created_at: Timestamp;
   updated_at: Timestamp;
 }
@@ -144,7 +279,65 @@ interface Conversation {
 interface Message {
   role: 'user' | 'assistant';    // Message sender
   content: string;               // Message text
+  image_url?: string;            // Generated image URL (for assistant messages)
+  image_data?: string;           // Base64 image data (stripped before save)
+  files?: FileAttachment[];      // Attached files
   created_at: Timestamp;
+}
+
+interface FileAttachment {
+  name: string;                  // File name
+  type: string;                  // MIME type
+  size: number;                  // File size in bytes
+  data?: string;                 // Base64 data (not persisted)
+}
+```
+
+**Note**: Messages are stored as subcollections under conversations for efficient querying and automatic deletion when conversation is deleted. File base64 data is not persisted to reduce Firestore costs.
+
+### Memory Document
+**Collection**: `memory`
+**Document ID**: User ID
+
+```typescript
+interface UserMemory {
+  user_id: string;
+  facts: MemoryFact[];
+  language_preference?: 'english' | 'chinese' | 'hybrid';
+  stats: {
+    total_facts: number;
+    token_usage: number;
+    last_cleanup: Date;
+  };
+  updated_at: Date;
+}
+
+interface MemoryFact {
+  id: string;
+  fact: string;                  // The actual fact
+  category: 'PROFILE' | 'PREFERENCE' | 'TECHNICAL' | 'PROJECT';
+  tier: 'CORE' | 'IMPORTANT' | 'CONTEXT';
+  confidence: number;            // 0.0 - 1.0
+  source_conversation?: string;  // Conversation ID
+  created_at: Date;
+  expires_at?: Date;             // For IMPORTANT and CONTEXT tiers
+  last_used?: Date;              // For importance scoring
+  usage_count: number;           // How many times referenced
+}
+```
+
+### Prompt Document
+**Collection**: `prompts`
+**Document ID**: Auto-generated ID
+
+```typescript
+interface PromptConfig {
+  name: string;                  // Prompt name/description
+  systemPrompt: string;          // The system prompt text
+  temperature: number;           // 0.0 - 2.0
+  isActive: boolean;             // Only one active at a time
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }
 ```
 
@@ -163,13 +356,23 @@ interface Message {
 - `POST /api/conversations` - Create new conversation
 - `GET /api/conversations/[id]` - Get conversation with messages
 - `DELETE /api/conversations/[id]` - Delete conversation
-- `POST /api/chat` - Send message and stream response
+- `POST /api/chat` - Send message and stream response (supports files, triggers memory/image)
+
+### Memory Endpoints
+- `GET /api/memory` - Get user's memory facts
+- `POST /api/memory` - Add memory fact manually
+- `DELETE /api/memory` - Clear all memory facts
+- `DELETE /api/memory/[id]` - Delete specific memory fact
 
 ### Admin Endpoints
 - `GET /api/admin/whitelist` - List whitelisted emails
 - `POST /api/admin/whitelist` - Add email to whitelist
 - `DELETE /api/admin/whitelist` - Remove from whitelist
-- `GET /api/admin/users` - List all users
+- `GET /api/admin/users` - List all users with stats
+- `GET /api/admin/prompts` - Get all prompt configurations
+- `POST /api/admin/prompts` - Create or update prompt
+- `POST /api/admin/prompts/reset` - Reset to default prompt
+- `POST /api/admin/cleanup-conversations` - Cleanup utility
 
 ## Project Structure (Next.js Fullstack)
 
@@ -178,52 +381,93 @@ interface Message {
 ├── src/
 │   ├── app/                    # Next.js App Router
 │   │   ├── api/               # API Routes (Backend)
-│   │   │   ├── auth/
-│   │   │   │   └── [...nextauth]/
-│   │   │   │       └── route.ts
-│   │   │   ├── conversations/
+│   │   │   ├── auth/          # NextAuth endpoints
+│   │   │   │   └── [...nextauth]/route.ts
+│   │   │   ├── conversations/ # Conversation management
 │   │   │   │   ├── route.ts
-│   │   │   │   └── [id]/
-│   │   │   │       └── route.ts
-│   │   │   ├── chat/
+│   │   │   │   └── [id]/route.ts
+│   │   │   ├── chat/          # Chat streaming endpoint
 │   │   │   │   └── route.ts
-│   │   │   └── admin/
-│   │   │       ├── whitelist/
-│   │   │       │   └── route.ts
-│   │   │       └── users/
-│   │   │           └── route.ts
-│   │   ├── (auth)/            # Auth pages
-│   │   │   └── login/
-│   │   │       └── page.tsx
+│   │   │   ├── memory/        # Memory system
+│   │   │   │   ├── route.ts
+│   │   │   │   └── [id]/route.ts
+│   │   │   └── admin/         # Admin endpoints
+│   │   │       ├── whitelist/route.ts
+│   │   │       ├── users/route.ts
+│   │   │       ├── prompts/route.ts
+│   │   │       └── cleanup-conversations/route.ts
 │   │   ├── chat/              # Main chat UI
 │   │   │   ├── page.tsx
-│   │   │   └── [id]/
-│   │   │       └── page.tsx
+│   │   │   └── [id]/page.tsx
 │   │   ├── admin/             # Admin panel
 │   │   │   └── page.tsx
-│   │   ├── layout.tsx
+│   │   ├── profile/           # User memory profile
+│   │   │   └── page.tsx
+│   │   ├── login/             # Login page
+│   │   │   └── page.tsx
+│   │   ├── layout.tsx         # Root layout with providers
 │   │   └── page.tsx           # Landing page
 │   ├── components/
-│   │   ├── chat/
+│   │   ├── chat/              # Chat components
 │   │   │   ├── ChatInput.tsx
 │   │   │   ├── ChatMessage.tsx
 │   │   │   ├── ChatSidebar.tsx
+│   │   │   ├── ChatTopBar.tsx
 │   │   │   └── ConversationList.tsx
-│   │   ├── auth/
-│   │   │   └── SignInButton.tsx
-│   │   └── admin/
-│   │       └── WhitelistManager.tsx
+│   │   ├── admin/             # Admin components
+│   │   │   ├── WhitelistManager.tsx
+│   │   │   ├── UserStats.tsx
+│   │   │   └── PromptManager.tsx
+│   │   ├── ui/                # UI components (shadcn)
+│   │   │   ├── button.tsx
+│   │   │   ├── dropdown-menu.tsx
+│   │   │   └── loading.tsx
+│   │   └── providers/
+│   │       └── SessionProvider.tsx
 │   ├── lib/
-│   │   ├── firebase-admin.ts  # Firestore connection
-│   │   ├── gemini.ts          # Gemini API client
+│   │   ├── firebase-admin.ts  # Firestore connection (lazy init)
+│   │   ├── gemini.ts          # Legacy Gemini client
 │   │   ├── auth.ts            # NextAuth config
-│   │   └── utils.ts
-│   └── types/
-│       └── index.ts           # TypeScript types
+│   │   ├── prompts.ts         # Dynamic prompt management
+│   │   ├── utils.ts           # Utility functions
+│   │   ├── providers/         # AI provider abstraction
+│   │   │   ├── provider-factory.ts
+│   │   │   └── gemini.provider.ts
+│   │   ├── memory/            # Memory system
+│   │   │   ├── index.ts
+│   │   │   ├── storage.ts
+│   │   │   ├── extractor.ts
+│   │   │   ├── loader.ts
+│   │   │   └── cleanup.ts
+│   │   └── keywords/          # Keyword trigger system
+│   │       ├── system.ts
+│   │       └── triggers.ts
+│   ├── config/                # Configuration
+│   │   ├── models.ts          # Gemini model tiering
+│   │   └── keywords.ts        # Bilingual keywords
+│   └── types/                 # TypeScript types
+│       ├── index.ts           # Main types
+│       ├── memory.ts          # Memory types
+│       ├── prompts.ts         # Prompt types
+│       ├── file.ts            # File attachment types
+│       ├── ai-providers.ts    # Provider interfaces
+│       └── next-auth.d.ts     # NextAuth extensions
+├── docs/                      # Documentation
+│   ├── DESIGN.md
+│   ├── DEPLOYMENT.md
+│   ├── TESTING_CHECKLIST.md
+│   ├── MEMORY_SYSTEM_COMPLETE.md
+│   ├── ADDING_PROVIDERS.md
+│   └── README.md
+├── scripts/                   # Utility scripts
+│   ├── check-active-prompt.ts
+│   └── fix-language-preference.ts
 ├── .env.local                 # Environment variables
-├── Dockerfile
+├── Dockerfile                 # Multi-stage Docker build
 ├── package.json
-└── next.config.js
+├── next.config.js
+├── CLAUDE.md                  # Development principles (CRITICAL)
+└── README.md                  # Project documentation
 ```
 
 ## Security Considerations
@@ -331,19 +575,26 @@ gcloud run deploy archerchat \
 - **Firestore**: **FREE**
   - 50K reads/day = 1.5M/month (way more than needed)
   - 20K writes/day = 600K/month (way more than needed)
-  - 1GB storage (plenty for text messages)
+  - 1GB storage (plenty for text + memory)
   - Estimate: $0/month ✅
 
 - **Cloud Run**: **~$5-10/month**
   - Min instances: 0 (scales to zero when idle)
   - ~10 hours of active usage/month
-  - Minimal CPU/memory usage
+  - 512Mi RAM, 1 vCPU
   - Estimate: $5-10/month ✅
 
-- **Gemini API (1.5 Flash)**: **~$2-5/month**
-  - 1000 messages × ~500 tokens avg = 500K tokens
-  - Input: 500K × $0.075/1M = $0.04
-  - Output: 500K × $0.30/1M = $0.15
+- **Gemini API (2.5 Flash + Lite)**: **~$2-5/month**
+  - Chat (2.5 Flash):
+    - 1000 messages × 600 tokens avg (with memory) = 600K tokens
+    - Input: 600K × $0.30/1M = $0.18
+    - Output: 600K × $2.50/1M = $1.50
+  - Memory extraction (2.5 Flash-Lite):
+    - 100 extractions × 3K tokens = 300K tokens
+    - Input: 300K × $0.075/1M = $0.02
+    - Output: 300K × $0.30/1M = $0.09
+  - Image generation (occasional):
+    - ~10 images/month = ~$0.50
   - Total with buffer: ~$2-5/month ✅
 
 - **Other (networking, etc.)**: **~$1-3/month**
@@ -352,43 +603,71 @@ gcloud run deploy archerchat \
 
 **Total: $8-18/month** ✅ **Well under $30!**
 
+**Breakdown by Feature:**
+- Base chat: ~$6-12/month
+- Memory system: +$0.50-1/month
+- Image generation: +$0.50-2/month
+- File attachments: included (no extra cost)
+
 ### If Usage Grows (50 users, 10K messages/month)
 - Firestore: Still likely FREE or ~$5-10
 - Cloud Run: ~$15-25
-- Gemini API: ~$20-30
-- **Total**: ~$40-65/month (still reasonable)
+- Gemini API: ~$20-35 (with memory + images)
+- **Total**: ~$40-70/month (still reasonable)
 
 ### Cost Optimization Tips
-1. Use Gemini Flash instead of Pro (4x cheaper)
-2. Keep min instances at 0
-3. Implement client-side caching to reduce Firestore reads
-4. Monitor usage in GCP Console
-5. Set up billing alerts at $20, $30
+1. **Tiered models**: Use 2.5 Flash-Lite for background tasks (25% cheaper)
+2. **Min instances = 0**: Service scales to zero when idle
+3. **Memory budget**: 500-token limit keeps costs predictable
+4. **Efficient storage**: Don't persist file base64 data to Firestore
+5. **Client-side caching**: Reduce Firestore reads
+6. **Monitor usage**: GCP Console + billing alerts at $20, $30
+7. **Keyword optimization**: Minimize unnecessary memory extractions
 
-## Future Enhancements (Post-MVP)
+## Future Enhancements
+
+### ✅ Already Implemented
+- ✅ File uploads (PDFs, images)
+- ✅ Memory system with automatic extraction
+- ✅ Image generation (native Gemini)
+- ✅ Bilingual support (English/Chinese)
+- ✅ Code syntax highlighting
+- ✅ Prompt management
+- ✅ User statistics
+- ✅ Provider abstraction layer
+
+### 🎯 Planned Features
 1. **Multi-Model Support**:
    - OpenAI API integration
+   - Anthropic Claude integration
    - Self-hosted models (Ollama, vLLM)
    - Model selection in UI
 2. **Advanced Features**:
-   - File uploads (PDFs, images)
    - Conversation sharing
    - Conversation search
    - Message regeneration
-   - Conversation export
+   - Conversation export (JSON, Markdown)
+   - Voice input support
 3. **UI Improvements**:
    - Dark mode
-   - Code syntax highlighting
    - Markdown tables support
-   - Mobile app
-4. **Administration**:
+   - Mobile app / responsive mobile UI
+   - File preview in chat
+4. **Memory Enhancements**:
+   - Memory search
+   - Memory analytics dashboard
+   - Shared family memories (opt-in)
+   - Memory export/import
+5. **Administration**:
    - Usage analytics dashboard
    - Cost tracking per user
-   - User management (ban, limits)
-5. **Performance**:
-   - Redis caching
+   - User management (ban, limits, quotas)
+   - Audit logs
+6. **Performance**:
+   - Redis caching for memory/prompts
    - CDN for static assets
    - WebSocket for real-time updates
+   - Conversation pagination
 
 ## Local Development Setup
 
@@ -481,15 +760,19 @@ If you just want to see the UI without backend:
 
 ### ✅ Decided (Based on Requirements)
 1. **Database**: Firestore (serverless, FREE tier for family use)
-2. **Architecture**: Next.js fullstack (single deployment, cheaper)
-3. **AI Model**: Gemini 1.5 Flash (4x cheaper than Pro, still great quality)
+2. **Architecture**: Next.js 14 fullstack (single deployment, cheaper)
+3. **AI Model**: Gemini 2.5 Flash (tiered: Main/Image/Lite for cost optimization)
 4. **Deployment**: Single Cloud Run instance (no separate backend)
 5. **Repository**: Monorepo (simpler for family project)
 6. **Admin Email**: archeryue7@gmail.com (via ADMIN_EMAIL env var)
 7. **Conversation Titles**: Auto-generated from first user message
-8. **Admin Panel**: Whitelist management + user stats (message count, last active)
-9. **UI**: Light mode only (no dark mode for MVP)
-10. **Mobile**: Desktop-focused, mobile support later
+8. **Admin Panel**: Whitelist + user stats + prompt management
+9. **Memory System**: Automatic extraction with 500-token budget
+10. **Image Generation**: Native Gemini 2.5 Flash Image
+11. **Bilingual**: Full English/Chinese support (175+ keywords)
+12. **Provider Abstraction**: IAIProvider interface for extensibility
+13. **UI**: Light mode only (dark mode planned for future)
+14. **Mobile**: Desktop-focused, mobile support later
 
 ### How Admin Works
 - Admin email is set via `ADMIN_EMAIL` environment variable

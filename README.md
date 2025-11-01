@@ -1,16 +1,21 @@
 # ArcherChat - AI Chatbot
 
-A ChatGPT-like AI chatbot powered by Google Gemini, built with Next.js and deployed on Google Cloud Platform.
+A bilingual (English/Chinese) AI chatbot with advanced memory and personalization features, powered by Google Gemini 2.5 Flash.
 
 ## Features
 
-- 🤖 AI-powered chat using Google Gemini 1.5 Flash
-- 🔐 Google OAuth authentication
-- 👥 Whitelist-based access control
-- 💬 Conversation history management
-- 👨‍💼 Admin panel for user management
-- 📊 User statistics tracking
-- 🎨 Clean, modern UI with Tailwind CSS
+- 🧠 **Intelligent Memory System**: Automatic extraction with tiered retention (CORE/IMPORTANT/CONTEXT)
+- 🎨 **Native Image Generation**: Built-in Gemini 2.5 Flash Image generation
+- 🌏 **Bilingual Support**: Full English and Chinese support (175+ keywords)
+- 📎 **File Attachments**: Upload and analyze images, PDFs with multimodal AI
+- 🤖 **AI Chat**: Streaming responses with syntax highlighting
+- 🔐 **Google OAuth**: Secure authentication with whitelist control
+- 💬 **Conversation Management**: Auto-generated titles, full history
+- 👨‍💼 **Admin Panel**: User management, whitelist, prompt configuration
+- 📊 **User Statistics**: Message counts, activity tracking
+- 🎯 **Smart Personalization**: AI remembers your preferences and context
+- ⚙️ **Dynamic Prompts**: Admin-configurable system prompts
+- 🎨 **Clean UI**: Modern interface with Tailwind CSS
 
 ## Tech Stack
 
@@ -112,26 +117,79 @@ src/
   app/
     api/                  # API routes
       auth/               # NextAuth endpoints
-      chat/               # Chat endpoint
+      chat/               # Chat streaming endpoint
       conversations/      # Conversation management
-      admin/              # Admin endpoints
+      memory/             # Memory system API
+      admin/              # Admin endpoints (whitelist, users, prompts, cleanup)
     chat/                 # Main chat interface
     admin/                # Admin panel
+    profile/              # User memory profile page
     login/                # Login page
-    layout.tsx            # Root layout
+    layout.tsx            # Root layout with providers
   components/
-    chat/                 # Chat components
-    admin/                # Admin components
-    ui/                   # UI components
+    chat/                 # Chat components (input, message, sidebar, topbar)
+    admin/                # Admin components (whitelist, stats, prompts)
+    ui/                   # UI components (shadcn/ui)
     providers/            # Context providers
   lib/
-    firebase-admin.ts     # Firestore setup
-    gemini.ts             # Gemini API client
+    firebase-admin.ts     # Firestore setup (lazy initialization)
     auth.ts               # NextAuth config
-    utils.ts              # Utility functions
+    prompts.ts            # Dynamic prompt management
+    providers/            # AI provider abstraction
+      provider-factory.ts
+      gemini.provider.ts
+    memory/               # Memory system
+      storage.ts          # CRUD operations
+      extractor.ts        # AI-powered extraction
+      loader.ts           # Memory loading for chat
+      cleanup.ts          # Automatic cleanup
+    keywords/             # Keyword trigger system
+      system.ts
+      triggers.ts
+  config/
+    models.ts             # Gemini model tiering
+    keywords.ts           # Bilingual keywords (175+ triggers)
   types/
-    index.ts              # TypeScript types
+    index.ts              # Main types
+    memory.ts             # Memory system types
+    prompts.ts            # Prompt types
+    file.ts               # File attachment types
+    ai-providers.ts       # Provider interfaces
 ```
+
+## Key Features Explained
+
+### 🧠 Memory System
+
+The AI automatically learns from your conversations:
+- **Hybrid Triggering**: Keywords ("remember that") or automatic after 5+ messages
+- **Tiered Retention**: CORE (permanent), IMPORTANT (90 days), CONTEXT (30 days)
+- **Smart Cleanup**: Removes low-value facts to stay under 500-token budget
+- **User Control**: View and delete facts at `/profile`
+
+### 🎨 Image Generation
+
+Generate images directly in chat:
+- **English**: "create an image of a sunset"
+- **Chinese**: "生成一幅图片，描绘星空"
+- Native Gemini 2.5 Flash Image model
+- Inline display in conversation
+
+### 📎 File Attachments
+
+Upload and analyze files:
+- **Images**: PNG, JPG, GIF, WebP
+- **Documents**: PDF
+- AI can analyze and discuss file contents
+- Multimodal processing with Gemini
+
+### 🌏 Bilingual Support
+
+Full Chinese and English support:
+- 138 memory trigger keywords (both languages)
+- 37 image generation keywords (both languages)
+- Language preference auto-detection
+- Hybrid mode for mixed conversations
 
 ## Admin Features
 
@@ -139,16 +197,26 @@ As an admin, you can:
 
 1. **Manage Whitelist**: Add/remove emails that can access the app
 2. **View User Stats**: See all users, message counts, and last active times
-3. **Access Admin Panel**: Click "Admin Panel" in the sidebar
+3. **Configure Prompts**: Edit system prompts and temperature settings
+4. **Access Admin Panel**: Click "Admin Panel" in the sidebar
 
 ## Cost Estimation
 
 For family use (5-10 users, ~1000 messages/month):
 
-- Firestore: **FREE** (within free tier)
-- Cloud Run: **$5-10/month**
-- Gemini API: **$2-5/month**
-- **Total: $8-18/month**
+- **Firestore**: FREE (within free tier)
+- **Cloud Run**: $5-10/month (scales to zero when idle)
+- **Gemini API**: $2-5/month (tiered models for optimization)
+  - Chat (2.5 Flash): ~$1.70
+  - Memory extraction (2.5 Flash-Lite): ~$0.50
+  - Image generation (occasional): ~$0.50
+- **Total: $8-18/month** ✅ Well under $30 budget!
+
+**Cost per feature:**
+- Base chat: ~$6-12/month
+- Memory system: +$0.50-1/month
+- Image generation: +$0.50-2/month
+- File attachments: included (no extra cost)
 
 ## Deployment
 

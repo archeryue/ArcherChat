@@ -172,13 +172,137 @@
 - [ ] Firefox (latest)
 - [ ] Safari (latest)
 
+## Memory System
+
+### Automatic Extraction
+- [ ] Chat for 5+ messages over 2+ minutes
+- [ ] Memory facts automatically extracted
+- [ ] Facts appear in /profile page
+- [ ] Facts categorized correctly (PROFILE, PREFERENCE, TECHNICAL, PROJECT)
+- [ ] Facts assigned correct tier (CORE, IMPORTANT, CONTEXT)
+- [ ] Confidence scores ≥ 0.6
+
+### Keyword Triggers (English)
+- [ ] "remember that" triggers immediate extraction
+- [ ] "my name is" triggers immediate extraction
+- [ ] "i prefer" triggers immediate extraction
+- [ ] "don't forget" triggers immediate extraction
+
+### Keyword Triggers (Chinese)
+- [ ] "记住" triggers immediate extraction
+- [ ] "我叫" triggers immediate extraction
+- [ ] "我喜欢" triggers immediate extraction
+- [ ] "别忘了" triggers immediate extraction
+
+### Memory Profile Page
+- [ ] Can access /profile page
+- [ ] All memory facts displayed
+- [ ] Facts grouped by category
+- [ ] Can delete individual facts
+- [ ] Can clear all memory
+- [ ] Deletion requires confirmation
+- [ ] Stats display correctly (total facts, token usage)
+- [ ] Language preference shown
+
+### Memory Integration
+- [ ] AI references memory in responses
+- [ ] Memory context loaded into chat
+- [ ] New facts don't duplicate existing ones
+- [ ] Old/low-value facts cleaned up automatically
+- [ ] Memory budget stays under 500 tokens
+
+## Image Generation
+
+### English Triggers
+- [ ] "create an image" generates image
+- [ ] "draw a picture" generates image
+- [ ] "generate an image" generates image
+- [ ] "make an image" generates image
+
+### Chinese Triggers
+- [ ] "生成图片" generates image
+- [ ] "画一幅图" generates image
+- [ ] "创建图像" generates image
+- [ ] "制作图片" generates image
+
+### Image Display
+- [ ] Generated images display inline in chat
+- [ ] Images have proper formatting
+- [ ] Image URLs are valid
+- [ ] Fallback text shown if generation fails
+
+### Model Switching
+- [ ] System automatically uses gemini-2.5-flash-image for generation
+- [ ] Regular chat continues with main model after image
+
+## File Attachments
+
+### File Upload
+- [ ] Can upload images (PNG, JPG, GIF, WebP)
+- [ ] Can upload PDFs
+- [ ] File size validation works
+- [ ] Upload button visible and functional
+- [ ] Multiple files can be attached
+
+### File Processing
+- [ ] AI can analyze uploaded images
+- [ ] AI can discuss PDF contents
+- [ ] File metadata stored correctly
+- [ ] Base64 data not persisted to Firestore
+- [ ] Thumbnails display for images
+
+### File Display
+- [ ] Attached files show in message
+- [ ] File names display correctly
+- [ ] File types indicated properly
+
+## Bilingual Support
+
+### Keyword Detection
+- [ ] English keywords detected correctly
+- [ ] Chinese keywords detected correctly
+- [ ] Mixed language messages handled
+- [ ] Word boundary matching works
+- [ ] Case insensitive matching (English)
+
+### Language Preference
+- [ ] Language auto-detected from conversation
+- [ ] Preference stored in memory
+- [ ] Three modes work: english, chinese, hybrid
+- [ ] AI adapts response style to preference
+
+## Prompt Management (Admin)
+
+### Prompt Configuration
+- [ ] Can view current active prompt
+- [ ] Can edit system prompt text
+- [ ] Can change temperature setting
+- [ ] Can create new prompt configuration
+- [ ] Can toggle active/inactive
+
+### Prompt Updates
+- [ ] Changes save to Firestore
+- [ ] Only one prompt can be active
+- [ ] New conversations use updated prompt
+- [ ] Reset to default works
+- [ ] Changes apply immediately
+
+## Provider Abstraction
+
+### Gemini Provider
+- [ ] Chat responses stream correctly
+- [ ] Image generation works
+- [ ] File attachments processed
+- [ ] Error handling graceful
+- [ ] Model selection automatic
+
 ## Known Limitations (Document, Not Fix)
 
 - Mobile not optimized (by design)
 - Dark mode not available (by design)
-- Single AI model only (future feature)
-- No file uploads (future feature)
+- Only Gemini provider currently (extensible for future)
 - No message search (future feature)
+- No conversation export (future feature)
 
 ## Bug Fixes Applied
 

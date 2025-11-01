@@ -285,6 +285,39 @@ gcloud logging read "resource.type=cloud_run_revision AND resource.labels.servic
 3. **Choose cheapest region**: us-central1 is typically the most affordable
 4. **Use FREE tier services**: Firestore FREE tier is generous for family use
 5. **Monitor usage**: Set up billing alerts to avoid surprises
+6. **Tiered models**: Gemini 2.5 Flash-Lite for background tasks (25% cheaper)
+7. **Memory budget**: 500-token limit keeps costs predictable
+
+## Testing New Features
+
+After deployment, test these key features:
+
+### Memory System
+1. Start a conversation and mention personal info:
+   ```
+   "Hi! My name is Archer, I'm a software engineer.
+   I prefer TypeScript and I'm working on AI projects."
+   ```
+2. Chat for 5+ messages over 2+ minutes
+3. Visit `/profile` to see extracted memory facts
+4. Start a new conversation and verify AI remembers your preferences
+5. Test deleting individual facts and clearing all memory
+
+### Image Generation
+1. Trigger in English: `"create an image of a sunset over mountains"`
+2. Trigger in Chinese: `"生成一幅图片，描绘星空"`
+3. Verify inline image display in chat
+4. Test fallback behavior if generation fails
+
+### File Attachments
+1. Upload an image and ask the AI to describe it
+2. Upload a PDF and ask questions about its content
+3. Verify multimodal processing works correctly
+
+### Bilingual Support
+1. Test memory triggers in both languages
+2. Test image keywords in both languages
+3. Verify language preference detection
 
 ## Production Checklist
 
@@ -298,8 +331,13 @@ Before going live:
 - [ ] Billing alerts configured
 - [ ] Initial users added to whitelist
 - [ ] Test login and chat functionality
-- [ ] Test image generation feature
+- [ ] Test memory system (automatic extraction, profile page)
+- [ ] Test image generation feature (bilingual keywords)
+- [ ] Test file attachments (images, PDFs)
+- [ ] Test prompt management (admin panel)
+- [ ] Verify tiered model configuration (2.5 Flash, Image, Lite)
 - [ ] Monitor logs for errors
+- [ ] Check Firestore security rules
 
 ## Support
 

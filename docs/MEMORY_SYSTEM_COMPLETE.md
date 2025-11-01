@@ -35,14 +35,31 @@ The automatic, aggressive, trust-based memory system with 500-token budget is no
 
 ## 🎯 System Behavior
 
-### Automatic Memory Extraction
+### Hybrid Triggering System
+
+**Two ways memory is extracted:**
+
+1. **Keyword-Based (Immediate)**
+   - Triggered by specific phrases in any language
+   - 138 bilingual triggers (English + Chinese)
+   - Examples:
+     - English: "remember that", "my name is", "I prefer", "don't forget"
+     - Chinese: "记住", "我叫", "我喜欢", "别忘了"
+   - Instant extraction when detected
+
+2. **Conversation-Based (Automatic)**
+   - Triggered after 5+ messages and 2+ minutes
+   - Analyzes full conversation context
+   - No user action required
+
+### Automatic Memory Extraction Flow
 
 ```
 User chats normally (>5 messages, >2 minutes)
     ↓
-Conversation ends
+Conversation ends OR keyword detected
     ↓
-Background extraction triggered (Gemini analyzes conversation)
+Background extraction triggered (Gemini 2.5 Flash-Lite analyzes)
     ↓
 Facts extracted (confidence ≥0.6)
     ↓
@@ -141,10 +158,10 @@ Current Work:
 
 | Component | Cost/Month |
 |-----------|------------|
-| Memory extraction (100 conversations) | ~$0.75 |
+| Memory extraction (100 conversations, 2.5 Flash-Lite) | ~$0.50-0.75 |
 | Memory storage in Firestore | FREE |
 | Memory loading (included in chat) | $0 |
-| **Total Additional Cost** | **~$1/month** |
+| **Total Additional Cost** | **~$0.50-1/month** |
 
 Still well within your $30 budget! ✅
 
@@ -152,9 +169,17 @@ Still well within your $30 budget! ✅
 
 - Without memory: ~100 tokens
 - With memory: ~600 tokens (500 memory + 100 prompt)
-- Cost increase: ~$0.00004 per message
+- Cost increase per message:
+  - Input: ~$0.00015 (600 tokens × $0.30/1M)
+  - Output: ~$0.00125 (500 tokens × $2.50/1M)
 
-For 1000 messages/month: **$0.04 additional cost**
+For 1000 messages/month: **~$1.40 additional cost** (included in $2-5/month estimate)
+
+### Cost Optimization
+- Uses **Gemini 2.5 Flash-Lite** for extraction (25% cheaper than main model)
+- 500-token memory budget prevents runaway costs
+- Aggressive cleanup removes low-value facts
+- Keyword-based extraction minimizes API calls
 
 ---
 
