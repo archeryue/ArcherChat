@@ -51,6 +51,39 @@ Fields: user_id (Ascending), timestamp (Ascending)
 - More predictable costs (one shared limit)
 - Easier to monitor
 
+### TODO: Analyze and Optimize Latency
+**Issue**: Response time is slow in some cases
+
+**Observed Behavior**:
+- Example: "compare Playwright with Selenium" caused noticeable delay
+- AI stuck for a while before responding
+
+**Potential Causes to Investigate**:
+1. **PromptAnalyzer latency** - Gemini Flash Lite analysis adds ~1 second
+2. **Rate limiter errors** - Firestore index errors cause delays (even though it "fails open")
+3. **Web search attempt** - Tries to search even when disabled, then falls back
+4. **Memory retrieval** - Loading user memory from Firestore
+5. **Main AI response** - Gemini 2.0 Flash response generation
+
+**Investigation Plan** (Tomorrow):
+1. Add timing logs to each major step:
+   - PromptAnalysis duration
+   - Rate limiter check duration
+   - Web search duration (if enabled)
+   - Memory retrieval duration
+   - AI response generation duration
+2. Identify bottlenecks from production logs
+3. Optimize the slowest components
+
+**Optimization Ideas**:
+- Cache rate limit results (avoid repeated Firestore queries)
+- Skip rate limiter entirely when web search is disabled
+- Parallel execution: Run PromptAnalysis + Memory retrieval concurrently
+- Consider caching PromptAnalysis for similar queries
+- Use Gemini Flash (faster) instead of Flash Lite for analysis if latency > quality
+
+**Target**: Total response time < 2 seconds for typical questions
+
 ---
 
 ## Executive Summary
