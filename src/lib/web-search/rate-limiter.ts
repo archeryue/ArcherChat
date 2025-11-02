@@ -1,4 +1,4 @@
-import { getFirestore } from "@/lib/firebase-admin";
+import { db } from "@/lib/firebase-admin";
 import { SearchUsage } from "@/types/web-search";
 
 /**
@@ -36,7 +36,7 @@ export class SearchRateLimiter {
     const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
     try {
-      const db = getFirestore();
+      
 
       // Get searches in the last hour
       const hourlySnapshot = await db
@@ -105,7 +105,7 @@ export class SearchRateLimiter {
     resultsCount: number
   ): Promise<void> {
     try {
-      const db = getFirestore();
+      
       const now = new Date();
 
       // Calculate cost (first 100/day are free)
@@ -153,7 +153,7 @@ export class SearchRateLimiter {
     averagePerDay: number;
   }> {
     try {
-      const db = getFirestore();
+      
       const now = new Date();
       const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
       const todayStart = new Date(now);

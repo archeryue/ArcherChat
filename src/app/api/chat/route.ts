@@ -13,7 +13,7 @@ import { KeywordTriggerType } from "@/lib/keywords/system";
 import { isIntelligentAnalysisEnabled, isWebSearchEnabled } from "@/config/feature-flags";
 import { promptAnalyzer } from "@/lib/prompt-analysis/analyzer";
 import { contextOrchestrator } from "@/lib/context-engineering/orchestrator";
-import { saveMemoryFacts } from "@/lib/memory/storage";
+import { addMemoryFacts } from "@/lib/memory/storage";
 
 export async function POST(req: NextRequest) {
   try {
@@ -221,7 +221,7 @@ export async function POST(req: NextRequest) {
             // NEW: Save extracted facts from PromptAnalysis
             if (extractedFacts && extractedFacts.length > 0) {
               console.log(`[Chat API] Saving ${extractedFacts.length} extracted facts`);
-              saveMemoryFacts(session.user.id, extractedFacts)
+              addMemoryFacts(session.user.id, extractedFacts)
                 .then(() => cleanupUserMemory(session.user.id))
                 .catch((err) => console.error("Memory save error:", err));
             }
