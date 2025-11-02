@@ -352,5 +352,20 @@ Analyze and return JSON:`;
   }
 }
 
-// Export singleton instance
-export const promptAnalyzer = new PromptAnalyzer();
+// Lazy initialization to avoid build-time errors
+let promptAnalyzerInstance: PromptAnalyzer | null = null;
+
+function getPromptAnalyzer(): PromptAnalyzer {
+  if (!promptAnalyzerInstance) {
+    promptAnalyzerInstance = new PromptAnalyzer();
+  }
+  return promptAnalyzerInstance;
+}
+
+// Export singleton instance with lazy initialization
+export const promptAnalyzer = new Proxy({} as PromptAnalyzer, {
+  get(_target, prop) {
+    const instance = getPromptAnalyzer();
+    return (instance as any)[prop];
+  }
+});
