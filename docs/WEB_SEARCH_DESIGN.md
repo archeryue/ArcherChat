@@ -62,7 +62,7 @@ Fields: user_id (Ascending), timestamp (Ascending)
 1. **PromptAnalyzer latency** - Gemini Flash Lite analysis adds ~1 second
 2. **Rate limiter errors** - Firestore index errors cause delays (even though it "fails open")
 3. **Web search attempt** - Tries to search even when disabled, then falls back
-4. **Memory retrieval** - Loading user memory from Firestore
+4. **Memory retrieval** - Currently queries Firestore EVERY request (NO caching!) ⚠️
 5. **Main AI response** - Gemini 2.0 Flash response generation
 
 **Investigation Plan** (Tomorrow):
@@ -76,9 +76,12 @@ Fields: user_id (Ascending), timestamp (Ascending)
 3. Optimize the slowest components
 
 **Optimization Ideas**:
-- Cache rate limit results (avoid repeated Firestore queries)
-- Skip rate limiter entirely when web search is disabled
-- Parallel execution: Run PromptAnalysis + Memory retrieval concurrently
+- **🔴 PRIORITY: Cache user memory** - Currently queries Firestore on EVERY message!
+  - Implement in-memory cache (Map) or Redis
+  - Cache TTL: 5-10 minutes (memory rarely changes)
+  - Invalidate cache when new facts are saved
+  - This should make memory retrieval nearly instant
+- Skip rate limiter entirely when web search is disabled (avoid Firestore error overhead)
 - Consider caching PromptAnalysis for similar queries
 - Use Gemini Flash (faster) instead of Flash Lite for analysis if latency > quality
 
