@@ -1,8 +1,55 @@
 # Web Search Integration - Complete Design and Implementation
 
 **Created**: 2025-11-01
-**Status**: Implemented ✅
+**Status**: Implemented ✅ (Disabled - TODO: Enable Tomorrow)
 **Provider**: Google Custom Search API
+
+---
+
+## 🔴 ISSUES & TODO (2025-11-02)
+
+### Issue 1: Firestore Index Missing for Rate Limiter
+**Problem**: Rate limiter queries require a composite index that doesn't exist:
+```
+Collection: search_usage
+Fields: user_id (Ascending), timestamp (Ascending)
+```
+
+**Error**: `9 FAILED_PRECONDITION: The query requires an index`
+
+**Impact**: None currently (web search disabled, and rate limiter "fails open" on error)
+
+**Link to create index**: https://console.firebase.google.com/v1/r/project/archerchat-3d462/firestore/indexes?create_composite=ClVwcm9qZWN0cy9hcmNoZXJjaGF0LTNkNDYyL2RhdGFiYXNlcy8oZGVmYXVsdCkvY29sbGVjdGlvbkdyb3Vwcy9zZWFyY2hfdXNhZ2UvaW5kZXhlcy9fEAEaCwoHdXNlcl9pZBABGg0KCXRpbWVzdGFtcBABGgwKCF9fbmFtZV9fEAE
+
+**Status**: Deferred until web search is enabled
+
+### TODO: Change Rate Limiting Strategy
+**Current Implementation** (Per-User):
+- 20 searches/hour per user
+- 100 searches/day per user
+- Tracks usage in `search_usage` collection with `user_id` field
+
+**New Requirement** (Global):
+- ✅ **One global daily limit for ALL users combined**
+- ❌ No per-user limits
+- ❌ No hourly limits (only daily)
+- Simpler, more cost-predictable approach
+
+**Implementation Plan** (Tomorrow):
+1. Modify `src/lib/web-search/rate-limiter.ts`:
+   - Remove per-user logic
+   - Remove hourly limit logic
+   - Count total searches across all users in the last 24 hours
+   - Single simple query: `search_usage.where('timestamp', '>=', oneDayAgo).count()`
+2. Update Firestore index requirement (simpler - only timestamp field)
+3. Update documentation with new limits
+4. Test and deploy
+
+**Benefits**:
+- Simpler code
+- Simpler Firestore index (single field)
+- More predictable costs (one shared limit)
+- Easier to monitor
 
 ---
 
