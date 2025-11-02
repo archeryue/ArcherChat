@@ -17,6 +17,21 @@ This document outlines the core principles and guidelines for developing ArcherC
 - **ALWAYS** ask for confirmation before deploying if unclear
 - **EXCEPTION**: Only deploy when user explicitly requests it
 
+**CRITICAL: Always Sync Environment Variables**
+- **ALWAYS** ensure Cloud Run environment variables match `.env.local` before deployment
+- **ALWAYS** sync feature flags (`NEXT_PUBLIC_USE_INTELLIGENT_ANALYSIS`, `NEXT_PUBLIC_USE_WEB_SEARCH`)
+- **CHECK** with: `gcloud run services describe archerchat --region us-central1 --project archerchat-3d462 --format="value(spec.template.spec.containers[0].env)"`
+- **UPDATE** with: `gcloud run services update archerchat --region us-central1 --project archerchat-3d462 --update-env-vars KEY=value`
+- **WHY**: Missing feature flags causes production to behave differently than local development
+
+**Example: Enabling intelligent analysis on Cloud Run**
+```bash
+gcloud run services update archerchat \
+  --region us-central1 \
+  --project archerchat-3d462 \
+  --update-env-vars NEXT_PUBLIC_USE_INTELLIGENT_ANALYSIS=true
+```
+
 ### 2. 🔐 SECURITY: Never Share Private Keys
 - **NEVER** commit API keys, private keys, or credentials to the repository
 - **NEVER** expose sensitive environment variables in client-side code
