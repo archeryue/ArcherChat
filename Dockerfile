@@ -13,6 +13,15 @@ RUN npm ci
 # Rebuild the source code only when needed
 FROM base AS builder
 WORKDIR /app
+
+# Accept build-time environment variables
+ARG NEXT_PUBLIC_USE_INTELLIGENT_ANALYSIS
+ARG NEXT_PUBLIC_USE_WEB_SEARCH
+
+# Set environment variables for the build
+ENV NEXT_PUBLIC_USE_INTELLIGENT_ANALYSIS=$NEXT_PUBLIC_USE_INTELLIGENT_ANALYSIS
+ENV NEXT_PUBLIC_USE_WEB_SEARCH=$NEXT_PUBLIC_USE_WEB_SEARCH
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 

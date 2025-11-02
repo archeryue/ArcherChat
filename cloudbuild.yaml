@@ -2,6 +2,10 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_USE_INTELLIGENT_ANALYSIS=true'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_USE_WEB_SEARCH=false'
       - '-t'
       - 'us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:latest'
       - '.'
