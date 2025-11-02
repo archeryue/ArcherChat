@@ -8,48 +8,35 @@
 
 ## 🔴 ISSUES & TODO (2025-11-02)
 
-### Issue 1: Firestore Index Missing for Rate Limiter
-**Problem**: Rate limiter queries require a composite index that doesn't exist:
-```
-Collection: search_usage
-Fields: user_id (Ascending), timestamp (Ascending)
-```
+### ✅ COMPLETED: Global Rate Limiting Implementation
+**Status**: Implemented and deployed (2025-11-02)
 
-**Error**: `9 FAILED_PRECONDITION: The query requires an index`
+**Changes Made**:
+1. ✅ Modified `src/lib/web-search/rate-limiter.ts`:
+   - Removed per-user logic (no more `user_id` filtering)
+   - Removed hourly limit logic
+   - Implemented global daily limit: 100 searches/day for ALL users
+   - Simple query: `search_usage.where('timestamp', '>=', oneDayAgo).get()`
 
-**Impact**: None currently (web search disabled, and rate limiter "fails open" on error)
+2. ✅ Updated `src/lib/context-engineering/orchestrator.ts`:
+   - Changed `checkRateLimit(userId)` to `checkRateLimit()` (no userId needed)
 
-**Link to create index**: https://console.firebase.google.com/v1/r/project/archerchat-3d462/firestore/indexes?create_composite=ClVwcm9qZWN0cy9hcmNoZXJjaGF0LTNkNDYyL2RhdGFiYXNlcy8oZGVmYXVsdCkvY29sbGVjdGlvbkdyb3Vwcy9zZWFyY2hfdXNhZ2UvaW5kZXhlcy9fEAEaCwoHdXNlcl9pZBABGg0KCXRpbWVzdGFtcBABGgwKCF9fbmFtZV9fEAE
+3. ✅ Simplified Firestore index requirement:
+   - **Old**: Composite index (user_id + timestamp) ❌
+   - **New**: Single-field index (timestamp only) ✅
+   - **Auto-created**: Firestore automatically creates single-field indexes
+   - **No manual setup needed** for basic `where('timestamp', '>=', ...)` queries
 
-**Status**: Deferred until web search is enabled
+**Benefits Achieved**:
+- ✅ Simpler code (50% fewer lines in rate limiter)
+- ✅ No Firestore index errors (single-field indexes auto-created)
+- ✅ More predictable costs (one shared limit)
+- ✅ Easier to monitor (one query, one metric)
 
-### TODO: Change Rate Limiting Strategy
-**Current Implementation** (Per-User):
-- 20 searches/hour per user
-- 100 searches/day per user
-- Tracks usage in `search_usage` collection with `user_id` field
-
-**New Requirement** (Global):
-- ✅ **One global daily limit for ALL users combined**
-- ❌ No per-user limits
-- ❌ No hourly limits (only daily)
-- Simpler, more cost-predictable approach
-
-**Implementation Plan** (Tomorrow):
-1. Modify `src/lib/web-search/rate-limiter.ts`:
-   - Remove per-user logic
-   - Remove hourly limit logic
-   - Count total searches across all users in the last 24 hours
-   - Single simple query: `search_usage.where('timestamp', '>=', oneDayAgo).count()`
-2. Update Firestore index requirement (simpler - only timestamp field)
-3. Update documentation with new limits
-4. Test and deploy
-
-**Benefits**:
-- Simpler code
-- Simpler Firestore index (single field)
-- More predictable costs (one shared limit)
-- Easier to monitor
+**New Limits**:
+- **Global daily limit**: 100 searches/day for ALL users combined
+- **Free tier**: 100 searches/day = $0 (within Google's free tier)
+- **Beyond 100/day**: $0.005 per search ($5 per 1,000 queries)
 
 ### TODO: Analyze and Optimize Latency
 **Issue**: Response time is slow in some cases
@@ -210,15 +197,21 @@ GOOGLE_SEARCH_ENGINE_ID=your-search-engine-id
 
 ### Rate Limiting
 
-**Limits:**
-- 20 searches per hour per user
-- 100 searches per day per user
+**Global Limits** (ALL users combined):
+- **100 searches per day** for all users combined
 - Tracked in Firestore `search_usage` collection
+- Simple query: `where('timestamp', '>=', last24hours)`
 
 **Cost Tracking:**
-- First 100 searches/day: FREE
-- Beyond 100/day: $0.005 per search
-- Usage tracked per user for analytics
+- First 100 searches/day globally: **FREE** ✅
+- Beyond 100/day: $0.005 per search ($5 per 1,000 queries)
+- Usage tracked with `user_id` for analytics (but not for rate limiting)
+
+**Why Global Limit:**
+- Simpler implementation (no per-user tracking)
+- More predictable costs (one shared pool)
+- Easier monitoring (single metric)
+- Fits free tier perfectly (100/day = $0)
 
 ### Code Implementation
 
