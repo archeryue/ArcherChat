@@ -32,7 +32,7 @@ envContent.split('\n').forEach(line => {
 import { db } from '../src/lib/firebase-admin';
 import { addMemoryFacts, getUserMemory } from '../src/lib/memory/storage';
 import { cleanupUserMemory } from '../src/lib/memory/cleanup';
-import { MemoryFact, MemoryTier, MemoryCategory } from '../src/types/memory';
+import { MemoryFact, MemoryTier, MemoryCategory, LanguagePreference } from '../src/types/memory';
 
 const TEST_USER_ID = 'test-user-memory-verification';
 
@@ -80,13 +80,13 @@ async function test_addMemoryFacts_withLanguagePreference() {
     extracted_from: 'test-conversation',
   };
 
-  await addMemoryFacts(TEST_USER_ID, [testFact], 'english');
+  await addMemoryFacts(TEST_USER_ID, [testFact], LanguagePreference.ENGLISH);
 
   const memory = await getUserMemory(TEST_USER_ID);
 
   assert(memory.facts.length === 1, 'Should have 1 fact');
   assert(memory.facts[0].content === 'Test fact 1', 'Fact content should match');
-  assert(memory.language_preference === 'english', 'Language preference should be "english"');
+  assert(memory.language_preference === LanguagePreference.ENGLISH, 'Language preference should be "english"');
 }
 
 // Test 2: Update language preference without adding facts (duplicates)
@@ -107,12 +107,12 @@ async function test_addMemoryFacts_languageOnly() {
     extracted_from: 'test-conversation',
   };
 
-  await addMemoryFacts(TEST_USER_ID, [duplicateFact], 'chinese');
+  await addMemoryFacts(TEST_USER_ID, [duplicateFact], LanguagePreference.CHINESE);
 
   const memory = await getUserMemory(TEST_USER_ID);
 
   assert(memory.facts.length === 1, 'Should still have 1 fact (duplicate skipped)');
-  assert(memory.language_preference === 'chinese', 'Language preference should be updated to "chinese"');
+  assert(memory.language_preference === LanguagePreference.CHINESE, 'Language preference should be updated to "chinese"');
 }
 
 // Test 3: cleanupUserMemory preserves language preference (BUG-001 fix)
@@ -137,17 +137,17 @@ async function test_cleanupUserMemory_preservesLanguagePreference() {
     });
   }
 
-  await addMemoryFacts(TEST_USER_ID, facts, 'hybrid');
+  await addMemoryFacts(TEST_USER_ID, facts, LanguagePreference.HYBRID);
 
   const beforeCleanup = await getUserMemory(TEST_USER_ID);
-  assert(beforeCleanup.language_preference === 'hybrid', 'Language should be "hybrid" before cleanup');
+  assert(beforeCleanup.language_preference === LanguagePreference.HYBRID, 'Language should be "hybrid" before cleanup');
   assert(beforeCleanup.facts.length === 6, 'Should have 6 facts before cleanup'); // 1 original + 5 new
 
   // Run cleanup
   await cleanupUserMemory(TEST_USER_ID);
 
   const afterCleanup = await getUserMemory(TEST_USER_ID);
-  assert(afterCleanup.language_preference === 'hybrid', 'Language should still be "hybrid" after cleanup');
+  assert(afterCleanup.language_preference === LanguagePreference.HYBRID, 'Language should still be "hybrid" after cleanup');
   assert(afterCleanup.facts.length <= 6, 'Facts should be same or reduced after cleanup');
 }
 
@@ -177,7 +177,7 @@ async function test_tierNormalization() {
     category: factWithUppercaseTier.category.toLowerCase(),
   };
 
-  await addMemoryFacts(TEST_USER_ID, [normalized], 'english');
+  await addMemoryFacts(TEST_USER_ID, [normalized], LanguagePreference.ENGLISH);
 
   const memory = await getUserMemory(TEST_USER_ID);
   const savedFact = memory.facts.find(f => f.id === 'fact-tier-test');
@@ -205,7 +205,7 @@ async function test_duplicateDetection() {
     extracted_from: 'test-conversation',
   };
 
-  await addMemoryFacts(TEST_USER_ID, [fact1], 'english');
+  await addMemoryFacts(TEST_USER_ID, [fact1], LanguagePreference.ENGLISH);
 
   const beforeDup = await getUserMemory(TEST_USER_ID);
   const factsCountBefore = beforeDup.facts.length;
@@ -225,7 +225,7 @@ async function test_duplicateDetection() {
     extracted_from: 'test-conversation',
   };
 
-  await addMemoryFacts(TEST_USER_ID, [fact2], 'english');
+  await addMemoryFacts(TEST_USER_ID, [fact2], LanguagePreference.ENGLISH);
 
   const afterDup = await getUserMemory(TEST_USER_ID);
 
@@ -250,7 +250,7 @@ async function test_similarityDetection() {
     extracted_from: 'test-conversation',
   };
 
-  await addMemoryFacts(TEST_USER_ID, [fact1], 'english');
+  await addMemoryFacts(TEST_USER_ID, [fact1], LanguagePreference.ENGLISH);
 
   const beforeSim = await getUserMemory(TEST_USER_ID);
   const factsCountBefore = beforeSim.facts.length;
@@ -270,7 +270,7 @@ async function test_similarityDetection() {
     extracted_from: 'test-conversation',
   };
 
-  await addMemoryFacts(TEST_USER_ID, [fact2], 'english');
+  await addMemoryFacts(TEST_USER_ID, [fact2], LanguagePreference.ENGLISH);
 
   const afterSim = await getUserMemory(TEST_USER_ID);
 
