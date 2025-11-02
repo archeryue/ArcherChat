@@ -10,6 +10,10 @@ import { loadMemoryForChat, cleanupUserMemory } from "@/lib/memory";
 import { FileAttachment } from "@/types/file";
 import { keywordSystem } from "@/lib/keywords/triggers";
 import { KeywordTriggerType } from "@/lib/keywords/system";
+import { isIntelligentAnalysisEnabled, isWebSearchEnabled } from "@/config/feature-flags";
+import { promptAnalyzer } from "@/lib/prompt-analysis/analyzer";
+import { contextOrchestrator } from "@/lib/context-engineering/orchestrator";
+import { saveMemoryFacts } from "@/lib/memory/storage";
 
 export async function POST(req: NextRequest) {
   try {
@@ -104,14 +108,67 @@ export async function POST(req: NextRequest) {
       currentTime: new Date().toLocaleTimeString(),
     });
 
-    // Load user's memory and append to system prompt
-    const memoryContext = await loadMemoryForChat(session.user.id);
-    const finalPrompt = memoryContext
-      ? `${processedPrompt}\n\n${memoryContext}`
-      : processedPrompt;
+    // NEW: Intelligent Analysis (if enabled)
+    let finalPrompt = processedPrompt;
+    let selectedModelName: string | undefined;
+    let webSearchResults: any[] | undefined;
+    let extractedFacts: any[] | undefined;
+
+    if (isIntelligentAnalysisEnabled()) {
+      console.log('[Chat API] Using intelligent analysis');
+
+      // Step 1: Analyze user input
+      const analysis = await promptAnalyzer.analyze({
+        message,
+        files,
+        conversationHistory: messages.slice(-5), // Last 5 messages for context
+        userSettings: {
+          webSearchEnabled: isWebSearchEnabled(),
+          languagePreference: undefined, // Auto-detect
+        },
+      });
+
+      console.log('[Chat API] Analysis result:', {
+        intent: analysis.intent,
+        confidence: analysis.confidence,
+        actions: Object.keys(analysis.actions).filter(
+          (k) => (analysis.actions as any)[k].needed
+        ),
+      });
+
+      // Step 2: Orchestrate context preparation
+      const contextResult = await contextOrchestrator.prepare(
+        analysis,
+        session.user.id,
+        conversationId
+      );
+
+      // Step 3: Build final prompt with context
+      if (contextResult.context) {
+        finalPrompt = `${processedPrompt}\n\n${contextResult.context}`;
+      }
+
+      // Use selected model from analysis
+      selectedModelName = contextResult.modelName;
+      webSearchResults = contextResult.webSearchResults;
+
+      // Save extracted facts from analysis
+      extractedFacts = analysis.actions.memory_extraction.facts;
+
+      if (contextResult.rateLimitError) {
+        console.warn('[Chat API] Rate limit error:', contextResult.rateLimitError);
+      }
+    } else {
+      // OLD: Load user's memory and append to system prompt (keyword-based)
+      console.log('[Chat API] Using keyword-based system');
+      const memoryContext = await loadMemoryForChat(session.user.id);
+      finalPrompt = memoryContext
+        ? `${processedPrompt}\n\n${memoryContext}`
+        : processedPrompt;
+    }
 
     // Create AI provider instance
-    const provider = ProviderFactory.createDefaultProvider();
+    const provider = ProviderFactory.createDefaultProvider(selectedModelName);
 
     // Stream response from AI provider
     // Pass files from current request (with full base64 data) for AI processing
@@ -129,6 +186,15 @@ export async function POST(req: NextRequest) {
           )) {
             fullResponse += chunk;
             controller.enqueue(encoder.encode(chunk));
+          }
+
+          // Add source citations if we have web search results
+          if (webSearchResults && webSearchResults.length > 0) {
+            const citations = contextOrchestrator.formatSourceCitations(webSearchResults);
+            if (citations) {
+              fullResponse += citations;
+              controller.enqueue(encoder.encode(citations));
+            }
           }
 
           // Save assistant message
@@ -150,22 +216,33 @@ export async function POST(req: NextRequest) {
             updated_at: new Date(),
           });
 
-          // Check for keyword triggers in user message
-          const keywordResults = keywordSystem.check(message);
-          const hasMemoryTrigger = keywordResults.some(
-            (r) => r.matched && r.type === KeywordTriggerType.MEMORY_GENERAL
-          );
+          // Post-processing: Save extracted memories or use keyword system
+          if (isIntelligentAnalysisEnabled()) {
+            // NEW: Save extracted facts from PromptAnalysis
+            if (extractedFacts && extractedFacts.length > 0) {
+              console.log(`[Chat API] Saving ${extractedFacts.length} extracted facts`);
+              saveMemoryFacts(session.user.id, extractedFacts)
+                .then(() => cleanupUserMemory(session.user.id))
+                .catch((err) => console.error("Memory save error:", err));
+            }
+          } else {
+            // OLD: Check for keyword triggers in user message
+            const keywordResults = keywordSystem.check(message);
+            const hasMemoryTrigger = keywordResults.some(
+              (r) => r.matched && r.type === KeywordTriggerType.MEMORY_GENERAL
+            );
 
-          // Execute keyword-triggered actions in background (don't await)
-          if (hasMemoryTrigger) {
-            keywordSystem
-              .execute(KeywordTriggerType.MEMORY_GENERAL, {
-                conversationId,
-                userId: session.user.id,
-                message,
-              })
-              .then(() => cleanupUserMemory(session.user.id))
-              .catch((err) => console.error("Keyword action error:", err));
+            // Execute keyword-triggered actions in background (don't await)
+            if (hasMemoryTrigger) {
+              keywordSystem
+                .execute(KeywordTriggerType.MEMORY_GENERAL, {
+                  conversationId,
+                  userId: session.user.id,
+                  message,
+                })
+                .then(() => cleanupUserMemory(session.user.id))
+                .catch((err) => console.error("Keyword action error:", err));
+            }
           }
 
           controller.close();

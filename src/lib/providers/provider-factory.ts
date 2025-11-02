@@ -35,9 +35,10 @@ export class ProviderFactory {
   /**
    * Create the default provider from environment configuration
    * Reads from env vars: AI_PROVIDER (default: gemini), GEMINI_API_KEY, etc.
+   * @param modelOverride - Optional model name to override default
    * @returns IAIProvider instance
    */
-  static createDefaultProvider(): IAIProvider {
+  static createDefaultProvider(modelOverride?: string): IAIProvider {
     // Read provider type from env (default to gemini)
     const providerType = (process.env.AI_PROVIDER || "gemini") as AIProviderType;
 
@@ -56,17 +57,17 @@ export class ProviderFactory {
     switch (providerType) {
       case "gemini":
         config.apiKey = process.env.GEMINI_API_KEY;
-        config.model = process.env.GEMINI_MODEL || "gemini-2.0-flash-exp";
+        config.model = modelOverride || process.env.GEMINI_MODEL || "gemini-2.0-flash-exp";
         break;
 
       case "openai":
         config.apiKey = process.env.OPENAI_API_KEY;
-        config.model = process.env.OPENAI_MODEL || "gpt-4-turbo-preview";
+        config.model = modelOverride || process.env.OPENAI_MODEL || "gpt-4-turbo-preview";
         break;
 
       case "inhouse":
         config.baseUrl = process.env.INHOUSE_BASE_URL || "http://localhost:11434";
-        config.model = process.env.INHOUSE_MODEL || "llama2";
+        config.model = modelOverride || process.env.INHOUSE_MODEL || "llama2";
         break;
     }
 
