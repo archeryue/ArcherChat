@@ -2,7 +2,7 @@ import { PromptAnalysisResult } from "@/types/prompt-analysis";
 import { AIMessage } from "@/types/ai-providers";
 import { googleSearchService } from "@/lib/web-search/google-search";
 import { searchRateLimiter } from "@/lib/web-search/rate-limiter";
-import { loadMemoryForChat } from "@/lib/memory/loader";
+import { getUserMemory } from "@/lib/memory/storage";
 import { SearchResult } from "@/types/web-search";
 import { MemoryFact } from "@/types/memory";
 import { GEMINI_MODELS, ModelTier } from "@/config/models";
@@ -142,8 +142,9 @@ export class ContextOrchestrator {
     searchTerms?: string[]
   ): Promise<MemoryFact[]> {
     try {
-      // If no search terms provided, load all recent memories
-      const memories = await loadMemoryForChat(userId);
+      // Load user memories
+      const userMemory = await getUserMemory(userId);
+      const memories = userMemory.facts;
 
       // If search terms provided, filter memories
       if (searchTerms && searchTerms.length > 0) {
