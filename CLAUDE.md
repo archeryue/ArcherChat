@@ -91,13 +91,37 @@ This document outlines the core principles and guidelines for developing ArcherC
 - Ask if the user wants to try a different model configuration
 - Explain trade-offs between different model options
 
-### 7. 🧪 TESTING: Always Run Tests After Code Changes
+### 7. 🧪 TESTING: Always Run Tests and Build Before Deployment
 - **ALWAYS** run the test suite after making code changes
 - **NEVER** commit code without verifying tests still pass
 - **ALWAYS** run `npx jest` before committing changes
 - **ALWAYS** ensure all tests pass (100% pass rate required)
 - **ALWAYS** fix failing tests immediately - don't leave them broken
 - **ALWAYS** add new tests when adding new features or fixing bugs
+
+**CRITICAL: Always run `npm run build` before deploying to production**
+- **ALWAYS** run `npm run build` locally before deploying to Cloud Run
+- **WHY**: `npm run dev` is lenient with TypeScript errors, but `npm run build` does strict type checking
+- **RESULT**: Catches all TypeScript type errors before wasting Cloud Build resources
+- **WORKFLOW**: Develop → `npm run build` → `npx jest` → Commit → Deploy
+
+**Proper Deployment Workflow:**
+```bash
+# 1. Make code changes with npm run dev
+npm run dev
+
+# 2. Build to catch TypeScript errors
+npm run build
+
+# 3. Run tests to verify functionality
+npx jest
+
+# 4. Only if both succeed → commit and deploy
+git add -A
+git commit -m "Your message"
+git push
+# Then deploy to Cloud Run (only if user explicitly requests)
+```
 - **EXCEPTION**: Quick typo fixes in documentation may skip tests
 
 **Testing Workflow:**
