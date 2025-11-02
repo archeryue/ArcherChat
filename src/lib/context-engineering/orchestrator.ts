@@ -107,8 +107,8 @@ export class ContextOrchestrator {
    * Execute web search with rate limiting
    */
   private async executeWebSearch(userId: string, query: string): Promise<SearchResult[]> {
-    // Check rate limits
-    const rateCheck = await searchRateLimiter.checkRateLimit(userId);
+    // Check global rate limits
+    const rateCheck = await searchRateLimiter.checkRateLimit();
 
     if (!rateCheck.allowed) {
       throw new Error(rateCheck.message || "Rate limit exceeded");
