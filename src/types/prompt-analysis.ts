@@ -1,6 +1,6 @@
 import { MemoryFact, MemoryCategory, MemoryTier } from "./memory";
 import { FileAttachment } from "./file";
-import { Message } from "./index";
+import { AIMessage } from "./ai-providers";
 
 /**
  * Primary intent of the user's message
@@ -82,7 +82,7 @@ export interface PromptAnalysisResult {
 export interface PromptAnalysisInput {
   message: string;
   files?: FileAttachment[];
-  conversationHistory?: Message[]; // Last 3-5 messages for context
+  conversationHistory?: AIMessage[]; // Last 3-5 messages for context
   userSettings?: {
     webSearchEnabled: boolean;
     languagePreference?: "english" | "chinese" | "hybrid";
