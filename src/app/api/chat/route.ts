@@ -13,7 +13,7 @@ import { KeywordTriggerType } from "@/lib/keywords/system";
 import { isIntelligentAnalysisEnabled, isWebSearchEnabled } from "@/config/feature-flags";
 import { promptAnalyzer } from "@/lib/prompt-analysis/analyzer";
 import { contextOrchestrator } from "@/lib/context-engineering/orchestrator";
-import { addMemoryFacts } from "@/lib/memory/storage";
+import { addMemoryFacts, generateMemoryId, calculateExpiry, getUserMemory, saveUserMemory } from "@/lib/memory/storage";
 
 export async function POST(req: NextRequest) {
   try {
@@ -113,12 +113,13 @@ export async function POST(req: NextRequest) {
     let selectedModelName: string | undefined;
     let webSearchResults: any[] | undefined;
     let extractedFacts: any[] | undefined;
+    let analysis: any | undefined;
 
     if (isIntelligentAnalysisEnabled()) {
       console.log('[Chat API] Using intelligent analysis');
 
       // Step 1: Analyze user input
-      const analysis = await promptAnalyzer.analyze({
+      analysis = await promptAnalyzer.analyze({
         message,
         files,
         conversationHistory: messages.slice(-5), // Last 5 messages for context
@@ -221,9 +222,37 @@ export async function POST(req: NextRequest) {
             // NEW: Save extracted facts from PromptAnalysis
             if (extractedFacts && extractedFacts.length > 0) {
               console.log(`[Chat API] Saving ${extractedFacts.length} extracted facts`);
-              addMemoryFacts(session.user.id, extractedFacts)
+
+              // Transform raw facts from PromptAnalyzer into complete MemoryFact objects
+              const completedFacts = extractedFacts.map((rawFact: any) => ({
+                id: generateMemoryId(),
+                content: rawFact.content,
+                category: rawFact.category,
+                tier: rawFact.tier,
+                confidence: rawFact.confidence,
+                created_at: new Date(),
+                last_used_at: new Date(),
+                use_count: 0,
+                expires_at: calculateExpiry(rawFact.tier),
+                extracted_from: conversationId,
+                auto_extracted: true,
+                keywords: rawFact.keywords || [],
+                source: rawFact.source || 'AI analysis',
+              }));
+
+              console.log(`[Chat API] Transformed facts:`, completedFacts.map((f: any) => ({
+                content: f.content,
+                tier: f.tier,
+                category: f.category
+              })));
+
+              addMemoryFacts(session.user.id, completedFacts, analysis?.language)
                 .then(() => cleanupUserMemory(session.user.id))
                 .catch((err) => console.error("Memory save error:", err));
+            } else if (analysis?.language) {
+              // No facts extracted but language preference detected
+              addMemoryFacts(session.user.id, [], analysis.language)
+                .catch((err) => console.error("Language preference save error:", err));
             }
           } else {
             // OLD: Check for keyword triggers in user message

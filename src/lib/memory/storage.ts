@@ -139,7 +139,8 @@ function calculateSimilarity(str1: string, str2: string): number {
  */
 export async function addMemoryFacts(
   userId: string,
-  newFacts: MemoryFact[]
+  newFacts: MemoryFact[],
+  languagePreference?: LanguagePreference
 ): Promise<void> {
   const memory = await getUserMemory(userId);
 
@@ -150,6 +151,12 @@ export async function addMemoryFacts(
 
   if (uniqueNewFacts.length === 0) {
     console.log("[Memory] All new facts are duplicates, skipping");
+
+    // Even if no new facts, update language preference if provided
+    if (languagePreference && memory.language_preference !== languagePreference) {
+      console.log(`[Memory] Updating language preference: ${memory.language_preference} → ${languagePreference}`);
+      await saveUserMemory(userId, memory.facts, languagePreference);
+    }
     return;
   }
 
@@ -162,8 +169,14 @@ export async function addMemoryFacts(
   // Add only unique facts
   memory.facts.push(...uniqueNewFacts);
 
-  // Preserve language preference when saving
-  await saveUserMemory(userId, memory.facts, memory.language_preference);
+  // Use new language preference if provided, otherwise preserve existing
+  const finalLanguagePreference = languagePreference || memory.language_preference;
+
+  if (languagePreference && memory.language_preference !== languagePreference) {
+    console.log(`[Memory] Updating language preference: ${memory.language_preference} → ${languagePreference}`);
+  }
+
+  await saveUserMemory(userId, memory.facts, finalLanguagePreference);
 }
 
 /**

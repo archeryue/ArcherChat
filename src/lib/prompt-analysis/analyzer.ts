@@ -224,6 +224,18 @@ Analyze and return JSON:`;
   }
 
   /**
+   * Normalize tier values from uppercase to lowercase enum values
+   */
+  private normalizeTier(tier: string): string {
+    const tierMap: Record<string, string> = {
+      'CORE': 'core',
+      'IMPORTANT': 'important',
+      'CONTEXT': 'context',
+    };
+    return tierMap[tier] || tier.toLowerCase();
+  }
+
+  /**
    * Parse and validate the analysis result from Gemini
    */
   private parseAnalysisResult(rawResponse: string): PromptAnalysisResult {
@@ -243,6 +255,20 @@ Analyze and return JSON:`;
 
       // Ensure confidence is in valid range
       result.confidence = Math.max(0, Math.min(1, result.confidence));
+
+      // Normalize tier and category values in extracted facts
+      if (result.actions.memory_extraction.facts && result.actions.memory_extraction.facts.length > 0) {
+        console.log('[PromptAnalyzer] Normalizing', result.actions.memory_extraction.facts.length, 'facts');
+        result.actions.memory_extraction.facts = result.actions.memory_extraction.facts.map(fact => {
+          const normalized = {
+            ...fact,
+            tier: this.normalizeTier(fact.tier as string) as any,
+            category: (fact.category as string).toLowerCase() as any, // Convert to lowercase
+          };
+          console.log(`[PromptAnalyzer] Normalized tier: ${fact.tier} → ${normalized.tier}, category: ${fact.category} → ${normalized.category}`);
+          return normalized;
+        });
+      }
 
       return result;
     } catch (error) {

@@ -28,8 +28,8 @@ export async function cleanupUserMemory(userId: string): Promise<void> {
     facts = enforceTokenBudget(facts, MEMORY_LIMITS.max_total_tokens);
   }
 
-  // Save cleaned memory
-  await saveUserMemory(userId, facts);
+  // Save cleaned memory (preserve language preference!)
+  await saveUserMemory(userId, facts, memory.language_preference);
 }
 
 /**
@@ -55,7 +55,14 @@ function enforceTierLimits(facts: MemoryFact[]): MemoryFact[] {
   };
 
   facts.forEach((fact) => {
-    byTier[fact.tier].push(fact);
+    // Ensure tier exists in byTier before pushing
+    if (fact.tier && byTier[fact.tier]) {
+      byTier[fact.tier].push(fact);
+    } else {
+      // Default to CONTEXT if tier is invalid
+      console.warn(`Invalid tier "${fact.tier}" for fact, defaulting to CONTEXT`);
+      byTier[MemoryTier.CONTEXT].push(fact);
+    }
   });
 
   // Keep top N per tier
