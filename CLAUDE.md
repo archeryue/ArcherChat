@@ -91,6 +91,37 @@ This document outlines the core principles and guidelines for developing ArcherC
 - Ask if the user wants to try a different model configuration
 - Explain trade-offs between different model options
 
+### 7. 🧪 TESTING: Always Run Tests After Code Changes
+- **ALWAYS** run the test suite after making code changes
+- **NEVER** commit code without verifying tests still pass
+- **ALWAYS** run `npx jest` before committing changes
+- **ALWAYS** ensure all tests pass (100% pass rate required)
+- **ALWAYS** fix failing tests immediately - don't leave them broken
+- **ALWAYS** add new tests when adding new features or fixing bugs
+- **EXCEPTION**: Quick typo fixes in documentation may skip tests
+
+**Testing Workflow:**
+1. Make code changes
+2. Run `npx jest` to verify all tests pass
+3. If tests fail, fix the code or update tests
+4. Only commit when all tests are green ✅
+5. Run `npx jest --coverage` periodically to check coverage
+
+**Why This Matters:**
+- Prevents breaking existing functionality
+- Catches bugs before they reach production
+- Maintains code quality and confidence
+- Documents expected behavior through tests
+- Makes refactoring safer
+
+**Test Commands:**
+```bash
+npx jest                 # Run all tests
+npx jest --watch        # Run tests in watch mode
+npx jest --coverage     # Run with coverage report
+npx jest path/to/file   # Run specific test file
+```
+
 ---
 
 ## Core Principles

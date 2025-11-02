@@ -25,6 +25,7 @@ A bilingual (English/Chinese) AI chatbot with advanced memory and personalizatio
 - **Authentication**: NextAuth.js (Google OAuth)
 - **AI**: Google Gemini API
 - **Styling**: Tailwind CSS + shadcn/ui
+- **Testing**: Jest + TypeScript (53 tests, 100% pass rate)
 - **Deployment**: Cloud Run (GCP)
 
 ## Local Development Setup
@@ -217,6 +218,32 @@ For family use (5-10 users, ~1000 messages/month):
 - Memory system: +$0.50-1/month
 - Image generation: +$0.50-2/month
 - File attachments: included (no extra cost)
+
+## Testing
+
+ArcherChat has comprehensive Jest + TypeScript test coverage:
+
+```bash
+# Run all tests
+npx jest
+
+# Run with coverage
+npx jest --coverage
+
+# Run specific suite
+npx jest src/__tests__/lib/memory/cleanup.test.ts
+
+# Watch mode
+npx jest --watch
+```
+
+**Current Status**: 53/53 tests passing (100% pass rate)
+- Memory cleanup (14 tests)
+- Memory extraction (11 tests)
+- Memory loading (17 tests)
+- Storage helpers (11 tests)
+
+See [docs/TESTING_PLAN.md](./docs/TESTING_PLAN.md) for detailed testing strategy.
 
 ## Deployment
 

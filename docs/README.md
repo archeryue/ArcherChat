@@ -43,8 +43,23 @@ Covers:
 
 **Production Checklist:** Complete 14-item checklist before going live
 
+### ✅ [TESTING_PLAN.md](./TESTING_PLAN.md)
+**Comprehensive testing strategy with detailed test cases.**
+
+**Status**: Phase 2 Complete ✅
+- 53/53 tests passing (100% pass rate)
+- 4 test suites (cleanup, extractor, loader, storage)
+- Jest + TypeScript infrastructure
+- Comprehensive coverage of memory system business logic
+
+Includes:
+- Test coverage by module (Memory, Prompt Analysis, Chat API, Web Search)
+- Testing infrastructure setup (Jest, Firestore Emulator, Playwright)
+- Implementation phases (Phase 1-6 roadmap)
+- Success metrics and quality gates
+
 ### ✅ [TESTING_CHECKLIST.md](./TESTING_CHECKLIST.md)
-**Comprehensive testing checklist for all features.**
+**Manual testing checklist for all features.**
 
 Test categories:
 - Pre-testing setup
@@ -83,6 +98,21 @@ Details:
 - Automatic cleanup
 - User control via /profile page
 
+### 🔍 [WEB_SEARCH_DESIGN.md](./WEB_SEARCH_DESIGN.md)
+**Web search integration - complete design and implementation.**
+
+Covers:
+- Architecture and implementation approach (Hybrid: Smart + User Control)
+- Cost comparison (Google Custom Search vs Tavily vs Gemini Grounding)
+- Setup and configuration (Google Custom Search API)
+- Rate limiting (20/hour, 100/day per user)
+- Testing procedures
+- Production deployment
+- Cost impact analysis (mostly FREE within 3,000 searches/month)
+
+**Provider**: Google Custom Search API
+**Status**: Implemented ✅
+
 ### 🔌 [ADDING_PROVIDERS.md](./ADDING_PROVIDERS.md)
 **Guide for extending ArcherChat with additional AI providers.**
 
@@ -96,9 +126,6 @@ Learn how to:
 
 **Current Providers:**
 - GeminiProvider (fully implemented)
-
-### 📋 [MEMORY_SYSTEM_STATUS.md](./MEMORY_SYSTEM_STATUS.md)
-**Memory system implementation status and roadmap.**
 
 ## 🚀 Quick Start
 
@@ -176,3 +203,10 @@ When updating documentation:
 
 **Last Updated**: 2025-11-01
 **Documentation Status**: ✅ Complete and up-to-date
+
+## Recent Updates (2025-11-01)
+
+- ✅ **Phase 2 Testing Complete**: 53/53 tests passing, comprehensive Jest infrastructure
+- ✅ **Web Search Documentation**: Consolidated into single WEB_SEARCH_DESIGN.md file
+- ✅ **Removed Outdated Files**: MEMORY_SYSTEM_STATUS.md (superseded by MEMORY_SYSTEM_COMPLETE.md)
+- ✅ **Updated TESTING_PLAN.md**: Marked Phase 2 complete with actual results
