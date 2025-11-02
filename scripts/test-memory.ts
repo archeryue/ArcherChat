@@ -77,8 +77,7 @@ async function test_addMemoryFacts_withLanguagePreference() {
     use_count: 0,
     expires_at: null,
     auto_extracted: true,
-    keywords: ['test'],
-    source: 'test',
+    extracted_from: 'test-conversation',
   };
 
   await addMemoryFacts(TEST_USER_ID, [testFact], 'english');
@@ -105,8 +104,7 @@ async function test_addMemoryFacts_languageOnly() {
     use_count: 0,
     expires_at: null,
     auto_extracted: true,
-    keywords: ['test'],
-    source: 'test',
+    extracted_from: 'test-conversation',
   };
 
   await addMemoryFacts(TEST_USER_ID, [duplicateFact], 'chinese');
@@ -135,8 +133,7 @@ async function test_cleanupUserMemory_preservesLanguagePreference() {
       use_count: 0,
       expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
       auto_extracted: true,
-      keywords: ['cleanup', 'test'],
-      source: 'test',
+      extracted_from: 'test-conversation',
     });
   }
 
@@ -170,8 +167,7 @@ async function test_tierNormalization() {
     use_count: 0,
     expires_at: null,
     auto_extracted: true,
-    keywords: ['tier', 'test'],
-    source: 'test',
+    extracted_from: 'test-conversation',
   };
 
   // Normalize (this should happen in PromptAnalyzer)
@@ -206,8 +202,7 @@ async function test_duplicateDetection() {
     use_count: 0,
     expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
     auto_extracted: true,
-    keywords: ['pizza'],
-    source: 'test',
+    extracted_from: 'test-conversation',
   };
 
   await addMemoryFacts(TEST_USER_ID, [fact1], 'english');
@@ -227,8 +222,7 @@ async function test_duplicateDetection() {
     use_count: 0,
     expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
     auto_extracted: true,
-    keywords: ['pizza'],
-    source: 'test',
+    extracted_from: 'test-conversation',
   };
 
   await addMemoryFacts(TEST_USER_ID, [fact2], 'english');
@@ -253,8 +247,7 @@ async function test_similarityDetection() {
     use_count: 0,
     expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
     auto_extracted: true,
-    keywords: ['dark', 'mode'],
-    source: 'test',
+    extracted_from: 'test-conversation',
   };
 
   await addMemoryFacts(TEST_USER_ID, [fact1], 'english');
@@ -274,8 +267,7 @@ async function test_similarityDetection() {
     use_count: 0,
     expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
     auto_extracted: true,
-    keywords: ['dark', 'mode', 'theme'],
-    source: 'test',
+    extracted_from: 'test-conversation',
   };
 
   await addMemoryFacts(TEST_USER_ID, [fact2], 'english');
