@@ -72,8 +72,8 @@ export class ContextOrchestrator {
     // Process results
     let taskIndex = 0;
 
-    // Web search results
-    if (analysis.actions.web_search.needed) {
+    // Web search results (only if task was added)
+    if (analysis.actions.web_search.needed && analysis.actions.web_search.query) {
       const searchResult = results[taskIndex++];
       if (searchResult.status === 'fulfilled') {
         result.webSearchResults = searchResult.value;
@@ -107,17 +107,17 @@ export class ContextOrchestrator {
    * Execute web search with rate limiting
    */
   private async executeWebSearch(userId: string, query: string): Promise<SearchResult[]> {
+    // Check if service is available first (skip rate limiter if disabled)
+    if (!googleSearchService.isAvailable()) {
+      console.warn('[ContextOrchestrator] Google Search not configured, skipping search');
+      return [];
+    }
+
     // Check global rate limits
     const rateCheck = await searchRateLimiter.checkRateLimit();
 
     if (!rateCheck.allowed) {
       throw new Error(rateCheck.message || "Rate limit exceeded");
-    }
-
-    // Check if service is available
-    if (!googleSearchService.isAvailable()) {
-      console.warn('[ContextOrchestrator] Google Search not configured, skipping search');
-      return [];
     }
 
     // Execute search

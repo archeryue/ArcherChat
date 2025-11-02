@@ -119,6 +119,7 @@ export async function POST(req: NextRequest) {
       console.log('[Chat API] Using intelligent analysis');
 
       // Step 1: Analyze user input
+      const t1 = Date.now();
       analysis = await promptAnalyzer.analyze({
         message,
         files,
@@ -128,6 +129,8 @@ export async function POST(req: NextRequest) {
           languagePreference: undefined, // Auto-detect
         },
       });
+      const t2 = Date.now();
+      console.log(`[Performance] PromptAnalysis took ${t2 - t1}ms`);
 
       console.log('[Chat API] Analysis result:', {
         intent: analysis.intent,
@@ -138,11 +141,14 @@ export async function POST(req: NextRequest) {
       });
 
       // Step 2: Orchestrate context preparation
+      const t3 = Date.now();
       const contextResult = await contextOrchestrator.prepare(
         analysis,
         session.user.id,
         conversationId
       );
+      const t4 = Date.now();
+      console.log(`[Performance] Context preparation took ${t4 - t3}ms`);
 
       // Step 3: Build final prompt with context
       if (contextResult.context) {

@@ -11,10 +11,39 @@ import { v4 as uuidv4 } from "uuid";
 // Collection name
 const MEMORY_COLLECTION = "memory";
 
+// In-memory cache for user memory
+interface CacheEntry {
+  memory: UserMemory;
+  timestamp: number;
+}
+
+const memoryCache = new Map<string, CacheEntry>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 /**
- * Get user's memory from Firestore
+ * Clear cached memory for a user
+ */
+function invalidateCache(userId: string): void {
+  memoryCache.delete(userId);
+  console.log(`[MemoryCache] Invalidated cache for user: ${userId}`);
+}
+
+/**
+ * Get user's memory from cache or Firestore
  */
 export async function getUserMemory(userId: string): Promise<UserMemory> {
+  // Check cache first
+  const cached = memoryCache.get(userId);
+  const now = Date.now();
+
+  if (cached && (now - cached.timestamp) < CACHE_TTL) {
+    console.log(`[MemoryCache] Cache HIT for user: ${userId}`);
+    return cached.memory;
+  }
+
+  console.log(`[MemoryCache] Cache MISS for user: ${userId}, fetching from Firestore`);
+
+  // Fetch from Firestore
   const memoryDoc = await db
     .collection(COLLECTIONS.USERS)
     .doc(userId)
@@ -34,6 +63,13 @@ export async function getUserMemory(userId: string): Promise<UserMemory> {
       },
       updated_at: new Date(),
     };
+
+    // Cache empty memory
+    memoryCache.set(userId, {
+      memory: emptyMemory,
+      timestamp: now
+    });
+
     return emptyMemory;
   }
 
@@ -59,6 +95,12 @@ export async function getUserMemory(userId: string): Promise<UserMemory> {
   if (data.language_preference) {
     memory.language_preference = data.language_preference as LanguagePreference;
   }
+
+  // Store in cache
+  memoryCache.set(userId, {
+    memory,
+    timestamp: now
+  });
 
   return memory;
 }
@@ -93,6 +135,9 @@ export async function saveUserMemory(
     .collection(MEMORY_COLLECTION)
     .doc("data")
     .set(memory);
+
+  // Invalidate cache after saving
+  invalidateCache(userId);
 }
 
 /**
