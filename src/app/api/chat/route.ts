@@ -201,7 +201,8 @@ export async function POST(req: NextRequest) {
       const contextResult = await contextOrchestrator.prepare(
         analysis,
         session.user.id,
-        conversationId
+        conversationId,
+        progressEmitter  // Pass progress emitter for content fetching/extraction tracking
       );
       const t4 = Date.now();
       console.log(`[Performance] Context preparation took ${t4 - t3}ms`);

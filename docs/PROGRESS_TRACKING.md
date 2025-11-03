@@ -12,10 +12,12 @@ Users see a **single badge** above the AI's response that updates in place:
 
 1. 🔵 **"Analyzing your question..."** - Analyzing prompt intent
 2. 🔵 **"Searching for: [query]"** - Web search in progress
-3. 🔵 **"Retrieving relevant memories..."** - Memory retrieval
-4. 🔵 **"Building context for AI..."** - Context preparation
-5. 🔵 **"Generating response..."** - AI generating answer
-6. 🟢 **"Completed"** - Response finished
+3. 🔵 **"Fetching N pages..."** - Fetching webpage content (NEW)
+4. 🔵 **"Extracting relevant information..."** - AI-powered content extraction (NEW)
+5. 🔵 **"Retrieving relevant memories..."** - Memory retrieval
+6. 🔵 **"Building context for AI..."** - Context preparation
+7. 🔵 **"Generating response..."** - AI generating answer
+8. 🟢 **"Completed"** - Response finished
 
 ## Architecture
 
@@ -148,6 +150,8 @@ while (true) {
 |------|------|----------|-----------|
 | ANALYZING_PROMPT | Always | ~1s | No |
 | SEARCHING_WEB | If web search needed | ~1s | Yes |
+| FETCHING_CONTENT | After web search (top 3 results) | ~2-3s | Yes |
+| EXTRACTING_INFO | After content fetching | ~2-4s | Yes |
 | RETRIEVING_MEMORY | If memories exist | <0.5s | Yes |
 | BUILDING_CONTEXT | Always | <0.1s | No |
 | GENERATING_RESPONSE | Always | 2-5s | No |
@@ -187,6 +191,49 @@ const updateUI = () => {
 ```
 
 **Tracking**: See `docs/FUTURE_IMPROVEMENTS.md` for detailed plan
+
+## Web Scraping Integration
+
+**NEW (November 2, 2025)**: Web scraping with AI-powered content extraction
+
+When web search is triggered, the system now:
+
+1. **Fetches Top Results**: Downloads HTML from top 3 search results
+   - Uses cheerio for HTML parsing
+   - Extracts main content (article, main, body)
+   - Cleans and normalizes text
+   - 5-second timeout per page
+   - Progress: "Fetching N pages..."
+
+2. **Extracts Relevant Info**: Uses Gemini Flash Lite to extract pertinent information
+   - Focuses on content relevant to user's query
+   - Generates 2-3 paragraph summaries
+   - Extracts key points as bulleted lists
+   - Ranks by relevance score (0-1)
+   - Progress: "Extracting relevant information..."
+
+3. **Builds Enhanced Context**: Provides AI with detailed content instead of just snippets
+   - Title + relevance score
+   - Comprehensive summary
+   - Key points
+   - Source URL
+
+**Benefits**:
+- Much more detailed information than search snippets alone
+- AI can answer with specific facts, quotes, and data
+- Better accuracy for recent events and specific questions
+- Cost-efficient: ~$0.001-0.002 per extraction using Gemini Flash Lite
+
+**Cost Impact**:
+- Content Fetching: FREE (standard HTTP requests)
+- Content Extraction: ~$0.000015 per page (Gemini Flash Lite)
+- Total: ~$0.00005 per search with extraction (3 pages)
+
+**Files**:
+- `src/lib/web-search/content-fetcher.ts` - HTML fetching with cheerio
+- `src/lib/web-search/content-extractor.ts` - AI-powered extraction
+- `src/types/content-fetching.ts` - Type definitions
+- `src/lib/context-engineering/orchestrator.ts` - Integration
 
 ---
 
