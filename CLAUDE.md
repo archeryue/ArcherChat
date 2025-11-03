@@ -157,17 +157,23 @@ Real-time visual feedback during AI response generation:
 - **NEVER** commit API keys, private keys, or credentials to the repository
 - **NEVER** expose sensitive environment variables in client-side code
 - **NEVER** log or display private keys, passwords, or tokens
+- **NEVER** include actual API keys in commit messages (even in deployment notes)
+- **NEVER** include actual API keys in documentation files (use placeholders like [REDACTED] or [Set in Cloud Run])
+- **NEVER** expose ANY sensitive credentials in commits, messages, or docs
 - **ALWAYS** use environment variables for all sensitive configuration
 - **ALWAYS** add sensitive files to `.gitignore` before committing
 - **ALWAYS** rotate keys immediately if accidentally exposed
 - **ALWAYS** use Firebase Admin SDK only on the server-side, never client-side
 
-**Examples of what NEVER to commit:**
+**Examples of what NEVER to commit or document:**
 - `FIREBASE_PRIVATE_KEY`
 - `GEMINI_API_KEY`
+- `GOOGLE_SEARCH_API_KEY`
 - `NEXTAUTH_SECRET`
 - Service account JSON files
 - `.env` files with real values
+- Actual API key values in commit messages
+- Actual API key values in documentation (even in docs/ folder)
 
 ### 3. 📁 DOCUMENTATION: Only README.md and CLAUDE.md in Root
 - **ALWAYS** place documentation in the `docs/` directory
