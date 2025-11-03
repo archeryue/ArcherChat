@@ -15,12 +15,16 @@ jest.mock('uuid', () => ({
 // Mock dependencies before importing
 jest.mock('@/lib/web-search/google-search');
 jest.mock('@/lib/web-search/rate-limiter');
+jest.mock('@/lib/web-search/content-fetcher');
+jest.mock('@/lib/web-search/content-extractor');
 jest.mock('@/lib/memory/storage');
 
 // Import after mocking
 import { ContextOrchestrator } from '@/lib/context-engineering/orchestrator';
 import { googleSearchService } from '@/lib/web-search/google-search';
 import { searchRateLimiter } from '@/lib/web-search/rate-limiter';
+import { contentFetcher } from '@/lib/web-search/content-fetcher';
+import { contentExtractor } from '@/lib/web-search/content-extractor';
 import { getUserMemory } from '@/lib/memory/storage';
 
 describe('ContextOrchestrator - Web Search Integration', () => {
@@ -71,6 +75,10 @@ describe('ContextOrchestrator - Web Search Integration', () => {
       dailyRemaining: 50,
     });
     jest.mocked(searchRateLimiter.trackUsage).mockResolvedValue(undefined);
+
+    // Mock content fetcher and extractor to return empty results by default
+    jest.mocked(contentFetcher.fetchMultiple).mockResolvedValue([]);
+    jest.mocked(contentExtractor.extractAndRank).mockResolvedValue([]);
 
     jest.mocked(getUserMemory).mockResolvedValue({
       user_id: mockUserId,
@@ -174,18 +182,39 @@ describe('ContextOrchestrator - Web Search Integration', () => {
 
     it('should include web search results in context', async () => {
       jest.mocked(googleSearchService.search).mockResolvedValue(mockSearchResults);
-      jest.mocked(googleSearchService.formatResultsForAI).mockReturnValue(
-        '**Web Search Results:**\n1. Playwright...'
-      );
-      const analysis = createMockAnalysis(true, 'playwright vs selenium');
 
+      // Mock successful content extraction
+      const mockExtractedContent = [{
+        url: 'https://selenium.dev',
+        title: 'selenium.dev',
+        extractedInfo: 'The Selenium Browser Automation Project...',
+        relevanceScore: 0.5,
+        confidence: 0.8,
+        keyPoints: ['Point 1', 'Point 2'],
+        tokensUsed: { input: 100, output: 50 },
+        cost: 0.001,
+        extractionTime: 500,
+      }];
+
+      jest.mocked(contentFetcher.fetchMultiple).mockResolvedValue([{
+        url: 'https://selenium.dev',
+        title: 'Selenium',
+        rawHtml: '<html>...</html>',
+        cleanedText: 'The Selenium Browser Automation Project...',
+        metadata: { fetchedAt: new Date(), fetchDuration: 500, contentLength: 1000 },
+      }]);
+
+      jest.mocked(contentExtractor.extractAndRank).mockResolvedValue(mockExtractedContent);
+
+      const analysis = createMockAnalysis(true, 'playwright vs selenium');
       const result = await orchestrator.prepare(analysis, mockUserId, mockConversationId);
 
-      expect(result.context).toContain('**Web Search Results:**');
-      expect(googleSearchService.formatResultsForAI).toHaveBeenCalledWith(
-        mockSearchResults,
-        'playwright vs selenium'
-      );
+      // Should use extracted content format instead of snippets
+      expect(result.context).toContain('**Detailed Web Content for "playwright vs selenium":**');
+      expect(result.extractedContent).toEqual(mockExtractedContent);
+
+      // Fallback formatter should NOT be called when extraction succeeds
+      expect(googleSearchService.formatResultsForAI).not.toHaveBeenCalled();
     });
   });
 
