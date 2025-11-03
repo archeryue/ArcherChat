@@ -1,0 +1,55 @@
+# Gitleaks configuration for ArcherChat
+# This file defines what secrets to detect in commits
+
+title = "ArcherChat Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+# Custom rules for API keys specific to this project
+[[rules]]
+id = "google-api-key"
+description = "Google API Key (Gemini, Search, etc.)"
+regex = '''AIza[0-9A-Za-z-_]{35}'''
+keywords = [
+    "AIza",
+]
+
+[[rules]]
+id = "firebase-private-key"
+description = "Firebase Private Key"
+regex = '''-----BEGIN PRIVATE KEY-----'''
+keywords = [
+    "FIREBASE_PRIVATE_KEY",
+    "BEGIN PRIVATE KEY",
+]
+
+[[rules]]
+id = "nextauth-secret"
+description = "NextAuth Secret"
+regex = '''NEXTAUTH_SECRET\s*=\s*['""]?([A-Za-z0-9+/=]{32,})['""]?'''
+keywords = [
+    "NEXTAUTH_SECRET",
+]
+
+[[rules]]
+id = "google-oauth-secret"
+description = "Google OAuth Client Secret"
+regex = '''GOCSPX-[A-Za-z0-9_-]{28}'''
+keywords = [
+    "GOOGLE_CLIENT_SECRET",
+    "GOCSPX-",
+]
+
+# Allowlist for false positives
+[allowlist]
+description = "Allowlist for acceptable patterns"
+paths = [
+    '''.env.local.example''',  # Example file with placeholders
+    '''docs/.*\.md''',         # Documentation (as long as values are [REDACTED])
+    '''.github/workflows/.*''', # GitHub Actions workflows
+]
+
+regexes = [
+    '''(your-api-key|your-secret|placeholder|example|REDACTED|\[Set in Cloud Run\])''',
+]

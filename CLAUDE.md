@@ -27,6 +27,52 @@ npx jest src/__tests__/lib/web-search/     # Web search (6 tests)
 npx jest src/__tests__/lib/context-engineering/  # Context orchestration (8 tests)
 ```
 
+## CI/CD Pipeline (GitHub Actions)
+
+**Automated checks run on every push and pull request:**
+
+### 5 Security & Quality Gates:
+
+1. **Secret Scanning** (Gitleaks)
+   - Detects API keys, passwords, tokens in commits
+   - Scans entire git history
+   - Custom rules for Google API keys, Firebase keys, OAuth secrets
+   - Config: `.gitleaks.toml`
+
+2. **ESLint** (Code Quality)
+   - Enforces code style and best practices
+   - Must pass before merge
+
+3. **TypeScript Build** (Type Safety)
+   - Runs `npm run build` to catch type errors
+   - Prevents broken deployments
+
+4. **Jest Tests** (Functionality)
+   - All 87 tests must pass (100% pass rate required)
+   - Generates coverage reports
+   - Uploaded to Codecov (optional)
+
+5. **NPM Security Audit**
+   - Checks for vulnerable dependencies
+   - Flags moderate+ severity issues
+
+### Workflow Files:
+- `.github/workflows/ci.yml` - Main CI/CD pipeline
+- `.gitleaks.toml` - Secret scanning configuration
+- `.github/BRANCH_PROTECTION.md` - Setup guide for branch protection
+
+### Setting Up Branch Protection:
+
+To make these checks **mandatory** before merging:
+
+1. Go to: `https://github.com/archeryue/ArcherChat/settings/branches`
+2. Add protection rule for `main` branch
+3. Enable "Require status checks to pass before merging"
+4. Select all 5 checks as required
+5. See `.github/BRANCH_PROTECTION.md` for detailed instructions
+
+**Result**: Cannot merge PRs until all checks pass ✅
+
 ## Critical Architecture Patterns
 
 ### 1. Intelligent Analysis Pipeline (Current Production System)
