@@ -8,8 +8,8 @@ import { ExtractionRequest, ExtractedContent } from '@/types/content-fetching';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-// Use Gemini 1.5 Flash for fast, cheap extraction
-const EXTRACTION_MODEL = "gemini-1.5-flash"; // Fast and cost-efficient
+// Use Gemini 2.5 Flash Lite for lightweight background extraction
+const EXTRACTION_MODEL = "gemini-2.5-flash-lite"; // Lightweight model for background tasks
 
 export class ContentExtractor {
   private model;
@@ -54,7 +54,7 @@ export class ContentExtractor {
       const inputTokens = Math.ceil(truncatedContent.length / 4);
       const outputTokens = Math.ceil(extractedInfo.length / 4);
 
-      // Calculate cost (Gemini 1.5 Flash pricing)
+      // Calculate cost (Gemini 2.5 Flash Lite pricing)
       // Input: $0.075 per 1M tokens, Output: $0.30 per 1M tokens
       const inputCost = (inputTokens / 1_000_000) * 0.075;
       const outputCost = (outputTokens / 1_000_000) * 0.30;
