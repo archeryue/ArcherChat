@@ -49,7 +49,7 @@ Create a \`.env.local\` file in the root directory:
 
 \`\`\`env
 # Next.js
-NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_URL=http://localhost:8080
 NEXTAUTH_SECRET=your-secret-key-here
 
 # Google OAuth (Get from GCP Console)
@@ -93,7 +93,7 @@ ADMIN_EMAIL=archeryue7@gmail.com
 2. Navigate to APIs & Services → Credentials
 3. Click "Create Credentials" → "OAuth 2.0 Client ID"
 4. Application type: Web application
-5. Add authorized redirect URI: \`http://localhost:3000/api/auth/callback/google\`
+5. Add authorized redirect URI: \`http://localhost:8080/api/auth/callback/google\`
 6. Copy Client ID and Client Secret to \`.env.local\`
 
 ### Step 4: Run Development Server
@@ -102,7 +102,7 @@ ADMIN_EMAIL=archeryue7@gmail.com
 npm run dev
 \`\`\`
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:8080](http://localhost:8080) in your browser.
 
 ### Step 5: First Login
 
