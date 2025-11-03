@@ -7,7 +7,7 @@ import { ProviderFactory } from "@/lib/providers/provider-factory";
 import { AIMessage } from "@/types/ai-providers";
 import { NextRequest } from "next/server";
 import { loadMemoryForChat, cleanupUserMemory } from "@/lib/memory";
-import { FileAttachment } from "@/types/file";
+import { FileAttachment, Message } from "@/types";
 import { keywordSystem } from "@/lib/keywords/triggers";
 import { KeywordTriggerType } from "@/lib/keywords/system";
 import { isIntelligentAnalysisEnabled, isWebSearchEnabled } from "@/config/feature-flags";
@@ -15,7 +15,10 @@ import { promptAnalyzer } from "@/lib/prompt-analysis/analyzer";
 import { contextOrchestrator } from "@/lib/context-engineering/orchestrator";
 import { addMemoryFacts, generateMemoryId, calculateExpiry, getUserMemory, saveUserMemory } from "@/lib/memory/storage";
 import { ProgressEmitter, registerEmitter, removeEmitter } from "@/lib/progress/emitter";
-import { ProgressStep } from "@/lib/progress/types";
+import { ProgressStep, ProgressEvent } from "@/lib/progress/types";
+import { SearchResult } from "@/types/web-search";
+import { PromptAnalysisResult } from "@/types/prompt-analysis";
+import { MemoryFact } from "@/types/memory";
 
 export async function POST(req: NextRequest) {
   try {
@@ -54,7 +57,7 @@ export async function POST(req: NextRequest) {
     console.log(`[Chat API] Created progress tracker: ${requestId}`);
 
     // Buffer to collect ALL progress events (including early ones)
-    const progressEventsBuffer: any[] = [];
+    const progressEventsBuffer: ProgressEvent[] = [];
 
     // Subscribe IMMEDIATELY to capture all events
     const earlyUnsubscribe = progressEmitter.subscribe((event) => {
@@ -66,7 +69,7 @@ export async function POST(req: NextRequest) {
     // Store file metadata without base64 data to avoid Firestore size limits
     // Fixed: Conditionally include thumbnail field to prevent undefined values
     const fileMetadata = files?.map((file: FileAttachment) => {
-      const metadata: any = {
+      const metadata: Partial<FileAttachment> = {
         id: file.id,
         name: file.name,
         type: file.type,
@@ -82,14 +85,14 @@ export async function POST(req: NextRequest) {
       return metadata;
     });
 
-    const userMessageData: any = {
+    const userMessageData: Partial<Message> & { role: "user"; content: string; created_at: Date } = {
       role: "user",
       content: message || "",
       created_at: new Date(),
     };
 
     if (fileMetadata && fileMetadata.length > 0) {
-      userMessageData.files = fileMetadata;
+      userMessageData.files = fileMetadata as FileAttachment[];
     }
 
     const userMessageRef = await conversationRef
@@ -129,9 +132,9 @@ export async function POST(req: NextRequest) {
     // NEW: Intelligent Analysis (if enabled)
     let finalPrompt = processedPrompt;
     let selectedModelName: string | undefined;
-    let webSearchResults: any[] | undefined;
-    let extractedFacts: any[] | undefined;
-    let analysis: any | undefined;
+    let webSearchResults: SearchResult[] | undefined;
+    let extractedFacts: Partial<MemoryFact>[] | undefined;
+    let analysis: PromptAnalysisResult | undefined;
 
     if (isIntelligentAnalysisEnabled()) {
       console.log('[Chat API] Using intelligent analysis');
@@ -409,11 +412,6 @@ export async function POST(req: NextRequest) {
                 source: rawFact.source || 'AI analysis',
               }));
 
-              console.log(`[Chat API] Transformed facts:`, completedFacts.map((f: any) => ({
-                content: f.content,
-                tier: f.tier,
-                category: f.category
-              })));
 
               addMemoryFacts(session.user.id, completedFacts, analysis?.language)
                 .then(() => cleanupUserMemory(session.user.id))
