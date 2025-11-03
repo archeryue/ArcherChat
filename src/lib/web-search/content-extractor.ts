@@ -5,11 +5,12 @@
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { ExtractionRequest, ExtractedContent } from '@/types/content-fetching';
+import { getModelForTask } from '@/config/models';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-// Use Gemini 2.5 Flash Lite for lightweight background extraction
-const EXTRACTION_MODEL = "gemini-2.5-flash-lite"; // Lightweight model for background tasks
+// Use lightweight model for background extraction tasks
+const EXTRACTION_MODEL = getModelForTask("analysis");
 
 export class ContentExtractor {
   private model;

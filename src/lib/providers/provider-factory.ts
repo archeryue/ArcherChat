@@ -1,5 +1,6 @@
 import { IAIProvider, AIProviderType, AIProviderConfig } from "@/types/ai-providers";
 import { GeminiProvider } from "./gemini.provider";
+import { GEMINI_MODELS, ModelTier } from "@/config/models";
 
 /**
  * Factory for creating AI provider instances
@@ -57,7 +58,7 @@ export class ProviderFactory {
     switch (providerType) {
       case "gemini":
         config.apiKey = process.env.GEMINI_API_KEY;
-        config.model = modelOverride || process.env.GEMINI_MODEL || "gemini-2.0-flash-exp";
+        config.model = modelOverride || process.env.GEMINI_MODEL || GEMINI_MODELS[ModelTier.MAIN];
         break;
 
       case "openai":
