@@ -43,6 +43,27 @@ Covers:
 
 **Production Checklist:** Complete 14-item checklist before going live
 
+### 🔐 [GITLEAKS_TROUBLESHOOTING.md](./GITLEAKS_TROUBLESHOOTING.md)
+**Complete troubleshooting guide for Gitleaks secret scanning.**
+
+**NEW**: Based on real testing and debugging experience (2025-11-03)
+
+Learn how to:
+- Fix common Gitleaks configuration issues
+- Properly format regex patterns for API keys
+- Test secret detection with fake keys
+- Understand why secrets might be missed
+- Configure allowlists correctly
+- Debug Gitleaks failures
+
+**Key Gotchas:**
+- Config file must be `gitleaks.toml` (not `.gitleaks.toml`)
+- Google API keys: Must be exactly 39 characters (`AIza` + 35 more)
+- Gitleaks only scans changed files in each commit
+- Allowlist patterns can be too broad
+
+**Includes**: Step-by-step testing guide with fake secrets
+
 ### 📊 [DEPLOYMENT_STATUS.md](./DEPLOYMENT_STATUS.md)
 **Current production deployment status and configuration.**
 

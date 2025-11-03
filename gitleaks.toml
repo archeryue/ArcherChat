@@ -46,10 +46,9 @@ keywords = [
 description = "Allowlist for acceptable patterns"
 paths = [
     '''.env.local.example''',  # Example file with placeholders
-    '''docs/.*\.md''',         # Documentation (as long as values are [REDACTED])
     '''.github/workflows/.*''', # GitHub Actions workflows
 ]
 
 regexes = [
-    '''(your-api-key|your-secret|placeholder|example|REDACTED|\[Set in Cloud Run\])''',
+    '''(your-api-key|your-secret|placeholder|REDACTED|\[Set in Cloud Run\])''',
 ]

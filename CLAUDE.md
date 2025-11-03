@@ -29,15 +29,19 @@ npx jest src/__tests__/lib/context-engineering/  # Context orchestration (8 test
 
 ## CI/CD Pipeline (GitHub Actions)
 
-**Automated checks run on every push and pull request:**
+**Status**: ✅ Fully operational and tested (Branch protection enforced on `main`)
+
+**Automated checks run on every push to any branch and all pull requests:**
 
 ### 5 Security & Quality Gates:
 
-1. **Secret Scanning** (Gitleaks)
+1. **Secret Scanning** (Gitleaks) ✅ TESTED & WORKING
    - Detects API keys, passwords, tokens in commits
-   - Scans entire git history
+   - Scans changed files in each commit
    - Custom rules for Google API keys, Firebase keys, OAuth secrets
-   - Config: `.gitleaks.toml`
+   - **Config**: `gitleaks.toml` (root directory, NO leading dot)
+   - **IMPORTANT**: Google API keys must match pattern `AIza[0-9A-Za-z-_]{35}` (39 chars total)
+   - Successfully tested: Blocks commits containing fake API keys
 
 2. **ESLint** (Code Quality)
    - Enforces code style and best practices
@@ -46,6 +50,7 @@ npx jest src/__tests__/lib/context-engineering/  # Context orchestration (8 test
 3. **TypeScript Build** (Type Safety)
    - Runs `npm run build` to catch type errors
    - Prevents broken deployments
+   - Catches issues that `npm run dev` might miss
 
 4. **Jest Tests** (Functionality)
    - All 87 tests must pass (100% pass rate required)
@@ -57,21 +62,37 @@ npx jest src/__tests__/lib/context-engineering/  # Context orchestration (8 test
    - Flags moderate+ severity issues
 
 ### Workflow Files:
-- `.github/workflows/ci.yml` - Main CI/CD pipeline
-- `.gitleaks.toml` - Secret scanning configuration
+- `.github/workflows/ci.yml` - Main CI/CD pipeline (runs on ALL branches)
+- `gitleaks.toml` - Secret scanning configuration (auto-detected by Gitleaks)
 - `.github/BRANCH_PROTECTION.md` - Setup guide for branch protection
 
-### Setting Up Branch Protection:
+### Branch Protection (ACTIVE):
 
-To make these checks **mandatory** before merging:
+**Status**: ✅ Enabled on `main` branch
 
-1. Go to: `https://github.com/archeryue/ArcherChat/settings/branches`
-2. Add protection rule for `main` branch
-3. Enable "Require status checks to pass before merging"
-4. Select all 5 checks as required
-5. See `.github/BRANCH_PROTECTION.md` for detailed instructions
+- ✅ Cannot push directly to `main` (must use PRs)
+- ✅ All 5 checks must pass before merging
+- ✅ Tested and verified working
+- ✅ Even administrators must pass checks
 
-**Result**: Cannot merge PRs until all checks pass ✅
+**Setup**: Classic branch protection rule on `main` branch
+- See `.github/BRANCH_PROTECTION.md` for detailed setup instructions
+
+### Important Notes:
+
+**Gitleaks Gotchas** (learned through testing):
+1. Config file MUST be named `gitleaks.toml` (not `.gitleaks.toml`)
+2. Gitleaks scans **changed files in each commit**, not all files
+3. Google API key regex: Requires exactly 39 characters (`AIza` + 35 more)
+4. Allowlist regex `example` will skip files with "example" in content
+5. The action automatically detects `gitleaks.toml` in repo root
+
+**Testing the Pipeline**:
+- Create a feature branch
+- Make changes and push
+- CI runs automatically (no PR needed)
+- View results at: `https://github.com/archeryue/ArcherChat/actions`
+- Create PR to merge to `main` → Branch protection enforces all checks
 
 ## Critical Architecture Patterns
 

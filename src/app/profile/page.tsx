@@ -193,7 +193,7 @@ export default function ProfilePage() {
             <Brain className="w-16 h-16 text-slate-400 mx-auto mb-4" />
             <h2 className="text-xl font-semibold text-slate-900 mb-2">No Memories Yet</h2>
             <p className="text-slate-600 mb-4">
-              As you chat, I'll automatically learn about your preferences and remember important facts.
+              As you chat, I&apos;ll automatically learn about your preferences and remember important facts.
             </p>
             <Link href="/chat">
               <Button>Start Chatting</Button>
