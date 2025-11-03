@@ -4,7 +4,7 @@
 
 const testConfig = {
   // This fake Google API key should be caught by Gitleaks NOW
-  apiKey: "AIzaSyDFakeKeyForTestingPurposes123456",
+  apiKey: "AIzaSyDFakeKeyForTestingPurposes1234567",
   timestamp: Date.now()
 };
 
