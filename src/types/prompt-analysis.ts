@@ -1,4 +1,4 @@
-import { MemoryFact, MemoryCategory, MemoryTier } from "./memory";
+import { MemoryFact, MemoryCategory, MemoryTier, LanguagePreference } from "./memory";
 import { FileAttachment } from "./file";
 import { AIMessage } from "./ai-providers";
 
@@ -65,7 +65,7 @@ export interface PromptAnalysisResult {
   actions: PromptActions;
 
   // Context metadata
-  language: "english" | "chinese" | "hybrid";
+  language: LanguagePreference;
   sentiment?: "positive" | "neutral" | "negative";
   urgency?: "high" | "normal" | "low";
 
@@ -85,7 +85,7 @@ export interface PromptAnalysisInput {
   conversationHistory?: AIMessage[]; // Last 3-5 messages for context
   userSettings?: {
     webSearchEnabled: boolean;
-    languagePreference?: "english" | "chinese" | "hybrid";
+    languagePreference?: LanguagePreference;
   };
 }
 

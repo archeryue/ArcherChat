@@ -85,14 +85,21 @@ export async function POST(req: NextRequest) {
       return metadata;
     });
 
-    const userMessageData: Partial<Message> & { role: "user"; content: string; created_at: Date } = {
+    interface UserMessageData {
+      role: "user";
+      content: string;
+      created_at: Date;
+      files?: Partial<FileAttachment>[];
+    }
+
+    const userMessageData: UserMessageData = {
       role: "user",
       content: message || "",
       created_at: new Date(),
     };
 
     if (fileMetadata && fileMetadata.length > 0) {
-      userMessageData.files = fileMetadata as FileAttachment[];
+      userMessageData.files = fileMetadata;
     }
 
     const userMessageRef = await conversationRef
@@ -173,7 +180,7 @@ export async function POST(req: NextRequest) {
         intent: analysis.intent,
         confidence: analysis.confidence,
         actions: Object.keys(analysis.actions).filter(
-          (k) => (analysis.actions as any)[k].needed
+          (k) => (analysis!.actions as any)[k].needed
         ),
       });
 

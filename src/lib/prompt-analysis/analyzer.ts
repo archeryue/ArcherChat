@@ -5,6 +5,7 @@ import {
   PromptAnalysisResult,
   UserIntent,
 } from "@/types/prompt-analysis";
+import { LanguagePreference } from "@/types/memory";
 
 /**
  * PromptAnalysis Module
@@ -363,11 +364,11 @@ Analyze and return JSON:`;
     const hasChineseChars = /[\u4e00-\u9fa5]/.test(input.message);
     const hasEnglishChars = /[a-zA-Z]/.test(input.message);
 
-    let language: "english" | "chinese" | "hybrid" = "english";
+    let language: LanguagePreference = LanguagePreference.ENGLISH;
     if (hasChineseChars && hasEnglishChars) {
-      language = "hybrid";
+      language = LanguagePreference.HYBRID;
     } else if (hasChineseChars) {
-      language = "chinese";
+      language = LanguagePreference.CHINESE;
     }
 
     return {
