@@ -2,9 +2,11 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    # Run on ALL branches
+    branches: [ '**' ]
   pull_request:
-    branches: [ main, develop ]
+    # Run on ALL pull requests
+    branches: [ '**' ]
 
 jobs:
   # Job 1: Security - Scan for secrets
