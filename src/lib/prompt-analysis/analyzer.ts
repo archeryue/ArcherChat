@@ -51,7 +51,12 @@ export class PromptAnalyzer {
 
 1. Primary intent (question/image_generation/casual_chat/command)
 2. Required actions:
-   - Web search: Does this need current, real-time information? If yes, generate optimized search query
+   - Web search: BE CONSERVATIVE! Only use if user EXPLICITLY asks for:
+     * Current/recent events (today, this week, latest news)
+     * Real-time data (stock prices, weather, live scores)
+     * "Latest" products/versions released recently
+     * Specific facts that change frequently
+     DO NOT use for: general knowledge, programming concepts, how-to guides, historical facts, explanations
    - Memory retrieval: Should we recall user's past preferences/info? If yes, what search terms?
    - Memory extraction: Should we save information from this conversation? If yes, EXTRACT THE FACTS NOW
    - Image generation: Is the user asking to create/generate an image?
@@ -116,18 +121,46 @@ Return ONLY valid JSON matching this exact schema:
 
 Examples:
 
-Input: "What's the latest iPhone model?"
+Input: "What's the latest iPhone model released this week?"
 Output: {
   "intent": "question",
   "actions": {
-    "web_search": {"needed": true, "query": "latest iPhone model 2025", "reason": "User asks for current product information", "priority": "high"},
+    "web_search": {"needed": true, "query": "latest iPhone model 2025", "reason": "User explicitly asks for 'latest' recent product", "priority": "high"},
     "memory_retrieval": {"needed": false},
     "memory_extraction": {"needed": false, "trigger": "implicit"},
     "image_generation": {"needed": false}
   },
   "language": "english",
   "confidence": 0.92,
-  "reasoning": "User explicitly asks for 'latest' which requires real-time data"
+  "reasoning": "User explicitly asks for 'latest' with time reference, needs real-time data"
+}
+
+Input: "How does React useState work?"
+Output: {
+  "intent": "question",
+  "actions": {
+    "web_search": {"needed": false},
+    "memory_retrieval": {"needed": false},
+    "memory_extraction": {"needed": false, "trigger": "implicit"},
+    "image_generation": {"needed": false}
+  },
+  "language": "english",
+  "confidence": 0.95,
+  "reasoning": "General programming knowledge question - AI can answer without web search"
+}
+
+Input: "What are the best practices for API design?"
+Output: {
+  "intent": "question",
+  "actions": {
+    "web_search": {"needed": false},
+    "memory_retrieval": {"needed": false},
+    "memory_extraction": {"needed": false, "trigger": "implicit"},
+    "image_generation": {"needed": false}
+  },
+  "language": "english",
+  "confidence": 0.93,
+  "reasoning": "General knowledge question about concepts - no web search needed"
 }
 
 Input: "Remember my birthday is June 5th"

@@ -301,11 +301,19 @@ export async function POST(req: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          // Send all buffered progress events first
+          // Send all buffered progress events first with small delays
+          // This ensures users can see each badge transition instead of only the last one
           console.log('[Server] Sending', progressEventsBuffer.length, 'buffered events');
-          for (const event of progressEventsBuffer) {
+          for (let i = 0; i < progressEventsBuffer.length; i++) {
+            const event = progressEventsBuffer[i];
             const progressLine = `[PROGRESS]${JSON.stringify(event)}\n`;
             controller.enqueue(encoder.encode(progressLine));
+
+            // Add 150ms delay between events so users can see transitions
+            // Skip delay after the last event to start content streaming immediately
+            if (i < progressEventsBuffer.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 150));
+            }
           }
 
           // Unsubscribe from the buffering subscription
