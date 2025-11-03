@@ -69,7 +69,7 @@ export function ProgressMessage({ events, className }: ProgressMessageProps) {
           className={cn(
             "w-3.5 h-3.5 flex-shrink-0",
             isComplete ? "text-green-500" : statusColor,
-            currentEvent.status === 'in_progress' && "animate-spin"
+            (currentEvent.status === 'in_progress' || currentEvent.status === 'started') && "animate-spin"
           )}
         />
         <span>{isComplete ? "Completed" : currentEvent.message}</span>

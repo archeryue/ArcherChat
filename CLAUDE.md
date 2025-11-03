@@ -1,10 +1,139 @@
-# ArcherChat Development Principles
+# CLAUDE.md
 
-This document outlines the core principles and guidelines for developing ArcherChat. Follow these principles when making changes or adding new features.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Philosophy
 
 **Mission**: Build a clean, professional AI chatbot that serves both English and Chinese-speaking family members with intelligent memory and personalization.
+
+## Essential Commands
+
+```bash
+# Development
+npm run dev                    # Start dev server (http://localhost:3000)
+npm run build                  # Production build with strict TypeScript checking
+npm run start                  # Start production server
+npm run lint                   # ESLint checks
+
+# Testing (87 tests, 100% pass rate)
+npx jest                       # Run all tests
+npx jest --watch              # Watch mode for TDD
+npx jest --coverage           # Coverage report
+npx jest path/to/file.test.ts # Run specific test file
+
+# Testing specific modules
+npx jest src/__tests__/lib/memory/         # Memory system (14 tests)
+npx jest src/__tests__/lib/web-search/     # Web search (6 tests)
+npx jest src/__tests__/lib/context-engineering/  # Context orchestration (8 tests)
+```
+
+## Critical Architecture Patterns
+
+### 1. Intelligent Analysis Pipeline (Current Production System)
+
+**Feature Flag**: `NEXT_PUBLIC_USE_INTELLIGENT_ANALYSIS=true` (enabled in production)
+
+The system uses **AI-powered intent analysis** instead of keyword matching:
+
+```
+User Input → PromptAnalyzer → ContextOrchestrator → AI Response
+                ↓                      ↓
+          (analyzes intent)    (web search, memory, model selection)
+```
+
+**Key Files**:
+- `src/lib/prompt-analysis/analyzer.ts` - Uses Gemini Flash Lite to analyze user intent
+- `src/lib/context-engineering/orchestrator.ts` - Coordinates web search, memory retrieval, model selection
+- `src/app/api/chat/route.ts` lines 146-270 - Main integration point
+
+**What it does**:
+1. Analyzes user input to determine: intent, required actions (web search, memory, image gen), language
+2. Executes web search if needed (conservative mode - only for time-sensitive queries)
+3. Retrieves relevant memories from Firestore
+4. Selects appropriate model (Flash vs Image)
+5. Builds final context and streams response
+
+**Cost**: ~$0.000002 per analysis (~50 tokens with Flash Lite)
+
+### 2. Lazy Initialization Pattern (Firebase Admin)
+
+`src/lib/firebase-admin.ts` uses **Proxy pattern** to defer initialization:
+
+```typescript
+export const db = new Proxy({} as Firestore, {
+  get(_target, prop) {
+    if (!firestoreInstance) {
+      getFirebaseApp();
+      firestoreInstance = getFirestore();
+    }
+    return (firestoreInstance as any)[prop];
+  }
+});
+```
+
+**Why**: Required for Docker build compatibility. Never initialize services that need runtime env vars at module import time.
+
+### 3. Provider Abstraction Layer
+
+All AI providers implement `IAIProvider` interface (`src/types/ai-providers.ts`):
+
+```typescript
+// Usage
+const provider = ProviderFactory.createDefaultProvider(modelName);
+await provider.streamResponse(messages, systemPrompt, temperature, files);
+```
+
+**Model Configuration**: Centralized in `src/config/models.ts`
+- `ModelTier.MAIN`: Gemini 2.5 Flash (chat)
+- `ModelTier.IMAGE`: Gemini 2.5 Flash Image (image generation)
+- `ModelTier.LITE`: Gemini 2.5 Flash Lite (analysis, memory extraction)
+
+### 4. Memory System Architecture
+
+**Three-tier retention**:
+- `CORE`: Never expire (name, birthday, allergies)
+- `IMPORTANT`: 90 days (preferences, technical context)
+- `CONTEXT`: 30 days (current projects, temporary info)
+
+**Triggering Modes**:
+1. **AI Analysis** (primary): PromptAnalyzer extracts facts immediately during analysis
+2. **Keyword fallback** (deprecated): Only when `NEXT_PUBLIC_USE_INTELLIGENT_ANALYSIS=false`
+
+**Key Files**:
+- `src/lib/memory/storage.ts` - CRUD operations
+- `src/lib/memory/extractor.ts` - AI-powered extraction (legacy, replaced by PromptAnalyzer)
+- `src/lib/memory/loader.ts` - Load memories for chat context
+- `src/lib/memory/cleanup.ts` - Automatic cleanup, 500-token budget
+
+### 5. Web Search Integration
+
+**Provider**: Google Custom Search API
+**Rate Limits**: 20/hour, 100/day per user
+**Conservative Mode**: Only triggers for time-sensitive queries (latest news, stock prices, recent products)
+
+**Architecture**:
+- `src/lib/web-search/google-search.ts` - Search API client
+- `src/lib/web-search/rate-limiter.ts` - Per-user rate limiting
+- `src/lib/web-search/content-fetcher.ts` - Fetch top 3 results
+- `src/lib/web-search/content-extractor.ts` - AI-powered content extraction
+
+**Enable**: `NEXT_PUBLIC_USE_WEB_SEARCH=true` (set in `cloudbuild.yaml`)
+
+### 6. Progress Tracking System
+
+Real-time visual feedback during AI response generation:
+
+```
+[PROGRESS]{...event...}\n    ← Server-Sent Events protocol
+[CONTENT]chunk\n             ← Actual response content
+```
+
+**Key Files**:
+- `src/lib/progress/emitter.ts` - Server-side event emitter
+- `src/lib/progress/types.ts` - ProgressStep enum
+- `src/components/chat/ProgressMessage.tsx` - Client-side UI
+
+**Steps**: Analyzing → Searching → Retrieving Memory → Building Context → Generating
 
 ---
 
@@ -81,22 +210,10 @@ This document outlines the core principles and guidelines for developing ArcherC
 - [ ] Are error messages safe (no stack traces to users)?
 
 ### 6. 🤖 MODEL CONFIGURATION: Never Change Models Without Permission
-- **NEVER** change the AI model configuration (Gemini models, model tiers) unless the user explicitly asks
-- **NEVER** modify `src/config/models.ts` without explicit user request
-- **CAN** suggest model improvements if there's a good reason, but always ask before implementing
-- **ALWAYS** trust that the current model configuration is intentional and tested
-- **ALWAYS** wait for explicit permission before making any model changes
-- **EXCEPTION**: Only change models when user explicitly requests it
-
-**Examples of what NOT to do:**
-- Don't change `gemini-2.5-flash-image` to another model name without asking
-- Don't assume a model name is wrong and "fix" it
-- Don't modify model tier assignments without permission
-
-**What you CAN do:**
-- Suggest alternative models if there's a performance or cost benefit
-- Ask if the user wants to try a different model configuration
-- Explain trade-offs between different model options
+- **NEVER** change AI model configuration (Gemini models, model tiers) in `src/config/models.ts` without explicit user request
+- **CAN** suggest model improvements but ALWAYS ask first
+- **TRUST** current model configuration is intentional and tested
+- Current models: `gemini-2.5-flash-experimental-0827` (main), `gemini-2.5-flash-preview-04-17` (image), `gemini-2.5-flash-lite` (analysis)
 
 ### 7. 🧪 TESTING: Always Run Tests and Build Before Deployment
 - **ALWAYS** run the test suite after making code changes
@@ -192,185 +309,161 @@ BashOutput → Look for:
 
 ---
 
-## Core Principles
+## Development Principles
 
-### 1. Clean and Professional UI
-- **Consistency**: Use the Tailwind slate color palette throughout the application
-- **Subtlety**: Avoid overly prominent elements; blend UI components naturally
-- **Spacing**: Generous padding and margins for breathing room (e.g., `px-6 py-6` instead of `p-4`)
-- **Visual hierarchy**: Use shadows, gradients, and transitions to guide attention
-- **Responsive design**: Ensure the interface works well on all screen sizes
+### Multi-language Support (中英文双语)
+- **Language detection**: PromptAnalyzer auto-detects language preference (English, Chinese, Hybrid)
+- **Bilingual keywords**: `src/config/keywords.ts` contains 175+ keywords in both languages (legacy system)
+- **Inclusive design**: Both language speakers have equal experience quality
 
-### 2. Code Organization
-- **Centralized configuration**: Abstract shared logic into dedicated config files (e.g., `src/config/keywords.ts`)
-- **Documentation**: Keep all documentation in the `docs/` directory
+### Code Organization
+- **Centralized configuration**: `src/config/models.ts`, `src/config/keywords.ts`, `src/config/feature-flags.ts`
+- **Documentation**: All docs in `docs/` directory (see `docs/README.md` for index)
 - **Modular architecture**: Separate concerns (providers, memory, UI components)
-- **Clear file structure**: Follow Next.js conventions and keep related files together
+- **Next.js conventions**: App Router, API routes, server/client components
 
-### 3. Multi-language Support (中英文双语)
-- **Bilingual keywords**: All keyword-based triggers must support both English and Chinese
-- **Language preference**: Remember and respect user's language preference (English, Chinese, Hybrid)
-- **Automatic detection**: Use conversation analysis to infer language preference
-- **Inclusive design**: Ensure both language speakers have equal experience quality
+### UI Design Guidelines
+- **Color palette**: Tailwind slate throughout
+- **Spacing**: Generous padding (e.g., `px-6 py-6` instead of `p-4`)
+- **Subtlety**: Avoid flashy elements, blend UI naturally
+- **Responsive**: Works on all screen sizes
 
-### 4. User Privacy and Control
-- **Transparent memory**: Users can see exactly what the system remembers about them
-- **Granular control**: Allow deletion of individual memory facts, not just bulk clear
-- **Data isolation**: Each user's memory is private and isolated
-- **Minimal data collection**: Only remember what's truly useful for personalization
+### Error Handling
+- **User-facing**: Never show raw error messages or stack traces
+- **Server-side logging**: Detailed console.log with context
+- **Graceful degradation**: Provide fallbacks (e.g., if image gen fails, return text description)
+- **Validation**: Validate data before Firestore writes (no undefined values)
 
-### 5. Build and Deployment
-- **Build-time compatibility**: Never initialize services that require runtime environment variables during build
-- **Lazy initialization**: Use Proxy patterns or lazy loading for services (e.g., Firebase Admin SDK)
-- **Environment awareness**: Distinguish between development, build, and production environments
-- **Docker optimization**: Use multi-stage builds to minimize image size
+## Tech Stack
 
-### 6. Git Workflow
-- **Commit frequently**: Commit logical units of work with clear messages
-- **Descriptive commits**: Include context about what was changed and why
-- **Push after milestones**: Push to remote after completing features or fixes
-- **Organized documentation**: Keep documentation in sync with code changes
+- **Framework**: Next.js 14 (App Router, SSR, API routes)
+- **Language**: TypeScript (strict mode)
+- **Database**: Firestore (NoSQL, real-time)
+- **Auth**: NextAuth.js (Google OAuth, whitelist control)
+- **AI**: Google Gemini (cost-effective, multimodal, native image generation)
+- **Styling**: Tailwind CSS + shadcn/ui
+- **Testing**: Jest + TypeScript (87 tests)
+- **Deployment**: Cloud Run (GCP, scales to zero)
 
-### 7. Memory System Design
-- **Hybrid triggering**: Support both keyword-based (immediate) and conversation-based (automatic after 5+ messages, 2+ minutes) memory extraction
-- **Tiered retention**:
-  - Core facts: Never expire (profile information)
-  - Important facts: 90 days (preferences, technical context)
-  - Context facts: 30 days (current projects, temporary info)
-- **Deduplication**: Automatically filter out duplicate or highly similar facts
-- **Confidence scoring**: Only store facts with confidence ≥ 0.6
-- **Categories**: Organize facts into profile, preference, technical, and project categories
+## Common Development Tasks
 
-### 8. AI Provider Integration
-- **Provider abstraction**: Use the IAIProvider interface for all AI services
-- **Graceful fallbacks**: Handle API failures with descriptive error messages
-- **Model flexibility**: Support multiple models per provider (e.g., Gemini 2.0 Flash, Flash Experimental)
-- **Feature detection**: Automatically detect capabilities like image generation
+### Modifying Intent Analysis Behavior
+1. Update analysis prompt in `src/lib/prompt-analysis/analyzer.ts` (lines 39-257)
+2. Adjust web search conservatism, memory extraction triggers, etc.
+3. Test with various conversation patterns
+4. Run tests: `npx jest src/__tests__/lib/context-engineering/`
 
-### 9. Error Handling
-- **User-friendly errors**: Never show raw error messages to users
-- **Detailed logging**: Log errors server-side with full context for debugging
-- **Graceful degradation**: When features fail, provide alternatives (e.g., image generation → descriptive text)
-- **Validation**: Validate data structures before saving to Firestore
-
-### 10. Testing and Quality
-- **Test before deployment**: Verify changes work locally before pushing to Cloud Run
-- **Manual testing**: Test critical user flows after major changes
-- **Type safety**: Use TypeScript types consistently throughout the codebase
-- **Linting**: Follow ESLint rules for code quality
-
-## Technical Stack Decisions
-
-### Why Next.js 14?
-- Server-side rendering for better SEO and performance
-- App Router for modern routing patterns
-- API routes for backend functionality
-- Built-in optimization (images, fonts, code splitting)
-
-### Why Firebase?
-- Real-time updates for chat conversations
-- Secure authentication with Google OAuth
-- Flexible NoSQL database (Firestore) for unstructured data
-- Easy deployment and scaling
-
-### Why Tailwind CSS?
-- Utility-first approach for rapid UI development
-- Consistent design system through configuration
-- Minimal custom CSS needed
-- Excellent responsive design utilities
-
-### Why Google Gemini?
-- **Cost-effective**: Free tier with generous limits (60 requests/minute for Gemini 2.0 Flash)
-- **Native image generation**: Gemini 2.0 Flash has built-in image generation capabilities
-- **Competitive pricing**: Much cheaper than GPT-4 for paid usage ($0.075/1M input tokens vs $2.50/1M)
-- **Multimodal support**: Single API for text + images
-- **Fast inference times**: Quick responses for real-time chat
-- **No vendor lock-in**: Easy to add other providers later thanks to abstraction layer
-
-## Common Patterns
-
-### Adding a New Feature
-1. Plan the feature with clear requirements
-2. Update relevant documentation in `docs/`
-3. Implement with proper TypeScript types
-4. Test locally with `npm run dev`
-5. Commit with descriptive message
-6. Push to GitHub
-7. Deploy to Cloud Run for production testing
-
-### Adding New Keywords
-1. Add to appropriate category in `src/config/keywords.ts`
-2. Include both English and Chinese variants
-3. Update any related documentation
-4. Test with sample conversations
-
-### Modifying Memory Behavior
-1. Update extraction prompt in `src/lib/memory/extractor.ts` if needed
+### Modifying Memory Extraction
+1. Update PromptAnalyzer prompt to change extraction rules (lines 67-78 in analyzer.ts)
 2. Modify storage logic in `src/lib/memory/storage.ts` if needed
-3. Update UI in `src/app/profile/page.tsx` to reflect changes
-4. Test memory extraction with various conversation patterns
+3. Update UI in `src/app/profile/page.tsx` for display changes
+4. Run tests: `npx jest src/__tests__/lib/memory/`
 
-## Anti-Patterns to Avoid
+### Adding a New AI Provider
+1. Implement `IAIProvider` interface in `src/types/ai-providers.ts`
+2. Create provider class in `src/lib/providers/` (see `gemini.provider.ts` example)
+3. Add to `ProviderFactory` in `src/lib/providers/provider-factory.ts`
+4. Add env vars and configuration
+5. See `docs/ADDING_PROVIDERS.md` for detailed guide
 
-> **Note**: Critical security and cost anti-patterns are covered in the [CRITICAL RULES](#-critical-rules---never-violate-these) section above.
+### Modifying Progress Tracking Steps
+1. Add new step to `ProgressStep` enum in `src/lib/progress/types.ts`
+2. Emit events in orchestrator or chat route
+3. Update UI in `src/components/chat/ProgressMessage.tsx` for display
 
-❌ **Don't**: Initialize services at module import time if they need runtime config
-✅ **Do**: Use lazy initialization with Proxy patterns
+## Important Patterns & Anti-Patterns
 
-❌ **Don't**: Hardcode keywords throughout the codebase
-✅ **Do**: Centralize keywords in `src/config/keywords.ts`
+### ✅ DO:
+- Use lazy initialization with Proxy for services needing runtime env vars
+- Use PromptAnalyzer for intent detection (not keywords)
+- Validate data structures before Firestore writes (no undefined values)
+- Keep UI clean and subtle (Tailwind slate, generous spacing)
+- Support both English and Chinese equally
+- Use explicit TypeScript types (avoid `any`)
 
-❌ **Don't**: Make UI elements overly prominent or flashy
-✅ **Do**: Keep UI clean, professional, and subtle
+### ❌ DON'T:
+- Initialize services at module import time if they need runtime config
+- Hardcode keywords or magic strings (use `src/config/` files)
+- Save undefined values to Firestore (conditionally include fields)
+- Store sensitive data in memory facts
+- Show raw error messages or stack traces to users
+- Change model configuration without explicit permission
 
-❌ **Don't**: Assume all users speak English
-✅ **Do**: Support both English and Chinese equally
+## File Naming Conventions
 
-❌ **Don't**: Save undefined values to Firestore
-✅ **Do**: Conditionally include optional fields only when defined
+- **Components**: PascalCase (`ChatMessage.tsx`)
+- **Utilities**: camelCase (`firebase-admin.ts`)
+- **Types**: PascalCase (`memory.ts` exports `MemoryFact`)
+- **Config**: lowercase (`keywords.ts`, `models.ts`)
 
-❌ **Don't**: Store sensitive data in memory facts
-✅ **Do**: Filter out credentials, passwords, API keys from memory extraction
+## Deprecated Systems (Still in Code)
 
-## Code Style
+### Keyword-based Triggers (Legacy)
+**Status**: Deprecated, only runs when `NEXT_PUBLIC_USE_INTELLIGENT_ANALYSIS=false`
 
-### TypeScript
-- Use explicit types for function parameters and return values
-- Prefer interfaces over types for object shapes
-- Use enums for fixed sets of values (e.g., `MemoryTier`, `MemoryCategory`)
-- Avoid `any` type; use `unknown` and type guards instead
+**Files** (still in codebase but not used in production):
+- `src/lib/keywords/system.ts` - Keyword detection engine
+- `src/lib/keywords/triggers.ts` - Registered triggers
+- `src/config/keywords.ts` - 175+ bilingual keywords
+- `src/lib/memory/extractor.ts` - Old memory extraction (replaced by PromptAnalyzer)
 
-### React Components
-- Use functional components with hooks
-- Extract reusable logic into custom hooks
-- Keep components focused on single responsibility
-- Use proper TypeScript props interfaces
+**Why deprecated**: AI-powered PromptAnalyzer is more accurate, flexible, and doesn't require maintaining keyword lists.
 
-### File Naming
-- Components: PascalCase (e.g., `ChatMessage.tsx`)
-- Utilities: camelCase (e.g., `firebase-admin.ts`)
-- Types: PascalCase (e.g., `memory.ts` exports `MemoryFact`)
-- Config: lowercase (e.g., `keywords.ts`)
+## Project Structure
 
-## Future Considerations
+```
+src/
+  app/
+    api/
+      chat/route.ts              # Main chat endpoint (intelligent analysis integration)
+      conversations/route.ts     # Conversation CRUD
+      memory/route.ts            # Memory API
+      admin/                     # Admin endpoints
+    chat/page.tsx                # Main chat UI
+    admin/page.tsx               # Admin panel
+    profile/page.tsx             # User memory profile
+  lib/
+    prompt-analysis/analyzer.ts  # PromptAnalyzer (intent analysis)
+    context-engineering/orchestrator.ts  # Context orchestration
+    providers/                   # AI provider abstraction
+    memory/                      # Memory system
+    web-search/                  # Web search integration
+    progress/                    # Progress tracking
+    keywords/                    # Legacy keyword system
+  config/
+    models.ts                    # Model tier configuration
+    feature-flags.ts             # Feature toggles
+    keywords.ts                  # Legacy keyword lists
+  types/
+    ai-providers.ts              # Provider interfaces
+    prompt-analysis.ts           # Analysis types
+    memory.ts                    # Memory types
+  __tests__/                     # Jest tests (87 tests)
+```
 
-### Planned Enhancements
-- Enhanced keyword matching (word boundaries, negation detection, context awareness)
-- Memory analytics dashboard for users
-- Export/import memory data
-- Memory sharing between family members (opt-in)
-- Voice input support for Chinese
-- Multi-model AI provider support (OpenAI, Anthropic, etc.)
+## Cost Estimation (Family Use, 5-10 users, ~1000 messages/month)
 
-### Performance Optimizations
-- Implement caching for frequently accessed memory
-- Optimize Firestore queries with composite indexes
-- Add Redis for session management
-- Implement rate limiting for API endpoints
+- **Firestore**: FREE (within free tier)
+- **Cloud Run**: $5-10/month (scales to zero)
+- **Gemini API**: $2-5/month (tiered models, free tier first)
+  - Chat (2.5 Flash): ~$1.70
+  - Analysis (2.5 Flash Lite): ~$0.50
+  - Image generation (occasional): ~$0.50
+  - Web search content extraction: ~$1.00
+- **Google Custom Search**: FREE (within 100 queries/day)
+- **Total**: ~$8-18/month
+
+## Documentation
+
+See `docs/README.md` for comprehensive documentation index:
+- `docs/DESIGN.md` - System architecture
+- `docs/DEPLOYMENT.md` - Cloud Run deployment guide
+- `docs/TESTING_PLAN.md` - Testing strategy
+- `docs/MEMORY_SYSTEM_COMPLETE.md` - Memory system details
+- `docs/WEB_SEARCH_DESIGN.md` - Web search integration
+- `docs/PROGRESS_TRACKING.md` - Progress tracking system
 
 ---
 
-**Last Updated**: 2025-10-30
+**Last Updated**: 2025-11-02
 **Maintained By**: Archer & Claude Code
-
-This is a living document. Update it as the project evolves and new patterns emerge.
