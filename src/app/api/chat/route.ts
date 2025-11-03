@@ -14,6 +14,8 @@ import { isIntelligentAnalysisEnabled, isWebSearchEnabled } from "@/config/featu
 import { promptAnalyzer } from "@/lib/prompt-analysis/analyzer";
 import { contextOrchestrator } from "@/lib/context-engineering/orchestrator";
 import { addMemoryFacts, generateMemoryId, calculateExpiry, getUserMemory, saveUserMemory } from "@/lib/memory/storage";
+import { ProgressEmitter, registerEmitter, removeEmitter } from "@/lib/progress/emitter";
+import { ProgressStep } from "@/lib/progress/types";
 
 export async function POST(req: NextRequest) {
   try {
@@ -43,6 +45,22 @@ export async function POST(req: NextRequest) {
     if (conversationData?.user_id !== session.user.id) {
       return new Response("Forbidden", { status: 403 });
     }
+
+    // Create progress emitter for this request
+    const progressEmitter = new ProgressEmitter();
+    const requestId = progressEmitter.getRequestId();
+    registerEmitter(progressEmitter);
+
+    console.log(`[Chat API] Created progress tracker: ${requestId}`);
+
+    // Buffer to collect ALL progress events (including early ones)
+    const progressEventsBuffer: any[] = [];
+
+    // Subscribe IMMEDIATELY to capture all events
+    const earlyUnsubscribe = progressEmitter.subscribe((event) => {
+      progressEventsBuffer.push(event);
+      console.log('[Server] Buffered progress event:', event.step, event.status);
+    });
 
     // Save user message
     // Store file metadata without base64 data to avoid Firestore size limits
@@ -118,6 +136,14 @@ export async function POST(req: NextRequest) {
     if (isIntelligentAnalysisEnabled()) {
       console.log('[Chat API] Using intelligent analysis');
 
+      // Emit progress: Analyzing prompt
+      progressEmitter.emit({
+        step: ProgressStep.ANALYZING_PROMPT,
+        status: 'started',
+        message: 'Analyzing your question...',
+        timestamp: Date.now(),
+      });
+
       // Step 1: Analyze user input
       const t1 = Date.now();
       analysis = await promptAnalyzer.analyze({
@@ -132,6 +158,14 @@ export async function POST(req: NextRequest) {
       const t2 = Date.now();
       console.log(`[Performance] PromptAnalysis took ${t2 - t1}ms`);
 
+      // Emit progress: Analysis complete
+      progressEmitter.emit({
+        step: ProgressStep.ANALYZING_PROMPT,
+        status: 'completed',
+        message: 'Analysis complete',
+        timestamp: Date.now(),
+      });
+
       console.log('[Chat API] Analysis result:', {
         intent: analysis.intent,
         confidence: analysis.confidence,
@@ -139,6 +173,28 @@ export async function POST(req: NextRequest) {
           (k) => (analysis.actions as any)[k].needed
         ),
       });
+
+      // Emit progress for context preparation steps
+      const needsWebSearch = analysis.actions.web_search?.needed;
+      const needsMemory = analysis.actions.memory_retrieval?.needed;
+
+      if (needsWebSearch) {
+        progressEmitter.emit({
+          step: ProgressStep.SEARCHING_WEB,
+          status: 'started',
+          message: `Searching for: ${analysis.actions.web_search.query}`,
+          timestamp: Date.now(),
+        });
+      }
+
+      if (needsMemory) {
+        progressEmitter.emit({
+          step: ProgressStep.RETRIEVING_MEMORY,
+          status: 'started',
+          message: 'Retrieving relevant memories...',
+          timestamp: Date.now(),
+        });
+      }
 
       // Step 2: Orchestrate context preparation
       const t3 = Date.now();
@@ -150,6 +206,34 @@ export async function POST(req: NextRequest) {
       const t4 = Date.now();
       console.log(`[Performance] Context preparation took ${t4 - t3}ms`);
 
+      // Emit progress: Context preparation complete
+      if (needsWebSearch) {
+        const searchResults = contextResult.webSearchResults || [];
+        progressEmitter.emit({
+          step: ProgressStep.SEARCHING_WEB,
+          status: 'completed',
+          message: `Found ${searchResults.length} results`,
+          timestamp: Date.now(),
+        });
+      }
+
+      if (needsMemory) {
+        progressEmitter.emit({
+          step: ProgressStep.RETRIEVING_MEMORY,
+          status: 'completed',
+          message: `Retrieved ${contextResult.memoriesRetrieved?.length || 0} memories`,
+          timestamp: Date.now(),
+        });
+      }
+
+      // Emit progress: Building context
+      progressEmitter.emit({
+        step: ProgressStep.BUILDING_CONTEXT,
+        status: 'started',
+        message: 'Building context for AI...',
+        timestamp: Date.now(),
+      });
+
       // Step 3: Build final prompt with context
       if (contextResult.context) {
         finalPrompt = `${processedPrompt}\n\n${contextResult.context}`;
@@ -158,6 +242,14 @@ export async function POST(req: NextRequest) {
       // Use selected model from analysis
       selectedModelName = contextResult.modelName;
       webSearchResults = contextResult.webSearchResults;
+
+      // Emit progress: Context built
+      progressEmitter.emit({
+        step: ProgressStep.BUILDING_CONTEXT,
+        status: 'completed',
+        message: 'Context ready',
+        timestamp: Date.now(),
+      });
 
       // Save extracted facts from analysis
       extractedFacts = analysis.actions.memory_extraction.facts;
@@ -168,14 +260,37 @@ export async function POST(req: NextRequest) {
     } else {
       // OLD: Load user's memory and append to system prompt (keyword-based)
       console.log('[Chat API] Using keyword-based system');
+
+      progressEmitter.emit({
+        step: ProgressStep.RETRIEVING_MEMORY,
+        status: 'started',
+        message: 'Loading context...',
+        timestamp: Date.now(),
+      });
+
       const memoryContext = await loadMemoryForChat(session.user.id);
       finalPrompt = memoryContext
         ? `${processedPrompt}\n\n${memoryContext}`
         : processedPrompt;
+
+      progressEmitter.emit({
+        step: ProgressStep.RETRIEVING_MEMORY,
+        status: 'completed',
+        message: 'Context loaded',
+        timestamp: Date.now(),
+      });
     }
 
     // Create AI provider instance
     const provider = ProviderFactory.createDefaultProvider(selectedModelName);
+
+    // Emit progress: Starting to generate response
+    progressEmitter.emit({
+      step: ProgressStep.GENERATING_RESPONSE,
+      status: 'started',
+      message: 'Generating response...',
+      timestamp: Date.now(),
+    });
 
     // Stream response from AI provider
     // Pass files from current request (with full base64 data) for AI processing
@@ -185,6 +300,28 @@ export async function POST(req: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
+          // Send all buffered progress events first
+          console.log('[Server] Sending', progressEventsBuffer.length, 'buffered events');
+          for (const event of progressEventsBuffer) {
+            const progressLine = `[PROGRESS]${JSON.stringify(event)}\n`;
+            controller.enqueue(encoder.encode(progressLine));
+          }
+
+          // Unsubscribe from the buffering subscription
+          earlyUnsubscribe();
+
+          // Now subscribe to send future events directly to the stream
+          const liveUnsubscribe = progressEmitter.subscribe((event) => {
+            try {
+              const progressLine = `[PROGRESS]${JSON.stringify(event)}\n`;
+              console.log('[Server] Sending live progress event:', event.step, event.status);
+              controller.enqueue(encoder.encode(progressLine));
+            } catch (err) {
+              console.error('[Stream] Error sending progress:', err);
+            }
+          });
+
+          // Stream AI response content
           for await (const chunk of provider.streamResponse(
             messages,
             finalPrompt,
@@ -192,7 +329,9 @@ export async function POST(req: NextRequest) {
             files // Pass files with full base64 data to AI
           )) {
             fullResponse += chunk;
-            controller.enqueue(encoder.encode(chunk));
+            // Send content with [CONTENT] prefix, JSON-encoded to preserve newlines
+            const contentLine = `[CONTENT]${JSON.stringify(chunk)}\n`;
+            controller.enqueue(encoder.encode(contentLine));
           }
 
           // Add source citations if we have web search results
@@ -200,9 +339,24 @@ export async function POST(req: NextRequest) {
             const citations = contextOrchestrator.formatSourceCitations(webSearchResults);
             if (citations) {
               fullResponse += citations;
-              controller.enqueue(encoder.encode(citations));
+              const citationLine = `[CONTENT]${JSON.stringify(citations)}\n`;
+              controller.enqueue(encoder.encode(citationLine));
             }
           }
+
+          // Send completion progress event directly to ensure it's received
+          const completionEvent = {
+            step: ProgressStep.GENERATING_RESPONSE,
+            status: 'completed' as const,
+            message: 'Response complete',
+            timestamp: Date.now(),
+          };
+          const completionLine = `[PROGRESS]${JSON.stringify(completionEvent)}\n`;
+          controller.enqueue(encoder.encode(completionLine));
+          console.log('[Server] Sent completion event:', completionEvent.step, completionEvent.status);
+
+          // Unsubscribe from progress updates
+          liveUnsubscribe();
 
           // Save assistant message
           // Strip base64 image data to avoid Firestore size limits (1MB max)
@@ -280,6 +434,8 @@ export async function POST(req: NextRequest) {
             }
           }
 
+          console.log(`[Chat API] Completed request: ${requestId}`);
+
           controller.close();
         } catch (error) {
           console.error("Streaming error:", error);
@@ -292,6 +448,7 @@ export async function POST(req: NextRequest) {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
         "Transfer-Encoding": "chunked",
+        "X-Request-Id": requestId, // Include requestId for tracking
       },
     });
   } catch (error) {

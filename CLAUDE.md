@@ -153,6 +153,43 @@ npx jest --coverage     # Run with coverage report
 npx jest path/to/file   # Run specific test file
 ```
 
+### 8. ✅ VERIFICATION: Always Verify Code Changes Before Reporting Success
+- **ALWAYS** wait for the dev server to recompile after making code changes
+- **ALWAYS** check the server logs to confirm successful compilation
+- **NEVER** tell the user changes are ready without verifying first
+- **ALWAYS** look for `✓ Compiled` messages in the logs
+- **ALWAYS** check there are no new syntax or compilation errors
+- **ALWAYS** wait at least 5-10 seconds after saving files for webpack to finish
+
+**Mandatory Verification Workflow:**
+1. Make code changes and save files
+2. **WAIT** 5-10 seconds for webpack hot reload to complete
+3. **CHECK** `BashOutput` for the dev server logs
+4. **VERIFY** you see `✓ Compiled` with no errors
+5. **CONFIRM** latest HTTP requests return 200 status (not 500)
+6. **ONLY THEN** tell the user the changes are ready to test
+
+**Example of proper verification:**
+```bash
+# After making changes, check logs:
+BashOutput → Look for:
+  ✓ Compiled /chat in 2.4s (2108 modules)
+  GET /chat 200 in 2599ms
+```
+
+**What NOT to do:**
+- ❌ Make changes → immediately tell user "it's fixed"
+- ❌ Assume webpack compiled successfully without checking
+- ❌ Ignore compilation errors in the logs
+- ❌ Tell user it works when you see 500 errors
+
+**Why This Matters:**
+- Prevents wasting user's time with broken code
+- Catches syntax errors immediately
+- Builds trust through reliability
+- Ensures professional development practices
+- Respects user's time and patience
+
 ---
 
 ## Core Principles

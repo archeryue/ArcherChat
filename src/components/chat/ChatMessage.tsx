@@ -9,11 +9,15 @@ import { MessageClient } from "@/types";
 import { cn } from "@/lib/utils";
 import { FileType, formatFileSize } from "@/types/file";
 import { FileText, Image as ImageIcon, Copy, Check } from "lucide-react";
+import { ProgressEvent } from "@/lib/progress/types";
+import { ProgressMessage } from "./ProgressMessage";
 
 interface ChatMessageProps {
   message: MessageClient;
   userName?: string;
   userAvatar?: string;
+  progressEvents?: ProgressEvent[];
+  isGenerating?: boolean;
 }
 
 // Code block component with copy functionality
@@ -49,8 +53,10 @@ function CodeBlock({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function ChatMessage({ message, userName, userAvatar }: ChatMessageProps) {
+export function ChatMessage({ message, userName, userAvatar, progressEvents: externalProgressEvents, isGenerating }: ChatMessageProps) {
   const isUser = message.role === "user";
+  // Use progress events from message if available, otherwise use external ones
+  const progressEvents = message.progressEvents || externalProgressEvents;
 
   return (
     <div
@@ -83,6 +89,14 @@ export function ChatMessage({ message, userName, userAvatar }: ChatMessageProps)
         <div className="font-semibold text-sm mb-2 text-slate-700">
           {isUser ? userName || "You" : "Assistant"}
         </div>
+
+        {/* Progress Tracking - Show above content when available */}
+        {!isUser && progressEvents && progressEvents.length > 0 && (
+          <div className="mb-4">
+            <ProgressMessage events={progressEvents} />
+          </div>
+        )}
+
         <div className="prose prose-slate prose-sm max-w-none break-words overflow-x-auto">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}

@@ -65,6 +65,11 @@ export const authOptions: NextAuthOptions = {
         // Check if user is admin
         const adminEmail = process.env.ADMIN_EMAIL;
         session.user.isAdmin = session.user.email === adminEmail;
+
+        // Include avatar from token
+        if (token.picture) {
+          session.user.image = token.picture as string;
+        }
       }
       return session;
     },

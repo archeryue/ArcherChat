@@ -1,5 +1,6 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { FileAttachment } from "./file";
+import { ProgressEvent } from "@/lib/progress/types";
 
 // Re-export memory types
 export * from "./memory";
@@ -65,6 +66,7 @@ export interface MessageClient {
   image_data?: string;  // Base64 encoded image data
   files?: FileAttachment[];  // Uploaded file attachments
   created_at: Date;
+  progressEvents?: ProgressEvent[];  // Progress tracking for assistant messages
 }
 
 export interface WhitelistEntryClient {

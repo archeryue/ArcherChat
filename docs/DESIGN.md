@@ -10,6 +10,8 @@ ArcherChat is a bilingual (English/Chinese) AI chatbot with advanced memory and 
 - 📎 **File Attachments**: Upload and analyze images, PDFs
 - 🎯 **Smart Personalization**: AI remembers preferences and context
 - ⚙️ **Dynamic Prompts**: Admin-configurable system prompts
+- 📊 **Progress Tracking**: Real-time visual feedback during AI response generation
+- 🔍 **Web Search**: Intelligent web search with rate limiting and global usage tracking
 
 **Target Cost**: < $30/month for family use (5-10 users, ~1000 messages/month)
 **Actual Cost**: $8-18/month (well under budget)

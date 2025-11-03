@@ -177,14 +177,12 @@ export default function ChatPage() {
 
       if (reader) {
         let assistantContent = "";
+        let buffer = ""; // Buffer for incomplete lines
+        const progressEventsList: any[] = [];
+        let lastUpdateTime = 0;
+        const UPDATE_THROTTLE_MS = 50; // Update UI every 50ms max
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value);
-          assistantContent += chunk;
-
+        const updateUI = () => {
           // Extract image data if present and store separately
           const imageMatch = assistantContent.match(/!\[Generated Image\]\(data:(image\/[^;]+);base64,([A-Za-z0-9+/=]+)\)/);
 
@@ -197,19 +195,66 @@ export default function ChatPage() {
             contentToDisplay = assistantContent.replace(/!\[Generated Image\]\(data:image\/[^;]+;base64,[A-Za-z0-9+/=]+\)/, '');
           }
 
-          // Update assistant message with streamed content
+          // Update assistant message with streamed content AND progress events
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === assistantMessageId
                 ? {
                     ...msg,
-                    content: contentToDisplay.trim(),
-                    image_data: imageData
+                    content: contentToDisplay,
+                    image_data: imageData,
+                    progressEvents: progressEventsList.length > 0 ? [...progressEventsList] : undefined,
                   }
                 : msg
             )
           );
+        };
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          // Process complete lines
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || ""; // Keep last incomplete line in buffer
+
+          let shouldUpdate = false;
+
+          for (const line of lines) {
+            if (line.startsWith('[PROGRESS]')) {
+              // Parse and store progress event
+              try {
+                const progressData = JSON.parse(line.substring(10)); // Remove '[PROGRESS]' prefix
+                progressEventsList.push(progressData);
+                console.log('[Chat] Progress:', progressData);
+                shouldUpdate = true; // Always update UI for progress events
+              } catch (err) {
+                console.error('[Chat] Failed to parse progress:', err);
+              }
+            } else if (line.startsWith('[CONTENT]')) {
+              // Extract content chunk (JSON-encoded to preserve newlines)
+              try {
+                const contentChunk = JSON.parse(line.substring(9)); // Remove '[CONTENT]' prefix and parse JSON
+                assistantContent += contentChunk;
+                shouldUpdate = true;
+              } catch (err) {
+                console.error('[Chat] Failed to parse content:', err);
+              }
+            }
+          }
+
+          // Throttle UI updates to prevent React from rendering partial states
+          const now = Date.now();
+          if (shouldUpdate && (now - lastUpdateTime >= UPDATE_THROTTLE_MS)) {
+            updateUI();
+            lastUpdateTime = now;
+          }
         }
+
+        // Final update to ensure we show complete content
+        updateUI();
       }
 
       // Reload conversations to update title if it was the first message
@@ -270,14 +315,22 @@ export default function ChatPage() {
               </div>
             ) : (
               <>
-                {messages.map((message) => (
-                  <ChatMessage
-                    key={message.id}
-                    message={message}
-                    userName={session.user.name || undefined}
-                    userAvatar={session.user.image || undefined}
-                  />
-                ))}
+                {messages.map((message, index) => {
+                  // Check if this is the last assistant message being generated
+                  const isLastMessage = index === messages.length - 1;
+                  const isAssistant = message.role === "assistant";
+                  const isGeneratingThis = isLastMessage && isAssistant && isLoading;
+
+                  return (
+                    <ChatMessage
+                      key={message.id}
+                      message={message}
+                      userName={session.user.name || undefined}
+                      userAvatar={session.user.image || undefined}
+                      isGenerating={isGeneratingThis}
+                    />
+                  );
+                })}
                 <div ref={messagesEndRef} />
               </>
             )}

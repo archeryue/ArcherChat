@@ -113,6 +113,33 @@ Covers:
 **Provider**: Google Custom Search API
 **Status**: Implemented ✅
 
+### 📊 [PROGRESS_TRACKING.md](./PROGRESS_TRACKING.md)
+**Real-time progress tracking system for AI responses.**
+
+Details:
+- User experience (single updating badge)
+- System architecture (emitter, types, UI)
+- Data flow (server → client streaming)
+- Protocol design ([PROGRESS] and [CONTENT] prefixes)
+- JSON encoding for preserving newlines
+- Implementation details (server/client code)
+- Known issues and future improvements
+
+**Status**: Implemented ✅
+**Known Issue**: Badge transitions too fast (~500ms steps hard to read)
+
+### 🚀 [FUTURE_IMPROVEMENTS.md](./FUTURE_IMPROVEMENTS.md)
+**Planned enhancements and improvement roadmap.**
+
+Tracks:
+- **Low Priority**: Progress badge UX improvements
+- **Ideas**: Memory analytics, voice input, multi-model support
+- Detailed implementation approaches
+- Effort estimates
+- Related documentation links
+
+**Purpose**: Central tracker for future work and nice-to-have features
+
 ### 🔌 [ADDING_PROVIDERS.md](./ADDING_PROVIDERS.md)
 **Guide for extending ArcherChat with additional AI providers.**
 
@@ -134,7 +161,9 @@ Learn how to:
 3. **Ready to deploy?** Follow [DEPLOYMENT.md](./DEPLOYMENT.md)
 4. **Testing your deployment?** Use [TESTING_CHECKLIST.md](./TESTING_CHECKLIST.md)
 5. **Learning about memory?** See [MEMORY_SYSTEM_COMPLETE.md](./MEMORY_SYSTEM_COMPLETE.md)
-6. **Adding AI providers?** Check [ADDING_PROVIDERS.md](./ADDING_PROVIDERS.md)
+6. **Understanding progress tracking?** Check [PROGRESS_TRACKING.md](./PROGRESS_TRACKING.md)
+7. **Adding AI providers?** Check [ADDING_PROVIDERS.md](./ADDING_PROVIDERS.md)
+8. **Planning future work?** See [FUTURE_IMPROVEMENTS.md](./FUTURE_IMPROVEMENTS.md)
 
 ## 🎯 Key Features Documented
 
@@ -147,6 +176,8 @@ Learn how to:
 - **Prompt Management**: Dynamic admin-configurable prompts
 - **Admin Features**: Whitelist, user stats, prompt configuration
 - **Cost Optimization**: Tiered models, $8-18/month for family use
+- **Progress Tracking**: Real-time visual feedback during AI response generation
+- **Web Search**: Intelligent web search with rate limiting and caching
 
 ## 💡 Tips
 
@@ -201,11 +232,18 @@ When updating documentation:
 
 ---
 
-**Last Updated**: 2025-11-01
+**Last Updated**: 2025-11-02
 **Documentation Status**: ✅ Complete and up-to-date
 
-## Recent Updates (2025-11-01)
+## Recent Updates
 
+### 2025-11-02
+- ✅ **Progress Tracking Implemented**: Real-time visual feedback during AI responses
+- ✅ **New Documentation**: PROGRESS_TRACKING.md with complete architecture
+- ✅ **Future Improvements Tracker**: FUTURE_IMPROVEMENTS.md for enhancement planning
+- ⚠️ **Known Issue Documented**: Progress badge transitions too fast (low priority)
+
+### 2025-11-01
 - ✅ **Phase 2 Testing Complete**: 53/53 tests passing, comprehensive Jest infrastructure
 - ✅ **Web Search Documentation**: Consolidated into single WEB_SEARCH_DESIGN.md file
 - ✅ **Removed Outdated Files**: MEMORY_SYSTEM_STATUS.md (superseded by MEMORY_SYSTEM_COMPLETE.md)
