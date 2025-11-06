@@ -135,9 +135,12 @@ export class ContextOrchestrator {
       console.log('[ContextOrchestrator] No targetInfo provided, performing single search');
       try {
         const searchResults = await this.executeWebSearch(userId, currentQuery);
-        allSearchResults.push(...searchResults);
 
         if (searchResults.length > 0) {
+          // Only keep top 3 results (matching what we fetch)
+          const top3Results = searchResults.slice(0, 3);
+          allSearchResults.push(...top3Results);
+
           const extracted = await this.fetchAndExtractContent(
             searchResults,
             currentQuery,
@@ -176,12 +179,15 @@ export class ContextOrchestrator {
       try {
         // Execute search
         const searchResults = await this.executeWebSearch(userId, currentQuery);
-        allSearchResults.push(...searchResults);
 
         if (searchResults.length === 0) {
           console.log('[ContextOrchestrator] No search results, ending iteration');
           break;
         }
+
+        // Only keep top 3 results from each iteration (matching what we fetch)
+        const top3Results = searchResults.slice(0, 3);
+        allSearchResults.push(...top3Results);
 
         // Extract content
         const extracted = await this.fetchAndExtractContent(
@@ -608,16 +614,15 @@ If sufficient=false, provide specific missingAspects and a refined query to find
 
   /**
    * Format source citations for user (append to response)
-   * Only shows top 3 results that were actually used for context
+   * Shows top 3 results from each search iteration (3-9 links)
    */
   formatSourceCitations(webSearchResults?: SearchResult[]): string {
     if (!webSearchResults || webSearchResults.length === 0) {
       return "";
     }
 
-    // Only show top 3 results that were actually fetched/used
-    const top3Results = webSearchResults.slice(0, 3);
-    return googleSearchService.formatResultsForUser(top3Results);
+    // Results already filtered to top 3 per iteration in executeIterativeSearch
+    return googleSearchService.formatResultsForUser(webSearchResults);
   }
 }
 
