@@ -52,12 +52,24 @@ export class PromptAnalyzer {
 
 1. Primary intent (question/image_generation/casual_chat/command)
 2. Required actions:
-   - Web search: BE CONSERVATIVE! Only use if user EXPLICITLY asks for:
-     * Current/recent events (today, this week, latest news)
-     * Real-time data (stock prices, weather, live scores)
-     * "Latest" products/versions released recently
-     * Specific facts that change frequently
-     DO NOT use for: general knowledge, programming concepts, how-to guides, historical facts, explanations
+   - Web search: Use balanced judgment.
+     Consider web search when:
+     * User asks for current/recent events or news
+     * Real-time data (stock prices, weather, live scores, crypto)
+     * "Latest" or "current" products/versions/releases
+     * Recent comparisons (e.g., "best tools in 2025", "compare X vs Y")
+     * Specific recent facts or data that change over time
+     * Questions about what's happening "now" or "today"
+     * Info that's likely outdated or uncertain in your training data
+
+     Don't use web search when:
+     * Timeless concepts (how things work, design patterns, algorithms)
+     * Historical facts that don't change (e.g., "When was WWII?")
+     * Well-established knowledge (definitions, basic science, grammar)
+     * Personal advice or opinions
+     * Philosophical or subjective questions
+     * Simple calculations or logic problems
+     * Creative requests (writing, brainstorming, storytelling)
    - Memory retrieval: Should we recall user's past preferences/info? If yes, what search terms?
    - Memory extraction: Should we save information from this conversation? If yes, EXTRACT THE FACTS NOW
    - Image generation: Is the user asking to create/generate an image?
@@ -162,6 +174,34 @@ Output: {
   "language": "english",
   "confidence": 0.93,
   "reasoning": "General knowledge question about concepts - no web search needed"
+}
+
+Input: "Compare Playwright vs Selenium for 2025"
+Output: {
+  "intent": "question",
+  "actions": {
+    "web_search": {"needed": true, "query": "Playwright vs Selenium comparison 2025", "reason": "Recent comparison with specific year - tools evolve quickly", "priority": "medium"},
+    "memory_retrieval": {"needed": false},
+    "memory_extraction": {"needed": false, "trigger": "implicit"},
+    "image_generation": {"needed": false}
+  },
+  "language": "english",
+  "confidence": 0.88,
+  "reasoning": "User asks for current comparison of tools - both are actively developed so recent info is valuable"
+}
+
+Input: "What's the current price of Bitcoin?"
+Output: {
+  "intent": "question",
+  "actions": {
+    "web_search": {"needed": true, "query": "Bitcoin price now", "reason": "Real-time financial data", "priority": "high"},
+    "memory_retrieval": {"needed": false},
+    "memory_extraction": {"needed": false, "trigger": "implicit"},
+    "image_generation": {"needed": false}
+  },
+  "language": "english",
+  "confidence": 0.96,
+  "reasoning": "Cryptocurrency prices change by the second - requires live data"
 }
 
 Input: "Remember my birthday is June 5th"
