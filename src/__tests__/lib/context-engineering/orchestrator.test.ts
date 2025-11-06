@@ -111,7 +111,7 @@ describe('ContextOrchestrator - Web Search Integration', () => {
       expect(googleSearchService.isAvailable).toHaveBeenCalled();
       expect(searchRateLimiter.checkRateLimit).not.toHaveBeenCalled();
       expect(googleSearchService.search).not.toHaveBeenCalled();
-      expect(result.webSearchResults).toEqual([]);
+      expect(result.webSearchResults).toBeUndefined(); // Changed: no results = undefined
     });
 
     it('should skip web search when query is missing', async () => {
@@ -164,8 +164,8 @@ describe('ContextOrchestrator - Web Search Integration', () => {
 
       const result = await orchestrator.prepare(analysis, mockUserId, mockConversationId);
 
-      // Should not crash, but return empty results
-      expect(result.webSearchResults).toEqual([]);
+      // Should not crash, but return no results
+      expect(result.webSearchResults).toBeUndefined(); // Changed: no results = undefined
     });
 
     it('should not track usage on search failure', async () => {

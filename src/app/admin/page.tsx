@@ -93,6 +93,7 @@ export default function AdminPage() {
             <div className="flex items-center gap-3">
               <span className="text-sm text-slate-600">{session.user.email}</span>
               {session.user.image && (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={session.user.image}
                   alt={session.user.name || "Admin"}
