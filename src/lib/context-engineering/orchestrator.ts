@@ -475,16 +475,16 @@ Analyze:
 2. What important information is missing (if any)?
 3. If more search is needed, what specific refined query would help?
 
-Return ONLY valid JSON:
+Return ONLY valid JSON (DO NOT use 'undefined', omit fields or use null instead):
 {
   "sufficient": boolean,
-  "missingAspects": string[] | undefined,
-  "refinedQuery": string | undefined,
+  "missingAspects"?: string[],
+  "refinedQuery"?: string,
   "reasoning": string,
   "confidence": 0.0-1.0
 }
 
-If sufficient=true, leave missingAspects and refinedQuery as undefined.
+IMPORTANT: If sufficient=true, OMIT the missingAspects and refinedQuery fields entirely (do not set them to null or undefined).
 If sufficient=false, provide specific missingAspects and a refined query to find that information.`;
 
       const result = await model.generateContent(prompt);
