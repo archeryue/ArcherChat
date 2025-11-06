@@ -94,6 +94,33 @@ npx jest src/__tests__/lib/context-engineering/  # Context orchestration (8 test
 - View results at: `https://github.com/archeryue/ArcherChat/actions`
 - Create PR to merge to `main` → Branch protection enforces all checks
 
+### Git Workflow (develop → main):
+
+**IMPORTANT**: This project uses a **two-branch workflow**: `develop` and `main`
+
+**Mandatory Workflow**:
+1. **ALWAYS** commit to `develop` branch first
+2. **ALWAYS** push to `develop` and wait for CI checks to complete
+3. **ALWAYS** verify all CI checks passed using:
+   ```bash
+   gh run list --branch develop --limit 1
+   gh run view <run-id>
+   ```
+4. **ONLY THEN** merge `develop` → `main`:
+   ```bash
+   git checkout main
+   git merge develop
+   git push origin main
+   ```
+
+**Why this workflow**:
+- `develop` branch: Development and testing
+- `main` branch: Production-ready code only
+- CI runs on both branches
+- `main` requires all checks to pass before merge
+
+**Never create feature branches** - Work directly on `develop`, then merge to `main` after CI passes.
+
 ## Critical Architecture Patterns
 
 ### 1. Intelligent Analysis Pipeline (Current Production System)
