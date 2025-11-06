@@ -135,9 +135,12 @@ export class ContextOrchestrator {
       console.log('[ContextOrchestrator] No targetInfo provided, performing single search');
       try {
         const searchResults = await this.executeWebSearch(userId, currentQuery);
-        allSearchResults.push(...searchResults);
 
         if (searchResults.length > 0) {
+          // Only keep top 3 results (matching what we fetch)
+          const top3Results = searchResults.slice(0, 3);
+          allSearchResults.push(...top3Results);
+
           const extracted = await this.fetchAndExtractContent(
             searchResults,
             currentQuery,
@@ -176,12 +179,15 @@ export class ContextOrchestrator {
       try {
         // Execute search
         const searchResults = await this.executeWebSearch(userId, currentQuery);
-        allSearchResults.push(...searchResults);
 
         if (searchResults.length === 0) {
           console.log('[ContextOrchestrator] No search results, ending iteration');
           break;
         }
+
+        // Only keep top 3 results from each iteration (matching what we fetch)
+        const top3Results = searchResults.slice(0, 3);
+        allSearchResults.push(...top3Results);
 
         // Extract content
         const extracted = await this.fetchAndExtractContent(
@@ -355,22 +361,49 @@ export class ContextOrchestrator {
       // Fetch page content
       const fetchResults = await contentFetcher.fetchMultiple(urls, { concurrency: 2 });
 
-      // Filter successful fetches
+      // Separate successful and failed fetches
       const successfulFetches = fetchResults.filter(
         (result): result is import('@/types/content-fetching').PageContent => !('error' in result)
       );
+      const failedFetches = fetchResults.filter(
+        (result): result is import('@/types/content-fetching').ContentFetchError => 'error' in result
+      );
 
       console.log(`[ContextOrchestrator] Successfully fetched ${successfulFetches.length}/${urls.length} pages`);
+
+      // For failed fetches, use search result snippets as fallback
+      const snippetFallbacks: Array<{url: string, content: string}> = [];
+      for (const failed of failedFetches) {
+        const searchResult = topResults.find(r => r.link === failed.url);
+        if (searchResult?.snippet) {
+          snippetFallbacks.push({
+            url: failed.url,
+            content: `[Snippet only - website blocked access]\nTitle: ${searchResult.title}\n\n${searchResult.snippet}`
+          });
+          console.log(`[ContextOrchestrator] Using snippet fallback for ${failed.url}`);
+        }
+      }
+
+      console.log(`[ContextOrchestrator] Using ${snippetFallbacks.length} snippets as fallback`);
+
+      // Combine fetched content and snippet fallbacks
+      const allContent = [
+        ...successfulFetches.map(page => ({
+          url: page.url,
+          content: page.cleanedText,
+        })),
+        ...snippetFallbacks
+      ];
 
       // Emit progress: Fetching complete
       progressEmitter?.emit({
         step: ProgressStep.FETCHING_CONTENT,
         status: 'completed',
-        message: `Fetched ${successfulFetches.length} pages`,
+        message: `Fetched ${successfulFetches.length} pages + ${snippetFallbacks.length} snippets`,
         timestamp: Date.now(),
       });
 
-      if (successfulFetches.length === 0) {
+      if (allContent.length === 0) {
         return [];
       }
 
@@ -382,7 +415,7 @@ export class ContextOrchestrator {
         timestamp: Date.now(),
         details: {
           current: 0,
-          total: successfulFetches.length,
+          total: allContent.length,
         },
       });
 
@@ -390,10 +423,7 @@ export class ContextOrchestrator {
 
       // Extract relevant information using Gemini
       const extracted = await contentExtractor.extractAndRank(
-        successfulFetches.map(page => ({
-          url: page.url,
-          content: page.cleanedText,
-        })),
+        allContent,
         query
       );
 
@@ -584,12 +614,14 @@ If sufficient=false, provide specific missingAspects and a refined query to find
 
   /**
    * Format source citations for user (append to response)
+   * Shows top 3 results from each search iteration (3-9 links)
    */
   formatSourceCitations(webSearchResults?: SearchResult[]): string {
     if (!webSearchResults || webSearchResults.length === 0) {
       return "";
     }
 
+    // Results already filtered to top 3 per iteration in executeIterativeSearch
     return googleSearchService.formatResultsForUser(webSearchResults);
   }
 }
