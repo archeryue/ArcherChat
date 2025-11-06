@@ -12,7 +12,9 @@ export type UserIntent = "question" | "image_generation" | "casual_chat" | "comm
  */
 export interface WebSearchAction {
   needed: boolean;
-  query?: string;          // Optimized search query
+  query?: string;          // Initial optimized search query
+  userQuestion?: string;   // Original user question for context
+  targetInfo?: string[];   // Key aspects to cover (e.g., ["performance", "ease of use", "community"])
   reason?: string;         // Why search is needed
   priority?: "high" | "medium" | "low";
 }
@@ -95,4 +97,16 @@ export interface PromptAnalysisInput {
 export interface FeatureFlags {
   USE_INTELLIGENT_ANALYSIS: boolean;
   USE_WEB_SEARCH: boolean;
+}
+
+/**
+ * Reflection result after analyzing search content
+ * Used for iterative search refinement
+ */
+export interface SearchReflection {
+  sufficient: boolean;           // Is the content sufficient to answer the question?
+  missingAspects?: string[];     // What important aspects are missing?
+  refinedQuery?: string;         // Suggested refined search query
+  reasoning: string;             // Why is this sufficient or not?
+  confidence: number;            // 0.0-1.0 confidence in this assessment
 }

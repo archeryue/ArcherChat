@@ -68,6 +68,7 @@ export function ChatMessage({ message, userName, userAvatar, progressEvents: ext
       <div className="flex-shrink-0">
         {isUser ? (
           userAvatar ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={userAvatar}
               alt={userName || "User"}
@@ -137,6 +138,7 @@ export function ChatMessage({ message, userName, userAvatar, progressEvents: ext
                   {/* File Icon/Thumbnail */}
                   {file.type === FileType.IMAGE && file.thumbnail ? (
                     <div className="w-10 h-10 rounded overflow-hidden bg-slate-200 flex-shrink-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={file.thumbnail}
                         alt={file.name}
@@ -169,6 +171,7 @@ export function ChatMessage({ message, userName, userAvatar, progressEvents: ext
           {/* Display image if present */}
           {(message.image_url || message.image_data) && (
             <div className="mt-4 relative inline-block">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={message.image_url || `data:image/png;base64,${message.image_data}`}
                 alt="Generated image"

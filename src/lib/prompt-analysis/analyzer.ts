@@ -107,6 +107,8 @@ Return ONLY valid JSON matching this exact schema:
     "web_search": {
       "needed": boolean,
       "query": string | undefined,
+      "userQuestion": string | undefined,  // Keep original question for context
+      "targetInfo": string[] | undefined,  // Key aspects to cover (e.g., ["performance", "pricing", "features"])
       "reason": string | undefined,
       "priority": "high" | "medium" | "low" | undefined
     },
@@ -138,7 +140,7 @@ Input: "What's the latest iPhone model released this week?"
 Output: {
   "intent": "question",
   "actions": {
-    "web_search": {"needed": true, "query": "latest iPhone model 2025", "reason": "User explicitly asks for 'latest' recent product", "priority": "high"},
+    "web_search": {"needed": true, "query": "latest iPhone model 2025", "userQuestion": "What's the latest iPhone model released this week?", "targetInfo": ["model name", "release date", "features"], "reason": "User explicitly asks for 'latest' recent product", "priority": "high"},
     "memory_retrieval": {"needed": false},
     "memory_extraction": {"needed": false, "trigger": "implicit"},
     "image_generation": {"needed": false}
@@ -180,7 +182,7 @@ Input: "Compare Playwright vs Selenium for 2025"
 Output: {
   "intent": "question",
   "actions": {
-    "web_search": {"needed": true, "query": "Playwright vs Selenium comparison 2025", "reason": "Recent comparison with specific year - tools evolve quickly", "priority": "medium"},
+    "web_search": {"needed": true, "query": "Playwright vs Selenium comparison 2025", "userQuestion": "Compare Playwright vs Selenium for 2025", "targetInfo": ["performance", "features", "ease of use", "community support"], "reason": "Recent comparison with specific year - tools evolve quickly", "priority": "medium"},
     "memory_retrieval": {"needed": false},
     "memory_extraction": {"needed": false, "trigger": "implicit"},
     "image_generation": {"needed": false}
@@ -194,7 +196,7 @@ Input: "What's the current price of Bitcoin?"
 Output: {
   "intent": "question",
   "actions": {
-    "web_search": {"needed": true, "query": "Bitcoin price now", "reason": "Real-time financial data", "priority": "high"},
+    "web_search": {"needed": true, "query": "Bitcoin price now", "userQuestion": "What's the current price of Bitcoin?", "targetInfo": ["current price", "24h change"], "reason": "Real-time financial data", "priority": "high"},
     "memory_retrieval": {"needed": false},
     "memory_extraction": {"needed": false, "trigger": "implicit"},
     "image_generation": {"needed": false}

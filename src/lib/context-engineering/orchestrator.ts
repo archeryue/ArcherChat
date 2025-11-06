@@ -1,4 +1,4 @@
-import { PromptAnalysisResult } from "@/types/prompt-analysis";
+import { PromptAnalysisResult, SearchReflection } from "@/types/prompt-analysis";
 import { AIMessage } from "@/types/ai-providers";
 import { googleSearchService } from "@/lib/web-search/google-search";
 import { searchRateLimiter } from "@/lib/web-search/rate-limiter";
@@ -11,6 +11,7 @@ import { ExtractedContent } from "@/types/content-fetching";
 import { GEMINI_MODELS, ModelTier } from "@/config/models";
 import { ProgressEmitter } from "@/lib/progress/emitter";
 import { ProgressStep } from "@/lib/progress/types";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 /**
  * Context Engineering Module
@@ -61,53 +62,36 @@ export class ContextOrchestrator {
       modelName: this.selectModel(analysis),
     };
 
-    // Execute actions in parallel for speed
-    const tasks: Promise<any>[] = [];
-
-    // 1. Web Search (if needed)
-    if (analysis.actions.web_search.needed && analysis.actions.web_search.query) {
-      tasks.push(this.executeWebSearch(userId, analysis.actions.web_search.query));
-    }
-
-    // 2. Memory Retrieval (if needed)
+    // Handle memory retrieval (non-iterative)
     if (analysis.actions.memory_retrieval.needed) {
-      tasks.push(this.retrieveMemories(userId, analysis.actions.memory_retrieval.search_terms));
-    }
-
-    // Wait for all tasks to complete
-    const results = await Promise.allSettled(tasks);
-
-    // Process results
-    let taskIndex = 0;
-
-    // Web search results (only if task was added)
-    if (analysis.actions.web_search.needed && analysis.actions.web_search.query) {
-      const searchResult = results[taskIndex++];
-      if (searchResult.status === 'fulfilled') {
-        result.webSearchResults = searchResult.value;
-      } else {
-        console.error('[ContextOrchestrator] Web search failed:', searchResult.reason);
-        result.rateLimitError = searchResult.reason?.message;
+      try {
+        result.memoriesRetrieved = await this.retrieveMemories(
+          userId,
+          analysis.actions.memory_retrieval.search_terms
+        );
+      } catch (error) {
+        console.error('[ContextOrchestrator] Memory retrieval failed:', error);
       }
     }
 
-    // Memory retrieval results
-    if (analysis.actions.memory_retrieval.needed) {
-      const memoryResult = results[taskIndex++];
-      if (memoryResult.status === 'fulfilled') {
-        result.memoriesRetrieved = memoryResult.value;
-      } else {
-        console.error('[ContextOrchestrator] Memory retrieval failed:', memoryResult.reason);
-      }
-    }
-
-    // 3. Content Fetching & Extraction (if we have search results)
-    if (result.webSearchResults && result.webSearchResults.length > 0) {
-      result.extractedContent = await this.fetchAndExtractContent(
-        result.webSearchResults,
-        analysis.actions.web_search.query || '',
+    // Handle web search with iterative refinement (NEW!)
+    if (analysis.actions.web_search.needed && analysis.actions.web_search.query) {
+      const searchResult = await this.executeIterativeSearch(
+        userId,
+        analysis,
         progressEmitter
       );
+
+      // Only set results if we have data (not just empty arrays)
+      if (searchResult.searchResults.length > 0) {
+        result.webSearchResults = searchResult.searchResults;
+      }
+      if (searchResult.extractedContent.length > 0) {
+        result.extractedContent = searchResult.extractedContent;
+      }
+      if (searchResult.rateLimitError) {
+        result.rateLimitError = searchResult.rateLimitError;
+      }
     }
 
     // Build final context
@@ -119,6 +103,168 @@ export class ContextOrchestrator {
     );
 
     return result;
+  }
+
+  /**
+   * Execute iterative web search with reflection (up to 3 iterations)
+   *
+   * @param userId - User ID for rate limiting
+   * @param analysis - Prompt analysis result
+   * @param progressEmitter - Progress emitter for tracking
+   * @returns Combined search results and extracted content
+   */
+  private async executeIterativeSearch(
+    userId: string,
+    analysis: PromptAnalysisResult,
+    progressEmitter?: ProgressEmitter
+  ): Promise<{
+    searchResults: SearchResult[];
+    extractedContent: ExtractedContent[];
+    rateLimitError?: string;
+  }> {
+    const MAX_ITERATIONS = 3;
+    const allSearchResults: SearchResult[] = [];
+    const allExtractedContent: ExtractedContent[] = [];
+
+    let currentQuery = analysis.actions.web_search.query || '';
+    const userQuestion = analysis.actions.web_search.userQuestion || '';
+    const targetInfo = analysis.actions.web_search.targetInfo || [];
+
+    // If no targetInfo provided, can't do intelligent reflection - just do one search
+    if (targetInfo.length === 0) {
+      console.log('[ContextOrchestrator] No targetInfo provided, performing single search');
+      try {
+        const searchResults = await this.executeWebSearch(userId, currentQuery);
+        allSearchResults.push(...searchResults);
+
+        if (searchResults.length > 0) {
+          const extracted = await this.fetchAndExtractContent(
+            searchResults,
+            currentQuery,
+            progressEmitter
+          );
+          allExtractedContent.push(...extracted);
+        }
+      } catch (error: any) {
+        return {
+          searchResults: allSearchResults,
+          extractedContent: allExtractedContent,
+          rateLimitError: error?.message
+        };
+      }
+
+      return {
+        searchResults: allSearchResults,
+        extractedContent: allExtractedContent
+      };
+    }
+
+    // Iterative search with reflection
+    for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+      console.log(`[ContextOrchestrator] Search iteration ${iteration + 1}/${MAX_ITERATIONS}, query: "${currentQuery}"`);
+
+      // Emit progress: Starting iteration
+      if (iteration > 0 && progressEmitter) {
+        progressEmitter.emit({
+          step: ProgressStep.SEARCHING_WEB,
+          status: 'started',
+          message: `Refining search (iteration ${iteration + 1}): ${currentQuery}`,
+          timestamp: Date.now(),
+        });
+      }
+
+      try {
+        // Execute search
+        const searchResults = await this.executeWebSearch(userId, currentQuery);
+        allSearchResults.push(...searchResults);
+
+        if (searchResults.length === 0) {
+          console.log('[ContextOrchestrator] No search results, ending iteration');
+          break;
+        }
+
+        // Extract content
+        const extracted = await this.fetchAndExtractContent(
+          searchResults,
+          currentQuery,
+          progressEmitter
+        );
+        allExtractedContent.push(...extracted);
+
+        // Emit progress: Analyzing content
+        if (iteration < MAX_ITERATIONS - 1 && progressEmitter) {
+          progressEmitter.emit({
+            step: ProgressStep.ANALYZING_PROMPT,
+            status: 'started',
+            message: 'Analyzing if more information is needed...',
+            timestamp: Date.now(),
+          });
+        }
+
+        // Reflect: Do we need more information?
+        const reflection = await this.reflectOnContent(
+          userQuestion,
+          targetInfo,
+          allExtractedContent,
+          iteration
+        );
+
+        // If sufficient or last iteration, stop
+        if (reflection.sufficient || iteration === MAX_ITERATIONS - 1) {
+          console.log(`[ContextOrchestrator] Search complete after ${iteration + 1} iteration(s). Sufficient: ${reflection.sufficient}`);
+
+          // Emit progress: Search complete
+          if (progressEmitter) {
+            progressEmitter.emit({
+              step: ProgressStep.SEARCHING_WEB,
+              status: 'completed',
+              message: `Found comprehensive information (${iteration + 1} search${iteration > 0 ? 'es' : ''})`,
+              timestamp: Date.now(),
+            });
+          }
+          break;
+        }
+
+        // Continue with refined query
+        if (reflection.refinedQuery) {
+          currentQuery = reflection.refinedQuery;
+          console.log(`[ContextOrchestrator] Refining search: "${currentQuery}"`);
+
+          // Emit progress: Refining search
+          if (progressEmitter) {
+            progressEmitter.emit({
+              step: ProgressStep.ANALYZING_PROMPT,
+              status: 'completed',
+              message: `Need more info about: ${reflection.missingAspects?.join(', ') || 'additional details'}`,
+              timestamp: Date.now(),
+            });
+          }
+        } else {
+          console.log('[ContextOrchestrator] No refined query provided, ending iteration');
+          break;
+        }
+
+      } catch (error: any) {
+        console.error(`[ContextOrchestrator] Search iteration ${iteration + 1} failed:`, error);
+
+        // If first iteration fails, return error
+        if (iteration === 0) {
+          return {
+            searchResults: allSearchResults,
+            extractedContent: allExtractedContent,
+            rateLimitError: error?.message
+          };
+        }
+
+        // Otherwise, stop iteration and use what we have
+        break;
+      }
+    }
+
+    return {
+      searchResults: allSearchResults,
+      extractedContent: allExtractedContent
+    };
   }
 
   /**
@@ -276,6 +422,98 @@ export class ContextOrchestrator {
       });
 
       return [];
+    }
+  }
+
+  /**
+   * Reflect on collected content to determine if more search is needed
+   *
+   * @param userQuestion - Original user question
+   * @param targetInfo - Key aspects that should be covered
+   * @param extractedContent - Content collected so far
+   * @param iteration - Current iteration number
+   * @returns Reflection result with sufficiency assessment and refined query
+   */
+  private async reflectOnContent(
+    userQuestion: string,
+    targetInfo: string[],
+    extractedContent: ExtractedContent[],
+    iteration: number
+  ): Promise<SearchReflection> {
+    try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        console.warn('[ContextOrchestrator] Gemini API key not configured, skipping reflection');
+        return {
+          sufficient: true,
+          reasoning: 'Cannot perform reflection without API key',
+          confidence: 0.5
+        };
+      }
+
+      const client = new GoogleGenerativeAI(apiKey);
+      const model = client.getGenerativeModel({
+        model: GEMINI_MODELS[ModelTier.LITE] // Use Flash Lite for cost efficiency
+      });
+
+      // Build reflection prompt
+      const contentSummary = extractedContent.map((content, idx) =>
+        `Source ${idx + 1} (${content.title}):\n${content.extractedInfo}\nKey points: ${content.keyPoints?.join(', ') || 'none'}`
+      ).join('\n\n');
+
+      const prompt = `You are analyzing whether search results sufficiently answer a user's question.
+
+User asked: "${userQuestion}"
+
+We want to cover these aspects: ${targetInfo.join(', ')}
+
+Content found so far (iteration ${iteration + 1}/3):
+${contentSummary}
+
+Analyze:
+1. Does this content sufficiently cover the key aspects?
+2. What important information is missing (if any)?
+3. If more search is needed, what specific refined query would help?
+
+Return ONLY valid JSON:
+{
+  "sufficient": boolean,
+  "missingAspects": string[] | undefined,
+  "refinedQuery": string | undefined,
+  "reasoning": string,
+  "confidence": 0.0-1.0
+}
+
+If sufficient=true, leave missingAspects and refinedQuery as undefined.
+If sufficient=false, provide specific missingAspects and a refined query to find that information.`;
+
+      const result = await model.generateContent(prompt);
+      const response = result.response.text();
+
+      // Parse JSON response
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error("No JSON found in reflection response");
+      }
+
+      const reflection: SearchReflection = JSON.parse(jsonMatch[0]);
+
+      console.log(`[ContextOrchestrator] Reflection (iteration ${iteration + 1}):`, {
+        sufficient: reflection.sufficient,
+        missingAspects: reflection.missingAspects,
+        confidence: reflection.confidence
+      });
+
+      return reflection;
+    } catch (error) {
+      console.error('[ContextOrchestrator] Reflection error:', error);
+
+      // Fallback: assume content is sufficient to avoid infinite loops
+      return {
+        sufficient: true,
+        reasoning: 'Reflection failed, proceeding with available content',
+        confidence: 0.5
+      };
     }
   }
 
