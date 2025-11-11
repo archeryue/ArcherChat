@@ -3,8 +3,11 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import rehypeHighlight from "rehype-highlight";
+import rehypeKatex from "rehype-katex";
 import "highlight.js/styles/atom-one-dark.css";
+import "katex/dist/katex.min.css";
 import { MessageClient } from "@/types";
 import { cn } from "@/lib/utils";
 import { FileType, formatFileSize } from "@/types/file";
@@ -100,8 +103,8 @@ export function ChatMessage({ message, userName, userAvatar, progressEvents: ext
 
         <div className="prose prose-slate prose-sm max-w-none break-words overflow-x-auto">
           <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeHighlight]}
+            remarkPlugins={[remarkGfm, remarkMath]}
+            rehypePlugins={[rehypeKatex, rehypeHighlight]}
             components={{
               code({ node, className, children, ...props }: any) {
                 const match = /language-(\w+)/.exec(className || "");
