@@ -56,13 +56,21 @@ export async function POST(req: NextRequest) {
 
     console.log(`[Chat API] Created progress tracker: ${requestId}`);
 
-    // Buffer to collect ALL progress events (including early ones)
-    const progressEventsBuffer: ProgressEvent[] = [];
+    // Create the encoder and stream controller reference early
+    const encoder = new TextEncoder();
+    let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
 
-    // Subscribe IMMEDIATELY to capture all events
-    const earlyUnsubscribe = progressEmitter.subscribe((event) => {
-      progressEventsBuffer.push(event);
-      console.log('[Server] Buffered progress event:', event.step, event.status);
+    // Subscribe to send progress events in real-time to the stream
+    const progressUnsubscribe = progressEmitter.subscribe((event) => {
+      if (streamController) {
+        try {
+          const progressLine = `[PROGRESS]${JSON.stringify(event)}\n`;
+          streamController.enqueue(encoder.encode(progressLine));
+          console.log('[Server] Sent real-time progress event:', event.step, event.status);
+        } catch (err) {
+          console.error('[Stream] Error sending progress:', err);
+        }
+      }
     });
 
     // Save user message
@@ -126,218 +134,190 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Get active prompt configuration
-    const promptConfig = await getActivePrompt();
-
-    // Process prompt variables
-    const processedPrompt = processPromptVariables(promptConfig.systemPrompt, {
-      userName: session.user.name || "User",
-      currentDate: new Date().toLocaleDateString(),
-      currentTime: new Date().toLocaleTimeString(),
-    });
-
-    // NEW: Intelligent Analysis (if enabled)
-    let finalPrompt = processedPrompt;
-    let selectedModelName: string | undefined;
-    let webSearchResults: SearchResult[] | undefined;
-    let extractedFacts: Partial<MemoryFact>[] | undefined;
-    let analysis: PromptAnalysisResult | undefined;
-
-    if (isIntelligentAnalysisEnabled()) {
-      console.log('[Chat API] Using intelligent analysis');
-
-      // Emit progress: Analyzing prompt
-      progressEmitter.emit({
-        step: ProgressStep.ANALYZING_PROMPT,
-        status: 'started',
-        message: 'Analyzing your question...',
-        timestamp: Date.now(),
-      });
-
-      // Step 1: Analyze user input
-      const t1 = Date.now();
-      analysis = await promptAnalyzer.analyze({
-        message,
-        files,
-        conversationHistory: messages.slice(-5), // Last 5 messages for context
-        userSettings: {
-          webSearchEnabled: isWebSearchEnabled(),
-          languagePreference: undefined, // Auto-detect
-        },
-      });
-      const t2 = Date.now();
-      console.log(`[Performance] PromptAnalysis took ${t2 - t1}ms`);
-
-      // Emit progress: Analysis complete
-      progressEmitter.emit({
-        step: ProgressStep.ANALYZING_PROMPT,
-        status: 'completed',
-        message: 'Analysis complete',
-        timestamp: Date.now(),
-      });
-
-      console.log('[Chat API] Analysis result:', {
-        intent: analysis.intent,
-        confidence: analysis.confidence,
-        actions: Object.keys(analysis.actions).filter(
-          (k) => (analysis!.actions as any)[k].needed
-        ),
-      });
-
-      // Emit progress for context preparation steps
-      const needsWebSearch = analysis.actions.web_search?.needed;
-      const needsMemory = analysis.actions.memory_retrieval?.needed;
-
-      if (needsWebSearch) {
-        progressEmitter.emit({
-          step: ProgressStep.SEARCHING_WEB,
-          status: 'started',
-          message: `Searching for: ${analysis.actions.web_search.query}`,
-          timestamp: Date.now(),
-        });
-      }
-
-      if (needsMemory) {
-        progressEmitter.emit({
-          step: ProgressStep.RETRIEVING_MEMORY,
-          status: 'started',
-          message: 'Retrieving relevant memories...',
-          timestamp: Date.now(),
-        });
-      }
-
-      // Step 2: Orchestrate context preparation
-      const t3 = Date.now();
-      const contextResult = await contextOrchestrator.prepare(
-        analysis,
-        session.user.id,
-        conversationId,
-        progressEmitter  // Pass progress emitter for content fetching/extraction tracking
-      );
-      const t4 = Date.now();
-      console.log(`[Performance] Context preparation took ${t4 - t3}ms`);
-
-      // Emit progress: Context preparation complete
-      if (needsWebSearch) {
-        const searchResults = contextResult.webSearchResults || [];
-        progressEmitter.emit({
-          step: ProgressStep.SEARCHING_WEB,
-          status: 'completed',
-          message: `Found ${searchResults.length} results`,
-          timestamp: Date.now(),
-        });
-      }
-
-      if (needsMemory) {
-        progressEmitter.emit({
-          step: ProgressStep.RETRIEVING_MEMORY,
-          status: 'completed',
-          message: `Retrieved ${contextResult.memoriesRetrieved?.length || 0} memories`,
-          timestamp: Date.now(),
-        });
-      }
-
-      // Emit progress: Building context
-      progressEmitter.emit({
-        step: ProgressStep.BUILDING_CONTEXT,
-        status: 'started',
-        message: 'Building context for AI...',
-        timestamp: Date.now(),
-      });
-
-      // Step 3: Build final prompt with context
-      if (contextResult.context) {
-        finalPrompt = `${processedPrompt}\n\n${contextResult.context}`;
-      }
-
-      // Use selected model from analysis
-      selectedModelName = contextResult.modelName;
-      webSearchResults = contextResult.webSearchResults;
-
-      // Emit progress: Context built
-      progressEmitter.emit({
-        step: ProgressStep.BUILDING_CONTEXT,
-        status: 'completed',
-        message: 'Context ready',
-        timestamp: Date.now(),
-      });
-
-      // Save extracted facts from analysis
-      extractedFacts = analysis.actions.memory_extraction.facts;
-
-      if (contextResult.rateLimitError) {
-        console.warn('[Chat API] Rate limit error:', contextResult.rateLimitError);
-      }
-    } else {
-      // OLD: Load user's memory and append to system prompt (keyword-based)
-      console.log('[Chat API] Using keyword-based system');
-
-      progressEmitter.emit({
-        step: ProgressStep.RETRIEVING_MEMORY,
-        status: 'started',
-        message: 'Loading context...',
-        timestamp: Date.now(),
-      });
-
-      const memoryContext = await loadMemoryForChat(session.user.id);
-      finalPrompt = memoryContext
-        ? `${processedPrompt}\n\n${memoryContext}`
-        : processedPrompt;
-
-      progressEmitter.emit({
-        step: ProgressStep.RETRIEVING_MEMORY,
-        status: 'completed',
-        message: 'Context loaded',
-        timestamp: Date.now(),
-      });
-    }
-
-    // Create AI provider instance
-    const provider = ProviderFactory.createDefaultProvider(selectedModelName);
-
-    // Emit progress: Starting to generate response
-    progressEmitter.emit({
-      step: ProgressStep.GENERATING_RESPONSE,
-      status: 'started',
-      message: 'Generating response...',
-      timestamp: Date.now(),
-    });
-
-    // Stream response from AI provider
-    // Pass files from current request (with full base64 data) for AI processing
-    const encoder = new TextEncoder();
+    // Create stream immediately to send real-time progress
     let fullResponse = "";
 
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          // Send all buffered progress events first with small delays
-          // This ensures users can see each badge transition instead of only the last one
-          console.log('[Server] Sending', progressEventsBuffer.length, 'buffered events');
-          for (let i = 0; i < progressEventsBuffer.length; i++) {
-            const event = progressEventsBuffer[i];
-            const progressLine = `[PROGRESS]${JSON.stringify(event)}\n`;
-            controller.enqueue(encoder.encode(progressLine));
+          // Set the stream controller so progress events can be sent in real-time
+          streamController = controller;
 
-            // Add 150ms delay between events so users can see transitions
-            // Skip delay after the last event to start content streaming immediately
-            if (i < progressEventsBuffer.length - 1) {
-              await new Promise(resolve => setTimeout(resolve, 150));
+          // Get active prompt configuration
+          const promptConfig = await getActivePrompt();
+
+          // Process prompt variables
+          const processedPrompt = processPromptVariables(promptConfig.systemPrompt, {
+            userName: session.user.name || "User",
+            currentDate: new Date().toLocaleDateString(),
+            currentTime: new Date().toLocaleTimeString(),
+          });
+
+          // NEW: Intelligent Analysis (if enabled)
+          let finalPrompt = processedPrompt;
+          let selectedModelName: string | undefined;
+          let webSearchResults: SearchResult[] | undefined;
+          let extractedFacts: Partial<MemoryFact>[] | undefined;
+          let analysis: PromptAnalysisResult | undefined;
+
+          if (isIntelligentAnalysisEnabled()) {
+            console.log('[Chat API] Using intelligent analysis');
+
+            // Emit progress: Analyzing prompt
+            progressEmitter.emit({
+              step: ProgressStep.ANALYZING_PROMPT,
+              status: 'started',
+              message: 'Analyzing your question...',
+              timestamp: Date.now(),
+            });
+
+            // Step 1: Analyze user input
+            const t1 = Date.now();
+            analysis = await promptAnalyzer.analyze({
+              message,
+              files,
+              conversationHistory: messages.slice(-5), // Last 5 messages for context
+              userSettings: {
+                webSearchEnabled: isWebSearchEnabled(),
+                languagePreference: undefined, // Auto-detect
+              },
+            });
+            const t2 = Date.now();
+            console.log(`[Performance] PromptAnalysis took ${t2 - t1}ms`);
+
+            // Emit progress: Analysis complete
+            progressEmitter.emit({
+              step: ProgressStep.ANALYZING_PROMPT,
+              status: 'completed',
+              message: 'Analysis complete',
+              timestamp: Date.now(),
+            });
+
+            console.log('[Chat API] Analysis result:', {
+              intent: analysis.intent,
+              confidence: analysis.confidence,
+              actions: Object.keys(analysis.actions).filter(
+                (k) => (analysis!.actions as any)[k].needed
+              ),
+            });
+
+            // Emit progress for context preparation steps
+            const needsWebSearch = analysis.actions.web_search?.needed;
+            const needsMemory = analysis.actions.memory_retrieval?.needed;
+
+            if (needsWebSearch) {
+              progressEmitter.emit({
+                step: ProgressStep.SEARCHING_WEB,
+                status: 'started',
+                message: `Searching for: ${analysis.actions.web_search.query}`,
+                timestamp: Date.now(),
+              });
             }
+
+            if (needsMemory) {
+              progressEmitter.emit({
+                step: ProgressStep.RETRIEVING_MEMORY,
+                status: 'started',
+                message: 'Retrieving relevant memories...',
+                timestamp: Date.now(),
+              });
+            }
+
+            // Step 2: Orchestrate context preparation
+            const t3 = Date.now();
+            const contextResult = await contextOrchestrator.prepare(
+              analysis,
+              session.user.id,
+              conversationId,
+              progressEmitter  // Pass progress emitter for content fetching/extraction tracking
+            );
+            const t4 = Date.now();
+            console.log(`[Performance] Context preparation took ${t4 - t3}ms`);
+
+            // Emit progress: Context preparation complete
+            if (needsWebSearch) {
+              const searchResults = contextResult.webSearchResults || [];
+              progressEmitter.emit({
+                step: ProgressStep.SEARCHING_WEB,
+                status: 'completed',
+                message: `Found ${searchResults.length} results`,
+                timestamp: Date.now(),
+              });
+            }
+
+            if (needsMemory) {
+              progressEmitter.emit({
+                step: ProgressStep.RETRIEVING_MEMORY,
+                status: 'completed',
+                message: `Retrieved ${contextResult.memoriesRetrieved?.length || 0} memories`,
+                timestamp: Date.now(),
+              });
+            }
+
+            // Emit progress: Building context
+            progressEmitter.emit({
+              step: ProgressStep.BUILDING_CONTEXT,
+              status: 'started',
+              message: 'Building context for AI...',
+              timestamp: Date.now(),
+            });
+
+            // Step 3: Build final prompt with context
+            if (contextResult.context) {
+              finalPrompt = `${processedPrompt}\n\n${contextResult.context}`;
+            }
+
+            // Use selected model from analysis
+            selectedModelName = contextResult.modelName;
+            webSearchResults = contextResult.webSearchResults;
+
+            // Emit progress: Context built
+            progressEmitter.emit({
+              step: ProgressStep.BUILDING_CONTEXT,
+              status: 'completed',
+              message: 'Context ready',
+              timestamp: Date.now(),
+            });
+
+            // Save extracted facts from analysis
+            extractedFacts = analysis.actions.memory_extraction.facts;
+
+            if (contextResult.rateLimitError) {
+              console.warn('[Chat API] Rate limit error:', contextResult.rateLimitError);
+            }
+          } else {
+            // OLD: Load user's memory and append to system prompt (keyword-based)
+            console.log('[Chat API] Using keyword-based system');
+
+            progressEmitter.emit({
+              step: ProgressStep.RETRIEVING_MEMORY,
+              status: 'started',
+              message: 'Loading context...',
+              timestamp: Date.now(),
+            });
+
+            const memoryContext = await loadMemoryForChat(session.user.id);
+            finalPrompt = memoryContext
+              ? `${processedPrompt}\n\n${memoryContext}`
+              : processedPrompt;
+
+            progressEmitter.emit({
+              step: ProgressStep.RETRIEVING_MEMORY,
+              status: 'completed',
+              message: 'Context loaded',
+              timestamp: Date.now(),
+            });
           }
 
-          // Unsubscribe from the buffering subscription
-          earlyUnsubscribe();
+          // Create AI provider instance
+          const provider = ProviderFactory.createDefaultProvider(selectedModelName);
 
-          // Now subscribe to send future events directly to the stream
-          const liveUnsubscribe = progressEmitter.subscribe((event) => {
-            try {
-              const progressLine = `[PROGRESS]${JSON.stringify(event)}\n`;
-              console.log('[Server] Sending live progress event:', event.step, event.status);
-              controller.enqueue(encoder.encode(progressLine));
-            } catch (err) {
-              console.error('[Stream] Error sending progress:', err);
-            }
+          // Emit progress: Starting to generate response
+          progressEmitter.emit({
+            step: ProgressStep.GENERATING_RESPONSE,
+            status: 'started',
+            message: 'Generating response...',
+            timestamp: Date.now(),
           });
 
           // Stream AI response content
@@ -375,7 +355,7 @@ export async function POST(req: NextRequest) {
           console.log('[Server] Sent completion event:', completionEvent.step, completionEvent.status);
 
           // Unsubscribe from progress updates
-          liveUnsubscribe();
+          progressUnsubscribe();
 
           // Save assistant message
           // Strip base64 image data to avoid Firestore size limits (1MB max)

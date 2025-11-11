@@ -81,9 +81,10 @@ Includes:
 **Comprehensive testing strategy with detailed test cases.**
 
 **Status**: Phase 2 Complete ✅
-- 53/53 tests passing (100% pass rate)
-- 4 test suites (cleanup, extractor, loader, storage)
-- Jest + TypeScript infrastructure
+- 87/87 unit tests passing (100% pass rate)
+- 26/26 E2E tests (22 passed, 2 minor failures, 2 skipped)
+- Jest + TypeScript infrastructure (unit tests)
+- Playwright (E2E tests)
 - Comprehensive coverage of memory system business logic
 
 Includes:
@@ -91,6 +92,34 @@ Includes:
 - Testing infrastructure setup (Jest, Firestore Emulator, Playwright)
 - Implementation phases (Phase 1-6 roadmap)
 - Success metrics and quality gates
+
+### 🎭 [E2E_TESTING.md](./E2E_TESTING.md)
+**End-to-end testing with Playwright - complete guide.**
+
+**NEW**: Based on progress tracking fixes (2025-11-11)
+
+Learn how to:
+- Run E2E tests in different modes (headless, UI, headed, debug)
+- Write new E2E tests following best practices
+- Test authentication flows
+- Debug failing tests with screenshots and videos
+- Integrate E2E tests into CI/CD pipeline
+- Troubleshoot common issues
+
+**Test Coverage:**
+- Application basics (loading, errors, networking)
+- Login page (Google OAuth, responsiveness)
+- Performance metrics (Core Web Vitals)
+- SEO and accessibility
+- Error handling (404, offline mode)
+- Progress tracking (requires auth)
+
+**Commands:**
+```bash
+npm run test:e2e         # Run all E2E tests
+npm run test:e2e:ui      # Interactive UI mode
+npm run test:e2e:debug   # Debug with inspector
+```
 
 ### ✅ [TESTING_CHECKLIST.md](./TESTING_CHECKLIST.md)
 **Manual testing checklist for all features.**

@@ -8,7 +8,11 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest",
-    "test:memory": "npx tsx scripts/test-memory.ts"
+    "test:memory": "npx tsx scripts/test-memory.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
@@ -34,6 +38,7 @@
   },
   "devDependencies": {
     "@jest/globals": "^30.2.0",
+    "@playwright/test": "^1.56.1",
     "@types/cheerio": "^0.22.35",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.9.0",
@@ -42,6 +47,7 @@
     "eslint": "^8.57.1",
     "eslint-config-next": "14.2.18",
     "jest": "^30.2.0",
+    "playwright": "^1.56.1",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.15",
     "tailwindcss-animate": "^1.0.7",

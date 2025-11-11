@@ -13,6 +13,9 @@ const DEFAULT_OPTIONS: ContentFetcherOptions = {
   respectRobotsTxt: true,
 };
 
+// Maximum download size: 2MB (to prevent memory exhaustion)
+const MAX_DOWNLOAD_SIZE = 2 * 1024 * 1024;
+
 export class ContentFetcher {
   private options: ContentFetcherOptions;
 
@@ -46,6 +49,20 @@ export class ContentFetcher {
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      // Check Content-Type - skip PDFs and other binary files
+      const contentType = response.headers.get('Content-Type') || '';
+      if (contentType.includes('application/pdf') ||
+          contentType.includes('application/octet-stream') ||
+          contentType.includes('application/zip')) {
+        throw new Error(`Unsupported content type: ${contentType}`);
+      }
+
+      // Check Content-Length - skip if file is too large
+      const contentLength = response.headers.get('Content-Length');
+      if (contentLength && parseInt(contentLength) > MAX_DOWNLOAD_SIZE) {
+        throw new Error(`File too large: ${contentLength} bytes (max ${MAX_DOWNLOAD_SIZE})`);
       }
 
       const html = await response.text();
