@@ -142,9 +142,30 @@ IMPORTANT: Respond ONLY with valid JSON. No additional text.`;
     confidence: number;
   } {
     try {
-      // Try to extract JSON from markdown code blocks if present
-      const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/```\s*([\s\S]*?)\s*```/);
-      const jsonText = jsonMatch ? jsonMatch[1] : text;
+      let jsonText = text.trim();
+
+      // Try multiple strategies to extract JSON from markdown or mixed content
+
+      // Strategy 1: Remove markdown code fence with json language identifier
+      if (jsonText.includes('```json')) {
+        const match = jsonText.match(/```json\s*([\s\S]*?)\s*```/);
+        if (match) jsonText = match[1].trim();
+      }
+
+      // Strategy 2: Remove any markdown code fences
+      if (jsonText.includes('```')) {
+        const match = jsonText.match(/```\s*([\s\S]*?)\s*```/);
+        if (match) jsonText = match[1].trim();
+      }
+
+      // Strategy 3: Find JSON object in mixed text (look for {...})
+      if (!jsonText.startsWith('{')) {
+        const match = jsonText.match(/\{[\s\S]*\}/);
+        if (match) jsonText = match[0];
+      }
+
+      // Remove any leading/trailing backticks that might remain
+      jsonText = jsonText.replace(/^`+|`+$/g, '').trim();
 
       const parsed = JSON.parse(jsonText);
 
@@ -159,6 +180,7 @@ IMPORTANT: Respond ONLY with valid JSON. No additional text.`;
       };
     } catch (error) {
       console.error('[ContentExtractor] Failed to parse extraction result:', error);
+      console.error('[ContentExtractor] Attempted to parse:', text.substring(0, 200));
 
       // Fallback: return text as summary
       return {

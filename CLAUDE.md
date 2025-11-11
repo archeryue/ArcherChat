@@ -15,7 +15,7 @@ npm run build                  # Production build with strict TypeScript checkin
 npm run start                  # Start production server
 npm run lint                   # ESLint checks
 
-# Testing (87 tests, 100% pass rate)
+# Unit Testing (87 tests, 100% pass rate)
 npx jest                       # Run all tests
 npx jest --watch              # Watch mode for TDD
 npx jest --coverage           # Coverage report
@@ -25,6 +25,12 @@ npx jest path/to/file.test.ts # Run specific test file
 npx jest src/__tests__/lib/memory/         # Memory system (14 tests)
 npx jest src/__tests__/lib/web-search/     # Web search (6 tests)
 npx jest src/__tests__/lib/context-engineering/  # Context orchestration (8 tests)
+
+# E2E Testing (26 tests using Playwright)
+npm run test:e2e               # Run all E2E tests (headless)
+npm run test:e2e:ui            # Interactive UI mode
+npm run test:e2e:headed        # Run with visible browser
+npm run test:e2e:debug         # Debug mode with inspector
 ```
 
 ## CI/CD Pipeline (GitHub Actions)
