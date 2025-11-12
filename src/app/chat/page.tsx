@@ -37,7 +37,7 @@ export default function ChatPage() {
   // Don't auto-create conversations - wait for user to send first message
 
   // Scroll to bottom when messages change
-  // Add delay to allow KaTeX rendering which makes content shorter
+  // Use ResizeObserver to detect when KaTeX finishes rendering and content height changes
   useEffect(() => {
     const scrollToBottom = () => {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -46,10 +46,23 @@ export default function ChatPage() {
     // Initial scroll
     scrollToBottom();
 
-    // Second scroll after KaTeX has time to render (makes content shorter)
-    const timer = setTimeout(scrollToBottom, 300);
+    // Watch for height changes (KaTeX rendering makes content shorter)
+    const messagesContainer = messagesEndRef.current?.parentElement;
+    if (!messagesContainer) return;
 
-    return () => clearTimeout(timer);
+    let resizeTimeout: NodeJS.Timeout;
+    const resizeObserver = new ResizeObserver(() => {
+      // Debounce scroll calls during rapid height changes
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(scrollToBottom, 100);
+    });
+
+    resizeObserver.observe(messagesContainer);
+
+    return () => {
+      resizeObserver.disconnect();
+      clearTimeout(resizeTimeout);
+    };
   }, [messages]);
 
   const loadConversations = async () => {
