@@ -37,31 +37,58 @@ export default function ChatPage() {
   // Don't auto-create conversations - wait for user to send first message
 
   // Scroll to bottom when messages change
-  // Use ResizeObserver to detect when KaTeX finishes rendering and content height changes
+  // Force layout recalculation after KaTeX renders (makes content shorter)
   useEffect(() => {
     const scrollToBottom = () => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      const container = messagesEndRef.current?.parentElement;
+      if (container) {
+        // Use requestAnimationFrame to ensure layout is complete
+        requestAnimationFrame(() => {
+          // Force layout recalculation on multiple elements
+          const _ = container.offsetHeight;
+          const __ = container.scrollHeight;
+          // Then scroll to bottom
+          container.scrollTop = container.scrollHeight;
+        });
+      }
     };
 
     // Initial scroll
     scrollToBottom();
 
-    // Watch for height changes (KaTeX rendering makes content shorter)
+    // Use MutationObserver to detect when KaTeX adds rendered elements
     const messagesContainer = messagesEndRef.current?.parentElement;
     if (!messagesContainer) return;
 
-    let resizeTimeout: NodeJS.Timeout;
-    const resizeObserver = new ResizeObserver(() => {
-      // Debounce scroll calls during rapid height changes
-      clearTimeout(resizeTimeout);
-      resizeTimeout = setTimeout(scrollToBottom, 100);
+    // Debounce: Only scroll after KaTeX finishes all mutations
+    let mutationTimer: NodeJS.Timeout | null = null;
+    const observer = new MutationObserver(() => {
+      // Clear previous timer
+      if (mutationTimer) {
+        clearTimeout(mutationTimer);
+      }
+
+      // Wait for mutations to settle (50ms after last mutation)
+      mutationTimer = setTimeout(() => {
+        scrollToBottom();
+      }, 50);
     });
 
-    resizeObserver.observe(messagesContainer);
+    // Watch for DOM changes (KaTeX adding rendered math)
+    observer.observe(messagesContainer, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    // Also scroll after longer delay as fallback
+    const fallbackTimer = setTimeout(scrollToBottom, 800);
 
     return () => {
-      resizeObserver.disconnect();
-      clearTimeout(resizeTimeout);
+      observer.disconnect();
+      if (mutationTimer) clearTimeout(mutationTimer);
+      clearTimeout(fallbackTimer);
     };
   }, [messages]);
 
