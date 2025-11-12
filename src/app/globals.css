@@ -34,6 +34,10 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Prevent double scrollbars on chat page - only allow internal scrolling */
+  html, body {
+    @apply overflow-hidden h-full;
+  }
 }
 
 /* Improve code block font size for better readability */
