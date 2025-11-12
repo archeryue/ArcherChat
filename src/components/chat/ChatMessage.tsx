@@ -101,7 +101,7 @@ export function ChatMessage({ message, userName, userAvatar, progressEvents: ext
           </div>
         )}
 
-        <div className="prose prose-slate prose-sm max-w-none break-words overflow-x-auto [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden [&_.katex-display]:my-4">
+        <div className="prose prose-slate prose-sm max-w-none break-words">
           <ReactMarkdown
             remarkPlugins={[remarkGfm, remarkMath]}
             rehypePlugins={[rehypeKatex, rehypeHighlight]}

@@ -37,8 +37,19 @@ export default function ChatPage() {
   // Don't auto-create conversations - wait for user to send first message
 
   // Scroll to bottom when messages change
+  // Add delay to allow KaTeX rendering which makes content shorter
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const scrollToBottom = () => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
+
+    // Initial scroll
+    scrollToBottom();
+
+    // Second scroll after KaTeX has time to render (makes content shorter)
+    const timer = setTimeout(scrollToBottom, 300);
+
+    return () => clearTimeout(timer);
   }, [messages]);
 
   const loadConversations = async () => {

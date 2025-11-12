@@ -1,15 +1,21 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, chromium } from '@playwright/test';
 
 /**
  * E2E Tests for Math Rendering (LaTeX/KaTeX)
  *
  * These tests verify that math expressions render correctly without layout issues
+ * Uses production site with existing authentication
  */
 
 test.describe('Math Rendering Tests', () => {
-  test('should render display math without layout issues', async ({ page }) => {
-    // Navigate to chat page
-    await page.goto('/chat');
+  test('should render display math without layout issues', async () => {
+    // Use production URL where user is already authenticated
+    const browser = await chromium.launch({ headless: false });
+    const context = await browser.newContext();
+    const page = await context.newPage();
+
+    // Navigate to production chat page
+    await page.goto('https://archerchat-er7tpljqpa-uc.a.run.app/chat');
     await page.waitForLoadState('networkidle');
 
     const url = page.url();
@@ -102,9 +108,12 @@ test.describe('Math Rendering Tests', () => {
     });
 
     expect(pageErrors.length).toBe(0);
+
+    // Clean up
+    await browser.close();
   });
 
-  test('should load past conversation with math without layout issues', async ({ page }) => {
+  test('should load past conversation with math without layout issues', async () => {
     // Note: This test would require creating a conversation with math first
     // For now, we'll skip it and implement later if needed
     test.skip();
