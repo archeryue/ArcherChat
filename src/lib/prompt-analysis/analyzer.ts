@@ -6,6 +6,7 @@ import {
   UserIntent,
 } from "@/types/prompt-analysis";
 import { LanguagePreference } from "@/types/memory";
+import { parseJsonFromLLM, validateJsonStructure } from "@/lib/utils/json-sanitizer";
 
 /**
  * PromptAnalysis Module
@@ -316,20 +317,26 @@ Analyze and return JSON:`;
    */
   private parseAnalysisResult(rawResponse: string): PromptAnalysisResult {
     try {
-      // Extract JSON from response (in case there's extra text)
-      const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error("No JSON found in response");
+      // Use robust JSON sanitization to handle LLM formatting issues
+      const result = parseJsonFromLLM(rawResponse, 'PromptAnalyzer') as PromptAnalysisResult;
+
+      // Validate required fields exist
+      validateJsonStructure(result, [
+        'intent',
+        'actions',
+        'actions.web_search',
+        'actions.memory_retrieval',
+        'actions.memory_extraction',
+        'actions.image_generation',
+        'language',
+        'confidence'
+      ], 'PromptAnalyzer');
+
+      // Ensure confidence is in valid range (handle null/undefined)
+      if (typeof result.confidence !== 'number') {
+        console.warn('[PromptAnalyzer] Invalid confidence value, defaulting to 0.5');
+        result.confidence = 0.5;
       }
-
-      const result = JSON.parse(jsonMatch[0]) as PromptAnalysisResult;
-
-      // Validate required fields
-      if (!result.intent || !result.actions || !result.language || result.confidence === undefined) {
-        throw new Error("Missing required fields in analysis result");
-      }
-
-      // Ensure confidence is in valid range
       result.confidence = Math.max(0, Math.min(1, result.confidence));
 
       // Normalize tier and category values in extracted facts
@@ -348,8 +355,7 @@ Analyze and return JSON:`;
 
       return result;
     } catch (error) {
-      console.error("Error parsing analysis result:", error);
-      console.error("Raw response:", rawResponse);
+      console.error("[PromptAnalyzer] Failed to parse analysis result:", error);
       throw error;
     }
   }
