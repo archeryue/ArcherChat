@@ -6,6 +6,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { ExtractionRequest, ExtractedContent } from '@/types/content-fetching';
 import { getModelForTask } from '@/config/models';
+import { parseJsonFromLLM } from '@/lib/utils/json-sanitizer';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
@@ -142,32 +143,8 @@ IMPORTANT: Respond ONLY with valid JSON. No additional text.`;
     confidence: number;
   } {
     try {
-      let jsonText = text.trim();
-
-      // Try multiple strategies to extract JSON from markdown or mixed content
-
-      // Strategy 1: Remove markdown code fence with json language identifier
-      if (jsonText.includes('```json')) {
-        const match = jsonText.match(/```json\s*([\s\S]*?)\s*```/);
-        if (match) jsonText = match[1].trim();
-      }
-
-      // Strategy 2: Remove any markdown code fences
-      if (jsonText.includes('```')) {
-        const match = jsonText.match(/```\s*([\s\S]*?)\s*```/);
-        if (match) jsonText = match[1].trim();
-      }
-
-      // Strategy 3: Find JSON object in mixed text (look for {...})
-      if (!jsonText.startsWith('{')) {
-        const match = jsonText.match(/\{[\s\S]*\}/);
-        if (match) jsonText = match[0];
-      }
-
-      // Remove any leading/trailing backticks that might remain
-      jsonText = jsonText.replace(/^`+|`+$/g, '').trim();
-
-      const parsed = JSON.parse(jsonText);
+      // Use robust JSON sanitization to handle LLM formatting issues
+      const parsed = parseJsonFromLLM(text, 'ContentExtractor');
 
       return {
         title: parsed.title || 'Untitled',
