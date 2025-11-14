@@ -6,10 +6,18 @@
 import * as cheerio from 'cheerio';
 import { PageContent, ContentFetcherOptions, ContentFetchError } from '@/types/content-fetching';
 
+// Realistic User-Agent strings that rotate to avoid blocking
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+];
+
 const DEFAULT_OPTIONS: ContentFetcherOptions = {
   timeout: 5000, // 5 seconds
   maxContentLength: 50000, // 50KB
-  userAgent: 'Mozilla/5.0 (compatible; ArcherChatBot/1.0; +https://archerchat.app)',
+  userAgent: USER_AGENTS[0],
   respectRobotsTxt: true,
 };
 
@@ -24,28 +32,59 @@ export class ContentFetcher {
   }
 
   /**
-   * Fetch and parse content from a URL
+   * Get a random User-Agent from the pool
+   */
+  private getRandomUserAgent(): string {
+    return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+  }
+
+  /**
+   * Sleep for a given number of milliseconds
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Fetch and parse content from a URL with retry logic
    */
   async fetchPageContent(url: string): Promise<PageContent> {
-    const startTime = Date.now();
+    const maxRetries = 2;
+    let lastError: Error | null = null;
 
-    try {
-      console.log(`[ContentFetcher] Fetching: ${url}`);
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const startTime = Date.now();
 
-      // 1. Fetch HTML with timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.options.timeout);
+        if (attempt > 0) {
+          // Exponential backoff: 1s, 2s
+          const delay = 1000 * Math.pow(2, attempt - 1);
+          console.log(`[ContentFetcher] Retry attempt ${attempt}/${maxRetries} after ${delay}ms delay for ${url}`);
+          await this.sleep(delay);
+        }
 
-      const response = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          'User-Agent': this.options.userAgent,
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-        },
-      });
+        console.log(`[ContentFetcher] Fetching: ${url}`);
 
-      clearTimeout(timeoutId);
+        // 1. Fetch HTML with timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), this.options.timeout);
+
+        // Use random User-Agent on retry to bypass blocking
+        const userAgent = attempt > 0 ? this.getRandomUserAgent() : this.options.userAgent;
+
+        const response = await fetch(url, {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': userAgent,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Cache-Control': 'no-cache',
+            'Referer': new URL(url).origin,
+          },
+        });
+
+        clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -85,29 +124,47 @@ export class ContentFetcher {
 
       console.log(`[ContentFetcher] Extracted ${truncatedText.length} chars from ${url}`);
 
-      return {
-        url,
-        title,
-        rawHtml: html.substring(0, this.options.maxContentLength),
-        cleanedText: truncatedText,
-        metadata: {
-          fetchedAt: new Date(),
-          fetchDuration: Date.now() - startTime,
-          contentLength: truncatedText.length,
-        },
-      };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`[ContentFetcher] Failed to fetch ${url}:`, errorMessage);
+        return {
+          url,
+          title,
+          rawHtml: html.substring(0, this.options.maxContentLength),
+          cleanedText: truncatedText,
+          metadata: {
+            fetchedAt: new Date(),
+            fetchDuration: Date.now() - startTime,
+            contentLength: truncatedText.length,
+          },
+        };
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Unknown error');
+        const errorMessage = lastError.message;
 
-      const fetchError: ContentFetchError = {
-        url,
-        error: errorMessage,
-        errorType: this.categorizeError(error),
-      };
+        // Don't retry for non-retryable errors
+        if (errorMessage.includes('Unsupported content type') ||
+            errorMessage.includes('File too large')) {
+          console.error(`[ContentFetcher] Non-retryable error for ${url}:`, errorMessage);
+          break;
+        }
 
-      throw fetchError;
+        // Retry for HTTP errors (403, 429, 500+) and network errors
+        if (attempt < maxRetries) {
+          console.warn(`[ContentFetcher] Fetch failed (attempt ${attempt + 1}/${maxRetries + 1}):`, errorMessage);
+          continue;
+        }
+
+        // Max retries exhausted
+        console.error(`[ContentFetcher] Failed to fetch ${url} after ${maxRetries + 1} attempts:`, errorMessage);
+      }
     }
+
+    // All attempts failed, throw error
+    const fetchError: ContentFetchError = {
+      url,
+      error: lastError?.message || 'Failed to fetch after retries',
+      errorType: this.categorizeError(lastError),
+    };
+
+    throw fetchError;
   }
 
   /**

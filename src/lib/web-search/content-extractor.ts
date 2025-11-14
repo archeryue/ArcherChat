@@ -34,23 +34,41 @@ export class ContentExtractor {
       const maxInputChars = 10000 * 4; // ~10K tokens
       const truncatedContent = content.substring(0, maxInputChars);
 
-      // Build extraction prompt
-      const prompt = this.buildExtractionPrompt(query, url, truncatedContent);
+      // Try extraction with retry logic
+      let parsed: any;
+      let extractedInfo: string = '';
+      let retryCount = 0;
+      const maxRetries = 1;
 
-      // Generate extraction
-      const result = await this.model.generateContent({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          maxOutputTokens,
-          temperature: 0.2, // Low temperature for factual extraction
-        },
-      });
+      while (retryCount <= maxRetries) {
+        // Build extraction prompt (stricter on retry)
+        const prompt = this.buildExtractionPrompt(query, url, truncatedContent, retryCount > 0);
 
-      const response = result.response;
-      const extractedInfo = response.text();
+        // Generate extraction
+        const result = await this.model.generateContent({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
+            maxOutputTokens,
+            temperature: retryCount > 0 ? 0.1 : 0.2, // Lower temperature on retry
+          },
+        });
 
-      // Parse the JSON response
-      const parsed = this.parseExtractionResult(extractedInfo);
+        const response = result.response;
+        extractedInfo = response.text();
+
+        // Try to parse the JSON response
+        try {
+          parsed = this.parseExtractionResult(extractedInfo);
+          break; // Success! Exit retry loop
+        } catch (parseError) {
+          retryCount++;
+          if (retryCount > maxRetries) {
+            // Final attempt failed
+            throw parseError;
+          }
+          console.warn(`[ContentExtractor] Parse failed (attempt ${retryCount}/${maxRetries + 1}), retrying with stricter prompt...`);
+        }
+      }
 
       // Estimate token usage (rough approximation)
       const inputTokens = Math.ceil(truncatedContent.length / 4);
@@ -101,8 +119,8 @@ export class ContentExtractor {
   /**
    * Build the extraction prompt
    */
-  private buildExtractionPrompt(query: string, url: string, content: string): string {
-    return `You are a content extraction assistant. Extract the most relevant information from this web page that answers the user's query.
+  private buildExtractionPrompt(query: string, url: string, content: string, strictMode: boolean = false): string {
+    const basePrompt = `You are a content extraction assistant. Extract the most relevant information from this web page that answers the user's query.
 
 User Query: "${query}"
 Page URL: ${url}
@@ -130,6 +148,22 @@ Respond in this JSON format:
 }
 
 IMPORTANT: Respond ONLY with valid JSON. No additional text.`;
+
+    if (strictMode) {
+      return basePrompt + `
+
+CRITICAL JSON FORMATTING RULES:
+- All strings MUST have closing quotes
+- All string values must use double quotes ("), not single quotes (')
+- Escape any quotes inside strings with backslash: "He said \\"hello\\""
+- Arrays must have commas between elements: ["item1", "item2"]
+- Objects must have commas between key-value pairs
+- Do NOT include trailing commas before closing ] or }
+- Ensure all braces and brackets are properly closed
+- Return ONLY the JSON object, nothing else`;
+    }
+
+    return basePrompt;
   }
 
   /**
