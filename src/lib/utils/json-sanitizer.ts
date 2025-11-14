@@ -195,12 +195,14 @@ export function sanitizeJsonString(rawText: string): string {
   cleaned = cleaned.replace(/:\s*"undefined"\s*([,}\]])/g, ': null$1');
   cleaned = cleaned.replace(/:\s*'undefined'\s*([,}\]])/g, ': null$1');
 
-  // Apply advanced repairs
+  // Apply CONSERVATIVE repairs only
+  // NOTE: Advanced repairs disabled - they were corrupting valid JSON!
+  // Only keep unterminated string repair (most reliable)
   cleaned = repairUnterminatedStrings(cleaned);
-  cleaned = fixUnescapedQuotes(cleaned);
-  cleaned = addMissingCommas(cleaned);
+  // DISABLED: fixUnescapedQuotes() - was breaking valid JSON with backslashes
+  // DISABLED: addMissingCommas() - too aggressive, causing issues
 
-  // Remove trailing commas before closing braces/brackets (after adding commas)
+  // Remove trailing commas before closing braces/brackets
   cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
 
   return cleaned.trim();
