@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
-import { LogOut, Settings, Brain, User, Target } from "lucide-react";
+import { LogOut, Settings, Brain, User, Target, FileText } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -62,6 +62,12 @@ export function ChatTopBar({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuItem asChild>
+            <Link href="/whim" className="flex items-center cursor-pointer">
+              <FileText className="w-4 h-4 mr-2" />
+              Whims
+            </Link>
+          </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link href="/profile" className="flex items-center cursor-pointer">
               <Brain className="w-4 h-4 mr-2" />
