@@ -53,7 +53,7 @@ export function WhimEditor({
     content: htmlContent,
     editorProps: {
       attributes: {
-        class: 'prose prose-lg prose-slate max-w-none focus:outline-none px-8',
+        class: 'prose prose-sm prose-slate max-w-none focus:outline-none px-8 leading-relaxed',
       },
     },
     immediatelyRender: false,
@@ -146,13 +146,13 @@ export function WhimEditor({
   return (
     <div className="flex-1 flex flex-col bg-white overflow-hidden relative">
       {/* Title */}
-      <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
+      <div className="px-6 py-3 border-b border-slate-200 bg-slate-50">
         <input
           type="text"
           value={title}
           onChange={(e) => handleTitleChange(e.target.value)}
           onBlur={handleTitleBlur}
-          className="w-full text-2xl font-semibold text-slate-900 focus:outline-none bg-transparent"
+          className="w-full text-2xl font-semibold text-slate-900 focus:outline-none bg-transparent p-0 m-0 border-0"
           placeholder="Untitled"
         />
         <div className="text-xs text-slate-600 mt-1">
