@@ -146,7 +146,7 @@ export function WhimEditor({
   return (
     <div className="flex-1 flex flex-col bg-white overflow-hidden relative">
       {/* Title */}
-      <div className="px-6 py-2 border-b border-slate-200 bg-slate-50">
+      <div className="px-6 py-3 border-b border-slate-200 bg-slate-50">
         <input
           type="text"
           value={title}
