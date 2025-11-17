@@ -10,7 +10,7 @@ export function conversationToMarkdown(messages: AIMessage[]): string {
   let markdown = '';
 
   for (const message of messages) {
-    const role = message.role === 'user' ? '👤 User' : '🤖 AI';
+    const role = message.role === 'user' ? 'User' : 'AI';
     markdown += `## ${role}\n\n`;
     markdown += `${message.content}\n\n`;
     markdown += `---\n\n`;
@@ -33,9 +33,9 @@ export async function generateConversationTitle(messages: AIMessage[]): Promise<
       .map(m => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content.slice(0, 200)}`)
       .join('\n');
 
-    const prompt = `Analyze this conversation and generate a concise, descriptive title (max 8 words).
-The title should capture the main topic or purpose of the conversation.
-Use title case. Do not use quotes or special formatting.
+    const prompt = `Analyze this conversation and generate a short, concise title (4-5 words maximum).
+The title should capture the main topic. Be brief and direct.
+Use title case. Do not use quotes, articles (a, an, the), or special formatting.
 
 Conversation:
 ${conversationSummary}

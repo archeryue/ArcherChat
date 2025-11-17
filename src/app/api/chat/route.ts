@@ -133,8 +133,12 @@ export async function POST(req: NextRequest) {
     if (trimmedMessage === '/save' || trimmedMessage === '/whim') {
       console.log('[Chat API] Slash command detected, converting conversation to whim');
 
+      // Exclude the /save command itself from the whim
+      // Filter out the last message (which is the /save or /whim command)
+      const messagesWithoutCommand = messages.slice(0, -1);
+
       // Convert conversation to whim
-      const { title, content } = await convertConversationToWhim(messages);
+      const { title, content } = await convertConversationToWhim(messagesWithoutCommand);
 
       // Save whim to database
       const now = Timestamp.now();
