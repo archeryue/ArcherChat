@@ -10,7 +10,9 @@ import { loadMemoryForChat, cleanupUserMemory } from "@/lib/memory";
 import { FileAttachment, Message } from "@/types";
 import { keywordSystem } from "@/lib/keywords/triggers";
 import { KeywordTriggerType } from "@/lib/keywords/system";
-import { isIntelligentAnalysisEnabled, isWebSearchEnabled } from "@/config/feature-flags";
+import { isIntelligentAnalysisEnabled, isWebSearchEnabled, isAgenticModeEnabled } from "@/config/feature-flags";
+import { createAgent } from "@/lib/agent";
+import { AgentEvent } from "@/types/agent";
 import { promptAnalyzer } from "@/lib/prompt-analysis/analyzer";
 import { contextOrchestrator } from "@/lib/context-engineering/orchestrator";
 import { addMemoryFacts, generateMemoryId, calculateExpiry, getUserMemory, saveUserMemory } from "@/lib/memory/storage";
@@ -209,6 +211,113 @@ export async function POST(req: NextRequest) {
         try {
           // Set the stream controller so progress events can be sent in real-time
           streamController = controller;
+
+          // AGENTIC MODE: Use ReAct agent with tools
+          if (isAgenticModeEnabled()) {
+            console.log('[Chat API] Using agentic mode');
+
+            // Create agent with user context
+            const agent = createAgent({
+              userId: session.user.id,
+              conversationId,
+              style: 'balanced',
+            });
+
+            // Subscribe to agent events and stream them as progress
+            agent.onEvent((event: AgentEvent) => {
+              // Map agent events to progress events
+              let progressStep: ProgressStep;
+              let progressMessage: string = typeof event.content === 'string' ? event.content : '';
+
+              switch (event.type) {
+                case 'reasoning':
+                  progressStep = ProgressStep.ANALYZING_PROMPT;
+                  progressMessage = 'Reasoning about the question...';
+                  break;
+                case 'tool_call':
+                  if (event.toolName === 'web_search') {
+                    progressStep = ProgressStep.SEARCHING_WEB;
+                  } else if (event.toolName === 'memory_retrieve' || event.toolName === 'memory_save') {
+                    progressStep = ProgressStep.RETRIEVING_MEMORY;
+                  } else {
+                    progressStep = ProgressStep.BUILDING_CONTEXT;
+                  }
+                  progressMessage = `Using tool: ${event.toolName}`;
+                  break;
+                case 'observation':
+                  progressStep = ProgressStep.BUILDING_CONTEXT;
+                  progressMessage = 'Processing results...';
+                  break;
+                case 'response':
+                  progressStep = ProgressStep.GENERATING_RESPONSE;
+                  progressMessage = 'Generating response...';
+                  break;
+                case 'error':
+                  progressStep = ProgressStep.GENERATING_RESPONSE;
+                  progressMessage = `Error: ${event.content}`;
+                  break;
+                default:
+                  return;
+              }
+
+              const progressEvent: ProgressEvent = {
+                step: progressStep,
+                status: event.type === 'error' ? 'error' : 'started',
+                message: progressMessage,
+                timestamp: Date.now(),
+              };
+
+              const progressLine = `[PROGRESS]${JSON.stringify(progressEvent)}\n`;
+              controller.enqueue(encoder.encode(progressLine));
+            });
+
+            // Run the agent
+            const result = await agent.run({
+              message,
+              conversationHistory: messages,
+              files,
+            });
+
+            fullResponse = result.response;
+
+            // Stream the final response
+            const contentLine = `[CONTENT]${JSON.stringify(fullResponse)}\n`;
+            controller.enqueue(encoder.encode(contentLine));
+
+            // Send completion event
+            const completionEvent: ProgressEvent = {
+              step: ProgressStep.GENERATING_RESPONSE,
+              status: 'completed',
+              message: 'Response complete',
+              timestamp: Date.now(),
+            };
+            const completionLine = `[PROGRESS]${JSON.stringify(completionEvent)}\n`;
+            controller.enqueue(encoder.encode(completionLine));
+
+            // Unsubscribe and cleanup
+            progressUnsubscribe();
+
+            // Save assistant message
+            const contentToSave = fullResponse.replace(
+              /data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g,
+              'data:image/png;base64,[image-data-removed-due-to-size]'
+            );
+
+            await conversationRef.collection(COLLECTIONS.MESSAGES).add({
+              role: "assistant",
+              content: contentToSave,
+              created_at: new Date(),
+            });
+
+            await conversationRef.update({
+              updated_at: new Date(),
+            });
+
+            console.log(`[Chat API] Agentic request completed: ${requestId}, iterations: ${result.iterations}, tools: ${result.toolsUsed.join(', ')}`);
+
+            controller.close();
+            return;
+          }
 
           // Get active prompt configuration
           const promptConfig = await getActivePrompt();

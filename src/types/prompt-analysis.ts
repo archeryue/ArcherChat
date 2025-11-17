@@ -97,6 +97,7 @@ export interface PromptAnalysisInput {
 export interface FeatureFlags {
   USE_INTELLIGENT_ANALYSIS: boolean;
   USE_WEB_SEARCH: boolean;
+  USE_AGENTIC_MODE: boolean;
 }
 
 /**

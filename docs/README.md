@@ -25,6 +25,28 @@ Learn about:
 - 175+ bilingual keywords
 - Dynamic prompt management
 
+### 🤖 [AGENTIC_ARCHITECTURE.md](./AGENTIC_ARCHITECTURE.md)
+**Agentic refactoring design - ReAct pattern with tools.**
+
+**NEW**: Major architecture redesign document (2025-11-17)
+
+Learn about:
+- ReAct (Reason-Act-Observe) pattern implementation
+- Tool system design (WebSearch, WebFetch, MemorySave, MemoryRetrieve, ImageGenerate)
+- Agent core with configurable iterations (default 5, adjustable via admin)
+- Cost management and budgeting
+- Migration strategy from current pipeline
+- Admin panel configuration
+
+**Key Concepts:**
+- Agent loop with max iteration control
+- Structured reasoning prompts
+- Tool definitions with parameters
+- Progress tracking integration
+- Error handling and graceful degradation
+
+**Status**: Design Phase - Ready for Implementation
+
 ### 🚀 [DEPLOYMENT.md](./DEPLOYMENT.md)
 **Step-by-step deployment guide to Google Cloud Run.**
 
@@ -221,12 +243,13 @@ Learn how to:
 
 1. **New to ArcherChat?** Start with [../README.md](../README.md) for local setup
 2. **Understanding the system?** Read [DESIGN.md](./DESIGN.md)
-3. **Ready to deploy?** Follow [DEPLOYMENT.md](./DEPLOYMENT.md)
-4. **Testing your deployment?** Use [TESTING_CHECKLIST.md](./TESTING_CHECKLIST.md)
-5. **Learning about memory?** See [MEMORY_SYSTEM_COMPLETE.md](./MEMORY_SYSTEM_COMPLETE.md)
-6. **Understanding progress tracking?** Check [PROGRESS_TRACKING.md](./PROGRESS_TRACKING.md)
-7. **Adding AI providers?** Check [ADDING_PROVIDERS.md](./ADDING_PROVIDERS.md)
-8. **Planning future work?** See [FUTURE_IMPROVEMENTS.md](./FUTURE_IMPROVEMENTS.md)
+3. **Planning agentic refactor?** See [AGENTIC_ARCHITECTURE.md](./AGENTIC_ARCHITECTURE.md)
+4. **Ready to deploy?** Follow [DEPLOYMENT.md](./DEPLOYMENT.md)
+5. **Testing your deployment?** Use [TESTING_CHECKLIST.md](./TESTING_CHECKLIST.md)
+6. **Learning about memory?** See [MEMORY_SYSTEM_COMPLETE.md](./MEMORY_SYSTEM_COMPLETE.md)
+7. **Understanding progress tracking?** Check [PROGRESS_TRACKING.md](./PROGRESS_TRACKING.md)
+8. **Adding AI providers?** Check [ADDING_PROVIDERS.md](./ADDING_PROVIDERS.md)
+9. **Planning future work?** See [FUTURE_IMPROVEMENTS.md](./FUTURE_IMPROVEMENTS.md)
 
 ## 🎯 Key Features Documented
 
@@ -295,10 +318,17 @@ When updating documentation:
 
 ---
 
-**Last Updated**: 2025-11-03
+**Last Updated**: 2025-11-17
 **Documentation Status**: ✅ Complete and up-to-date
 
 ## Recent Updates
+
+### 2025-11-17 - Agentic Architecture Design
+- ✅ **AGENTIC_ARCHITECTURE.md**: Comprehensive design for refactoring to ReAct pattern
+- ✅ **Tool System Design**: WebSearch, WebFetch, MemorySave, MemoryRetrieve, ImageGenerate
+- ✅ **Agent Core**: Configurable iterations, cost management, error handling
+- ✅ **Admin Panel**: Max iterations, tool toggles, cost budgets
+- ✅ **Migration Strategy**: 5-phase plan from current pipeline to agentic system
 
 ### 2025-11-03 (Evening) - Production Deployment
 - ✅ **Code Quality Improvements**: Replaced all `any` types with proper TypeScript interfaces

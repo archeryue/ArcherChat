@@ -9,9 +9,10 @@ module.exports = {
   ],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^uuid$': '<rootDir>/src/__tests__/mocks/uuid.ts',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(uuid)/)',
+    '/node_modules/(?!uuid)/',
   ],
   collectCoverageFrom: [
     'src/lib/**/*.ts',
