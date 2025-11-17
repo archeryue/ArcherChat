@@ -100,7 +100,7 @@ export function WhimSidebar({
       style={{ width: `${sidebarWidth}px` }}
     >
       {/* Main Title */}
-      <div className="px-6 py-3 border-b border-slate-200">
+      <div className="px-6 py-2 border-b border-slate-200">
         <h1 className="text-2xl font-semibold text-blue-600 italic m-0 p-0">Whims</h1>
         <p className="text-xs text-slate-500 mt-1">
           Your saved conversations and notes
