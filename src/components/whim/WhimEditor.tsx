@@ -38,6 +38,7 @@ export function WhimEditor({
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [noChanges, setNoChanges] = useState(false);
 
   // Convert markdown to HTML for display
   const htmlContent = marked.parse(whim.content) as string;
@@ -92,7 +93,7 @@ export function WhimEditor({
   }, [whim.id, whim.content, whim.title, whim.folderId, editor]);
 
   const handleSave = useCallback(
-    async (newTitle: string, newContentHTML: string, newFolderId: string) => {
+    async (newTitle: string, newContentHTML: string, newFolderId: string): Promise<boolean> => {
       // Convert HTML back to markdown before saving
       const newContentMarkdown = turndownService.turndown(newContentHTML);
 
@@ -102,7 +103,7 @@ export function WhimEditor({
         newContentMarkdown === whim.content &&
         newFolderId === (whim.folderId || '')
       ) {
-        return;
+        return false;
       }
 
       setIsSaving(true);
@@ -113,8 +114,10 @@ export function WhimEditor({
           folderId: newFolderId || undefined,
         });
         setLastSaved(new Date());
+        return true;
       } catch (err) {
         console.error('Error saving whim:', err);
+        return false;
       } finally {
         setIsSaving(false);
       }
@@ -138,6 +141,26 @@ export function WhimEditor({
       handleSave(title, editor.getHTML(), folderId);
     }
   };
+
+  // Keyboard shortcut: Ctrl+S / Cmd+S to save
+  useEffect(() => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (editor) {
+          const saved = await handleSave(title, editor.getHTML(), selectedFolderId);
+          if (!saved) {
+            // Show "No changes" briefly
+            setNoChanges(true);
+            setTimeout(() => setNoChanges(false), 1500);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editor, title, selectedFolderId, handleSave]);
 
   if (!editor) {
     return <div className="flex-1 flex items-center justify-center">Loading editor...</div>;
@@ -283,8 +306,10 @@ export function WhimEditor({
           {/* Save Status */}
           {isSaving ? (
             <span className="text-xs text-slate-500">Saving...</span>
+          ) : noChanges ? (
+            <span className="text-xs text-slate-500">No changes</span>
           ) : lastSaved ? (
-            <span className="text-xs text-green-600">✓ Saved</span>
+            <span className="text-xs text-green-600">Saved</span>
           ) : null}
 
           {/* Delete */}
