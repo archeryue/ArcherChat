@@ -63,7 +63,15 @@ export function WhimSidebar({
 
   return (
     <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
-      {/* Header */}
+      {/* Main Title */}
+      <div className="px-6 py-4 border-b border-slate-200">
+        <h1 className="text-2xl font-semibold text-blue-600 italic">Whims</h1>
+        <p className="text-xs text-slate-600 mt-1">
+          Your saved conversations and notes
+        </p>
+      </div>
+
+      {/* Folders Header */}
       <div className="px-4 py-4 border-b border-slate-200">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-slate-700">Folders</h2>
