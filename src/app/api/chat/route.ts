@@ -19,6 +19,9 @@ import { ProgressStep, ProgressEvent } from "@/lib/progress/types";
 import { SearchResult } from "@/types/web-search";
 import { PromptAnalysisResult } from "@/types/prompt-analysis";
 import { MemoryFact } from "@/types/memory";
+import { convertConversationToWhim } from "@/lib/whim/converter";
+import { Timestamp } from 'firebase-admin/firestore';
+import { Whim } from "@/types/whim";
 
 export async function POST(req: NextRequest) {
   try {
@@ -124,6 +127,66 @@ export async function POST(req: NextRequest) {
       role: doc.data().role as "user" | "assistant",
       content: doc.data().content,
     }));
+
+    // Check for slash commands (/save or /whim)
+    const trimmedMessage = message.trim().toLowerCase();
+    if (trimmedMessage === '/save' || trimmedMessage === '/whim') {
+      console.log('[Chat API] Slash command detected, converting conversation to whim');
+
+      // Convert conversation to whim
+      const { title, content } = await convertConversationToWhim(messages);
+
+      // Save whim to database
+      const now = Timestamp.now();
+      const whimData: Omit<Whim, 'id'> = {
+        userId: session.user.id,
+        title,
+        content,
+        conversationId,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const whimRef = await db.collection('whims').add(whimData);
+      const whimId = whimRef.id;
+
+      console.log('[Chat API] Whim created:', whimId);
+
+      // Return success message as a stream
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          const successMessage = `✅ Whim saved successfully!\n\n**${title}**\n\nYou can view and edit this whim in the [Whims page](/whim).`;
+          controller.enqueue(encoder.encode(`[CONTENT]${JSON.stringify(successMessage)}\n`));
+          controller.close();
+        },
+      });
+
+      // Save AI response to conversation
+      await conversationRef.collection(COLLECTIONS.MESSAGES).add({
+        role: "assistant",
+        content: `✅ Whim saved successfully!\n\n**${title}**\n\nYou can view and edit this whim in the Whims page.`,
+        created_at: new Date(),
+      });
+
+      // Update conversation timestamp
+      await conversationRef.update({
+        updated_at: new Date(),
+      });
+
+      // Cleanup
+      removeEmitter(requestId);
+      progressUnsubscribe();
+
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+          "X-Request-Id": requestId,
+        },
+      });
+    }
 
     // Check if this is the first message and update title
     if (messages.length === 1) {
