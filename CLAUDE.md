@@ -10,7 +10,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Development
-npm run dev                    # Start dev server (http://localhost:3000)
+npm run dev                    # Start dev server (default port 8080)
+PORT=8080 npm run dev          # Explicitly set port 8080
 npm run build                  # Production build with strict TypeScript checking
 npm run start                  # Start production server
 npm run lint                   # ESLint checks
@@ -239,19 +240,63 @@ Real-time visual feedback during AI response generation:
 
 ## 🔴 CRITICAL RULES - NEVER VIOLATE THESE
 
-### 1. 🚀 DEPLOYMENT: Never Deploy Without Explicit Permission
+### 1. 🚀 DEPLOYMENT: Production Deployment Guide
+
+**Production URL**: `https://archerchat-697285727061.us-central1.run.app`
+
+#### Deployment Rules
 - **NEVER** deploy code to production (Google Cloud Run) unless the user explicitly asks
 - **ALWAYS** wait for user to say "deploy", "ship online", or similar explicit commands
 - **NEVER** assume deployment is wanted after committing code
 - **ALWAYS** ask for confirmation before deploying if unclear
 - **EXCEPTION**: Only deploy when user explicitly requests it
 
-**IMPORTANT: Feature Flags are Set at Build Time**
+#### Proper Deployment Workflow
+1. **Get credentials from .env.local**:
+   ```bash
+   cat .env.local  # ALWAYS use actual values from this file
+   ```
+2. **Build and test locally first**:
+   ```bash
+   npm run build   # Catch TypeScript errors
+   npx jest        # Ensure all tests pass
+   ```
+3. **Deploy using Cloud Build** (Preferred method):
+   ```bash
+   gcloud builds submit --config cloudbuild.yaml --project=archerchat-3d462
+   ```
+4. **Deploy with gcloud run** (use actual env vars from .env.local):
+   ```bash
+   gcloud run deploy archerchat \
+     --image us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:latest \
+     --region us-central1 \
+     --project archerchat-3d462 \
+     --set-env-vars "[USE_VALUES_FROM_ENV_LOCAL]"
+   ```
+4. **Update traffic routing if needed**:
+   ```bash
+   gcloud run services update-traffic archerchat \
+     --to-revisions=REVISION_NAME=100 \
+     --region=us-central1 \
+     --project=archerchat-3d462
+   ```
+
+#### Critical: Dual URL Issue
+Google Cloud Run creates TWO URLs for the same service:
+1. **Project-based URL**: `https://archerchat-697285727061.us-central1.run.app` (ACTIVE)
+2. **Generated URL**: `https://archerchat-er7tpljqpa-uc.a.run.app` (alternate)
+
+**IMPORTANT**:
+- NEXTAUTH_URL must match the URL configured in Google OAuth redirect
+- Current configuration uses: `https://archerchat-697285727061.us-central1.run.app`
+- Authentication will fail if URLs don't match!
+
+#### Feature Flags (Build-time Configuration)
 - Feature flags (`NEXT_PUBLIC_*`) are configured in `cloudbuild.yaml` as build args
 - Changes to feature flags require rebuilding and redeploying (not just env var updates)
 - Current settings in `cloudbuild.yaml`:
   - `NEXT_PUBLIC_USE_INTELLIGENT_ANALYSIS=true` (intelligent memory extraction)
-  - `NEXT_PUBLIC_USE_WEB_SEARCH=false` (web search disabled)
+  - `NEXT_PUBLIC_USE_WEB_SEARCH=true` (web search ENABLED ✅)
 
 ### 2. 🔐 SECURITY: Never Share Private Keys
 - **NEVER** commit API keys, private keys, or credentials to the repository

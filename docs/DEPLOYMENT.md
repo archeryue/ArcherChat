@@ -2,49 +2,74 @@
 
 This guide covers deploying ArcherChat to Google Cloud Run for production use.
 
+## 🔴 CRITICAL: Production URL & Authentication
+
+**Production URL**: `https://archerchat-697285727061.us-central1.run.app`
+
+### ⚠️ Dual URL Issue (MUST READ)
+Google Cloud Run automatically creates TWO URLs for your service:
+1. **Project-based URL**: `https://archerchat-697285727061.us-central1.run.app` ✅ (ACTIVE)
+2. **Generated URL**: `https://archerchat-er7tpljqpa-uc.a.run.app` (alternate)
+
+**CRITICAL FOR AUTHENTICATION**:
+- NEXTAUTH_URL **MUST** match your Google OAuth redirect URL
+- Current configuration: `https://archerchat-697285727061.us-central1.run.app`
+- If URLs don't match, authentication will fail on first attempt!
+- Always use the same URL consistently throughout your application
+
 ## Prerequisites
 
 - Google Cloud Platform account with billing enabled
-- Docker installed locally
-- gcloud CLI installed
+- Docker installed locally (for local testing)
+- gcloud CLI installed and configured
 - Firebase project set up with Firestore
 - Google OAuth credentials configured
+- Project ID: `archerchat-3d462`
 
 ## Cost Overview
 
-**Estimated monthly cost for family use: $5-15**
+**Estimated monthly cost for family use: $8-18**
 
 - Cloud Run: $5-10/month (with min-instances=0 for cost optimization)
+- Gemini API: $2-5/month (tiered models, uses free tier first)
 - Firestore: FREE tier (generous limits for personal/family use)
+- Google Custom Search: FREE (within 100 queries/day)
 - Artifact Registry: $0.10/GB storage + network egress
 - Total: Well within $30/month budget
 
-## Deployment Steps
+## Quick Deployment (Recommended)
 
-### 1. Install Docker (WSL2)
+### Using Cloud Build (Simplest Method)
 
 ```bash
-# Install Docker on WSL2
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
+# 1. Test locally first
+npm run build   # Catch TypeScript errors
+npx jest        # Ensure all tests pass
 
-# Add user to docker group
-sudo usermod -aG docker $USER
-newgrp docker
+# 2. Deploy using Cloud Build
+gcloud builds submit --config cloudbuild.yaml --project=archerchat-3d462
 
-# Verify installation
-docker --version
+# 3. Deploy the built image to Cloud Run
+gcloud run deploy archerchat \
+  --image us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:latest \
+  --region us-central1 \
+  --project archerchat-3d462
+
+# 4. Update traffic routing (if needed)
+gcloud run services update-traffic archerchat \
+  --to-revisions=REVISION_NAME=100 \
+  --region=us-central1 \
+  --project=archerchat-3d462
 ```
 
-### 2. Install and Configure gcloud CLI
+## Detailed Deployment Steps
+
+### 1. Prerequisites Setup
 
 ```bash
-# Install gcloud CLI (if not already installed)
-# Follow instructions at: https://cloud.google.com/sdk/docs/install
-
-# Initialize and authenticate
-gcloud auth login
-gcloud config set project YOUR_PROJECT_ID
+# Verify gcloud is installed and configured
+gcloud --version
+gcloud config get-value project  # Should show: archerchat-3d462
 
 # Enable required APIs
 gcloud services enable run.googleapis.com
@@ -52,24 +77,32 @@ gcloud services enable artifactregistry.googleapis.com
 gcloud services enable cloudbuild.googleapis.com
 ```
 
-### 3. Prepare Environment Variables
+### 2. Prepare Environment Variables
 
-Create a `.env.local` file in your project root with your credentials:
+**IMPORTANT**: Get your actual credentials from the `.env.local` file in the project root!
 
 ```bash
-# .env.local (DO NOT COMMIT TO GIT)
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=your-nextauth-secret-here
-GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-GEMINI_API_KEY=your-gemini-api-key
-FIREBASE_PROJECT_ID=your-firebase-project-id
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nyour-private-key-here\n-----END PRIVATE KEY-----\n"
-FIREBASE_CLIENT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
-ADMIN_EMAIL=your-admin-email@example.com
+# Check if .env.local exists and has your credentials
+cat .env.local
+
+# The file should contain (DO NOT COMMIT TO GIT):
+# NEXTAUTH_URL=http://localhost:8080  # Default dev port is 8080
+# NEXTAUTH_SECRET=your-actual-secret-from-env-local
+# GOOGLE_CLIENT_ID=your-actual-client-id.apps.googleusercontent.com
+# GOOGLE_CLIENT_SECRET=your-actual-client-secret
+# GEMINI_API_KEY=your-actual-api-key
+# FIREBASE_PROJECT_ID=your-project-id
+# FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nactual-key\n-----END PRIVATE KEY-----\n"
+# FIREBASE_CLIENT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
+# ADMIN_EMAIL=your-admin-email@example.com
+# GOOGLE_SEARCH_API_KEY=your-search-api-key
+# GOOGLE_SEARCH_ENGINE_ID=your-search-engine-id
 ```
 
-**IMPORTANT**: Ensure `.env.local` is in your `.gitignore` file!
+**⚠️ CRITICAL STEPS**:
+1. **ALWAYS** use the actual values from `.env.local` file when deploying
+2. **NEVER** commit `.env.local` to Git (ensure it's in `.gitignore`)
+3. **ALWAYS** keep a backup of your `.env.local` file in a secure location
 
 ### 4. Test Docker Build Locally (Optional but Recommended)
 
@@ -114,11 +147,18 @@ docker push us-central1-docker.pkg.dev/YOUR_PROJECT_ID/cloud-run-source-deploy/a
 
 ### 7. Deploy to Cloud Run
 
-Deploy with cost-optimized settings:
+**⚠️ FIRST**: Get all credential values from your `.env.local` file!
+
+```bash
+# View your credentials (DO NOT share this output!)
+cat .env.local
+```
+
+Deploy with cost-optimized settings (replace with YOUR actual values from .env.local):
 
 ```bash
 gcloud run deploy archerchat \
-  --image us-central1-docker.pkg.dev/YOUR_PROJECT_ID/cloud-run-source-deploy/archerchat:latest \
+  --image us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:latest \
   --platform managed \
   --region us-central1 \
   --allow-unauthenticated \
@@ -128,8 +168,8 @@ gcloud run deploy archerchat \
   --timeout 300 \
   --min-instances 0 \
   --max-instances 2 \
-  --set-env-vars "NEXTAUTH_SECRET=your-secret,GOOGLE_CLIENT_ID=your-id,GOOGLE_CLIENT_SECRET=your-secret,GEMINI_API_KEY=your-key,FIREBASE_PROJECT_ID=your-project-id,FIREBASE_CLIENT_EMAIL=your-email,ADMIN_EMAIL=your-admin-email" \
-  --project YOUR_PROJECT_ID
+  --set-env-vars "NEXTAUTH_SECRET=[FROM_ENV_LOCAL],GOOGLE_CLIENT_ID=[FROM_ENV_LOCAL],GOOGLE_CLIENT_SECRET=[FROM_ENV_LOCAL],GEMINI_API_KEY=[FROM_ENV_LOCAL],FIREBASE_PROJECT_ID=[FROM_ENV_LOCAL],FIREBASE_CLIENT_EMAIL=[FROM_ENV_LOCAL],ADMIN_EMAIL=[FROM_ENV_LOCAL],GOOGLE_SEARCH_API_KEY=[FROM_ENV_LOCAL],GOOGLE_SEARCH_ENGINE_ID=[FROM_ENV_LOCAL]" \
+  --project archerchat-3d462
 ```
 
 **Note**: The FIREBASE_PRIVATE_KEY needs special handling. Create a script to properly format it:
@@ -146,29 +186,31 @@ gcloud run services update archerchat \
   --project YOUR_PROJECT_ID
 ```
 
-### 8. Update Google OAuth Settings
+### 8. ⚠️ CRITICAL: Configure Google OAuth & NEXTAUTH_URL
 
-After deployment, you'll receive a Cloud Run URL like:
-`https://archerchat-XXXXXXXXXX.us-central1.run.app`
+**Your production URL**: `https://archerchat-697285727061.us-central1.run.app`
 
-1. Go to [Google Cloud Console - Credentials](https://console.cloud.google.com/apis/credentials)
+#### Google OAuth Configuration
+1. Go to [Google Cloud Console - Credentials](https://console.cloud.google.com/apis/credentials?project=archerchat-3d462)
 2. Select your OAuth 2.0 Client ID
-3. Under "Authorized redirect URIs", add:
+3. Under "Authorized redirect URIs", ensure you have:
    ```
-   https://your-cloud-run-url.run.app/api/auth/callback/google
+   https://archerchat-697285727061.us-central1.run.app/api/auth/callback/google
    ```
-4. Click "Save"
+4. Remove any incorrect URLs
+5. Click "Save"
 
-### 9. Update NEXTAUTH_URL
-
-Update the Cloud Run service with the production URL:
+#### Update NEXTAUTH_URL (Must Match OAuth)
 
 ```bash
+# Update NEXTAUTH_URL to match your OAuth redirect URL
 gcloud run services update archerchat \
   --region us-central1 \
-  --update-env-vars "NEXTAUTH_URL=https://your-cloud-run-url.run.app" \
-  --project YOUR_PROJECT_ID
+  --update-env-vars "NEXTAUTH_URL=https://archerchat-697285727061.us-central1.run.app" \
+  --project archerchat-3d462
 ```
+
+**⚠️ WARNING**: If NEXTAUTH_URL doesn't match your OAuth redirect URL, authentication will fail!
 
 ### 10. Setup Billing Alerts (Recommended)
 
@@ -240,17 +282,42 @@ gcloud logging read "resource.type=cloud_run_revision AND resource.labels.servic
 
 ## Troubleshooting
 
+### Authentication Issues (First Login Fails, Second Works)
+
+**Cause**: NEXTAUTH_URL doesn't match the URL you're accessing from
+
+**Problem**: Google Cloud Run creates two URLs for your service:
+- `https://archerchat-697285727061.us-central1.run.app` (project-based)
+- `https://archerchat-er7tpljqpa-uc.a.run.app` (generated)
+
+**Solution**:
+1. Check which URL is configured in Google OAuth redirect URIs
+2. Update NEXTAUTH_URL to match that exact URL:
+   ```bash
+   gcloud run services update archerchat \
+     --region us-central1 \
+     --update-env-vars "NEXTAUTH_URL=https://archerchat-697285727061.us-central1.run.app" \
+     --project archerchat-3d462
+   ```
+3. Always access the application using the same URL
+
+### Error: "State cookie was missing" or "state mismatch"
+
+**Cause**: URL mismatch between where you start login and where OAuth redirects
+
+**Solution**: Ensure you're consistently using the same URL throughout the authentication flow
+
 ### Error: "exec format error"
 
 **Cause**: Docker image built for wrong architecture (ARM64 instead of AMD64)
 
-**Solution**: Use `docker buildx build --platform linux/amd64` to build for the correct architecture
+**Solution**: Use Cloud Build which automatically builds for the correct architecture
 
 ### Error: "DECODER routines::unsupported" during login
 
 **Cause**: Firebase private key has escaped newlines (`\n`) instead of actual newlines
 
-**Solution**: Use the script in step 7 to properly format the FIREBASE_PRIVATE_KEY
+**Solution**: Update the Firebase private key with proper newlines using the update script
 
 ### Error: "OAuth callback error"
 
@@ -259,6 +326,7 @@ gcloud logging read "resource.type=cloud_run_revision AND resource.labels.servic
 **Solution**:
 1. Verify OAuth redirect URIs include production URL
 2. Ensure NEXTAUTH_URL matches the actual Cloud Run URL (no trailing slash)
+3. Use the project-based URL: `https://archerchat-697285727061.us-central1.run.app`
 
 ### Container fails to start
 
