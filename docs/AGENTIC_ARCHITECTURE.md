@@ -1,12 +1,18 @@
-# Agentic Architecture Design
+# Agentic Architecture - IMPLEMENTED
 
 ## Overview
 
-This document describes the refactoring of ArcherChat's chat logic from a pipeline-based architecture to an agentic architecture using the ReAct (Reason-Act-Observe) pattern.
+**Status**: ✅ **IMPLEMENTED** (2025-11-17)
 
-**Current Architecture**: PromptAnalyzer → ContextOrchestrator → AI Response (linear pipeline)
+This document describes ArcherChat's agentic architecture using the ReAct (Reason-Act-Observe) pattern.
 
-**New Architecture**: Agent with Tools performing iterative Reason → Act → Observe cycles
+**Feature Flag**: `NEXT_PUBLIC_USE_AGENTIC_MODE=true`
+
+**Previous Architecture**: PromptAnalyzer → ContextOrchestrator → AI Response (linear pipeline)
+
+**Current Architecture**: Agent with Tools performing iterative Reason → Act → Observe cycles
+
+**Test Coverage**: 58 unit tests (100% pass rate)
 
 ---
 
@@ -170,10 +176,23 @@ interface ToolCall {
 
 ### Tool 1: WebSearch
 
-Search the web for current information.
+Search the web for current information with reliable source targeting.
+
+**IMPLEMENTED ENHANCEMENT**: `sourceCategory` parameter for targeting reliable sources to reduce 403 errors.
 
 ```typescript
 // src/lib/agent/tools/web-search.ts
+
+// Reliable source categories
+const RELIABLE_SOURCES: Record<string, string[]> = {
+  encyclopedia: ['wikipedia.org', 'britannica.com'],
+  programming: ['stackoverflow.com', 'github.com', 'developer.mozilla.org'],
+  academic: ['arxiv.org', 'scholar.google.com', 'ncbi.nlm.nih.gov'],
+  government: ['*.gov', 'who.int', 'un.org'],
+  finance: ['reuters.com', 'bloomberg.com', 'sec.gov'],
+  tech: ['techcrunch.com', 'arstechnica.com', 'wired.com'],
+  reference: ['wikipedia.org', 'britannica.com', 'merriam-webster.com'],
+};
 
 const WebSearchTool: Tool = {
   name: 'web_search',
@@ -182,6 +201,12 @@ const WebSearchTool: Tool = {
     - Real-time data (stock prices, weather, sports scores)
     - Current comparisons or reviews
     - Information that may have changed since your training
+
+    IMPORTANT: Use sourceCategory to target reliable sources:
+    - "encyclopedia" for facts/concepts (Wikipedia)
+    - "programming" for code questions (StackOverflow, GitHub)
+    - "finance" for financial data (Reuters, Bloomberg)
+
     DO NOT use for: timeless concepts, historical facts, creative writing`,
 
   parameters: [
@@ -190,6 +215,12 @@ const WebSearchTool: Tool = {
       type: 'string',
       description: 'The search query, optimized for Google search',
       required: true
+    },
+    {
+      name: 'sourceCategory',
+      type: 'string',
+      description: 'Category of reliable sources: encyclopedia, programming, finance, government, academic, tech, reference',
+      required: false
     },
     {
       name: 'targetInfo',
@@ -1677,6 +1708,7 @@ src/app/admin/
 
 ---
 
-**Document Version**: 1.0
+**Document Version**: 2.0
 **Created**: 2024-11-17
+**Updated**: 2025-11-17 (Implemented and enhanced with sourceCategory)
 **Author**: Claude Code

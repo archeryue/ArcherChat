@@ -16,7 +16,7 @@ npm run build                  # Production build with strict TypeScript checkin
 npm run start                  # Start production server
 npm run lint                   # ESLint checks
 
-# Unit Testing (87 tests, 100% pass rate)
+# Unit Testing (145+ tests, 100% pass rate)
 npx jest                       # Run all tests
 npx jest --watch              # Watch mode for TDD
 npx jest --coverage           # Coverage report
@@ -26,6 +26,7 @@ npx jest path/to/file.test.ts # Run specific test file
 npx jest src/__tests__/lib/memory/         # Memory system (14 tests)
 npx jest src/__tests__/lib/web-search/     # Web search (6 tests)
 npx jest src/__tests__/lib/context-engineering/  # Context orchestration (8 tests)
+npx jest src/__tests__/lib/agent/          # Agent system (58 tests)
 
 # E2E Testing (26 tests using Playwright)
 npm run test:e2e               # Run all E2E tests (headless)
@@ -60,7 +61,7 @@ npm run test:e2e:debug         # Debug mode with inspector
    - Catches issues that `npm run dev` might miss
 
 4. **Jest Tests** (Functionality)
-   - All 87 tests must pass (100% pass rate required)
+   - All 145+ tests must pass (100% pass rate required)
    - Generates coverage reports
    - Uploaded to Codecov (optional)
 
@@ -236,6 +237,42 @@ Real-time visual feedback during AI response generation:
 
 **Steps**: Analyzing → Searching → Retrieving Memory → Building Context → Generating
 
+### 7. Agentic Architecture (ReAct Pattern)
+
+**Feature Flag**: `NEXT_PUBLIC_USE_AGENTIC_MODE=true`
+
+Implements the ReAct (Reason-Act-Observe) pattern for autonomous AI behavior:
+
+```
+User Input → Agent Loop (max 5 iterations)
+                ↓
+           REASON → ACT → OBSERVE → (repeat if needed)
+                ↓
+           Final Response
+```
+
+**Key Files**:
+- `src/lib/agent/core/agent.ts` - Agent class with ReAct loop
+- `src/lib/agent/tools/` - Tool implementations (web_search, memory, etc.)
+- `src/lib/agent/core/prompts.ts` - Agent system prompts
+- `src/lib/agent/core/context-manager.ts` - Context compression and scratchpad
+
+**Available Tools**:
+- `web_search` - Search with sourceCategory for reliable sources (Wikipedia, StackOverflow, etc.)
+- `web_fetch` - Fetch and extract content from URLs
+- `memory_retrieve` - Get relevant user memories
+- `memory_save` - Save new facts to memory
+- `get_current_time` - Get current date/time
+
+**sourceCategory Parameter**: Targets reliable sources to reduce 403 errors:
+- `encyclopedia`: Wikipedia, Britannica
+- `programming`: StackOverflow, GitHub, MDN
+- `finance`: Reuters, Bloomberg, SEC
+- `government`: *.gov sites
+- `academic`: arXiv, PubMed
+
+**Enable**: Set `NEXT_PUBLIC_USE_AGENTIC_MODE=true` in environment or cloudbuild.yaml
+
 ---
 
 ## 🔴 CRITICAL RULES - NEVER VIOLATE THESE
@@ -297,6 +334,7 @@ Google Cloud Run creates TWO URLs for the same service:
 - Current settings in `cloudbuild.yaml`:
   - `NEXT_PUBLIC_USE_INTELLIGENT_ANALYSIS=true` (intelligent memory extraction)
   - `NEXT_PUBLIC_USE_WEB_SEARCH=true` (web search ENABLED ✅)
+  - `NEXT_PUBLIC_USE_AGENTIC_MODE=true` (agentic ReAct pattern)
 
 ### 2. 🔐 SECURITY: Never Share Private Keys
 - **NEVER** commit API keys, private keys, or credentials to the repository
@@ -493,7 +531,7 @@ BashOutput → Look for:
 - **Auth**: NextAuth.js (Google OAuth, whitelist control)
 - **AI**: Google Gemini (cost-effective, multimodal, native image generation)
 - **Styling**: Tailwind CSS + shadcn/ui
-- **Testing**: Jest + TypeScript (87 tests)
+- **Testing**: Jest + TypeScript (145+ tests)
 - **Deployment**: Cloud Run (GCP, scales to zero)
 
 ## Common Development Tasks
@@ -589,7 +627,8 @@ src/
     ai-providers.ts              # Provider interfaces
     prompt-analysis.ts           # Analysis types
     memory.ts                    # Memory types
-  __tests__/                     # Jest tests (87 tests)
+    agent.ts                     # Agent types
+  __tests__/                     # Jest tests (145+ tests)
 ```
 
 ## Cost Estimation (Family Use, 5-10 users, ~1000 messages/month)
@@ -613,8 +652,9 @@ See `docs/README.md` for comprehensive documentation index:
 - `docs/MEMORY_SYSTEM_COMPLETE.md` - Memory system details
 - `docs/WEB_SEARCH_DESIGN.md` - Web search integration
 - `docs/PROGRESS_TRACKING.md` - Progress tracking system
+- `docs/AGENTIC_ARCHITECTURE.md` - Agentic ReAct pattern (implemented)
 
 ---
 
-**Last Updated**: 2025-11-02
+**Last Updated**: 2025-11-17
 **Maintained By**: Archer & Claude Code
