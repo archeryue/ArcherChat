@@ -1,4 +1,5 @@
 steps:
+  # Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
@@ -9,5 +10,17 @@ steps:
       - '-t'
       - 'us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:latest'
       - '.'
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'archerchat'
+      - '--image=us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:latest'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--update-env-vars=NEXT_PUBLIC_USE_INTELLIGENT_ANALYSIS=true,NEXT_PUBLIC_USE_WEB_SEARCH=true'
+
 images:
   - 'us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:latest'

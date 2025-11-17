@@ -196,14 +196,6 @@ export default function WhimPage() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <div className="bg-white border-b border-slate-200 px-6 py-4">
-          <h1 className="text-2xl font-semibold text-slate-800">Whims</h1>
-          <p className="text-sm text-slate-600 mt-1">
-            Your saved conversations and notes
-          </p>
-        </div>
-
         {/* Error Display */}
         {error && (
           <div className="bg-red-50 border-l-4 border-red-500 p-4 m-4">
