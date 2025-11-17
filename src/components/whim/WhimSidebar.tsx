@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { WhimClient, FolderClient } from '@/types/whim';
 
 interface WhimSidebarProps {
@@ -27,6 +27,9 @@ export function WhimSidebar({
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [editingFolder, setEditingFolder] = useState<string | null>(null);
   const [editingFolderName, setEditingFolderName] = useState('');
+  const [sidebarWidth, setSidebarWidth] = useState(256); // Default width in pixels
+  const [isResizing, setIsResizing] = useState(false);
+  const sidebarRef = useRef<HTMLDivElement>(null);
 
   // Group whims by folder
   const whimsWithoutFolder = whims.filter(w => !w.folderId);
@@ -61,12 +64,45 @@ export function WhimSidebar({
     setExpandedFolders(newExpanded);
   };
 
+  // Handle resize
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      const newWidth = e.clientX;
+      if (newWidth >= 200 && newWidth <= 500) {
+        setSidebarWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing]);
+
   return (
-    <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
+    <div
+      ref={sidebarRef}
+      className="bg-white border-r border-slate-200 flex flex-col relative"
+      style={{ width: `${sidebarWidth}px` }}
+    >
       {/* Main Title */}
-      <div className="px-6 py-4 border-b border-slate-200">
-        <h1 className="text-2xl font-semibold text-blue-600 italic">Whims</h1>
-        <p className="text-xs text-slate-600 mt-1">
+      <div className="px-6 py-3 border-b border-slate-200">
+        <h1 className="text-2xl font-semibold text-blue-600 italic m-0 p-0">Whims</h1>
+        <p className="text-xs text-slate-500 mt-1">
           Your saved conversations and notes
         </p>
       </div>
@@ -237,6 +273,12 @@ export function WhimSidebar({
           );
         })}
       </div>
+
+      {/* Resize Handle */}
+      <div
+        className="absolute top-0 right-0 w-1 h-full cursor-ew-resize hover:bg-blue-400 bg-slate-300 transition-colors"
+        onMouseDown={() => setIsResizing(true)}
+      />
     </div>
   );
 }
