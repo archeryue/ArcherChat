@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import { useEffect, useState, useCallback } from 'react';
-import { Whim, Folder } from '@/types/whim';
+import { WhimClient, FolderClient } from '@/types/whim';
 import { marked } from 'marked';
 import TurndownService from 'turndown';
 
@@ -21,8 +21,8 @@ const turndownService = new TurndownService({
 });
 
 interface WhimEditorProps {
-  whim: Whim;
-  folders: Folder[];
+  whim: WhimClient;
+  folders: FolderClient[];
   onUpdate: (whimId: string, updates: { title?: string; content?: string; folderId?: string }) => void;
   onDelete: (whimId: string) => void;
 }

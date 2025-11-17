@@ -3,16 +3,16 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Whim, Folder } from '@/types/whim';
+import { WhimClient, FolderClient } from '@/types/whim';
 import { WhimEditor } from '@/components/whim/WhimEditor';
 import { WhimSidebar } from '@/components/whim/WhimSidebar';
 
 export default function WhimPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [whims, setWhims] = useState<Whim[]>([]);
-  const [folders, setFolders] = useState<Folder[]>([]);
-  const [selectedWhim, setSelectedWhim] = useState<Whim | null>(null);
+  const [whims, setWhims] = useState<WhimClient[]>([]);
+  const [folders, setFolders] = useState<FolderClient[]>([]);
+  const [selectedWhim, setSelectedWhim] = useState<WhimClient | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,7 +55,7 @@ export default function WhimPage() {
     }
   };
 
-  const handleWhimSelect = (whim: Whim) => {
+  const handleWhimSelect = (whim: WhimClient) => {
     setSelectedWhim(whim);
   };
 

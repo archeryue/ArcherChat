@@ -27,7 +27,7 @@ export async function GET(
       ...data,
       createdAt: data.createdAt.toDate().toISOString(),
       updatedAt: data.updatedAt.toDate().toISOString(),
-    };
+    } as Whim;
 
     // Verify ownership
     if (whim.userId !== session.user.id) {

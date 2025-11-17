@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { Whim, Folder } from '@/types/whim';
+import { WhimClient, FolderClient } from '@/types/whim';
 
 interface WhimSidebarProps {
-  whims: Whim[];
-  folders: Folder[];
-  selectedWhim: Whim | null;
-  onWhimSelect: (whim: Whim) => void;
+  whims: WhimClient[];
+  folders: FolderClient[];
+  selectedWhim: WhimClient | null;
+  onWhimSelect: (whim: WhimClient) => void;
   onFolderCreate: (name: string) => void;
   onFolderUpdate: (folderId: string, name: string) => void;
   onFolderDelete: (folderId: string) => void;
@@ -33,7 +33,7 @@ export function WhimSidebar({
   const whimsByFolder = folders.reduce((acc, folder) => {
     acc[folder.id] = whims.filter(w => w.folderId === folder.id);
     return acc;
-  }, {} as Record<string, Whim[]>);
+  }, {} as Record<string, WhimClient[]>);
 
   const handleCreateFolder = () => {
     if (newFolderName.trim()) {
