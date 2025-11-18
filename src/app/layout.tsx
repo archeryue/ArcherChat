@@ -6,8 +6,8 @@ import { SessionProvider } from "@/components/providers/session-provider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "ArcherChat - AI Chatbot",
-  description: "ChatGPT-like AI chatbot powered by Google Gemini",
+  title: "WhimCraft - AI Agent",
+  description: "Intelligent AI agent powered by Google Gemini",
   icons: {
     icon: "/icon.svg",
     apple: "/icon.svg",

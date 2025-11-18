@@ -1,6 +1,6 @@
-# ArcherChat - AI Chatbot
+# WhimCraft - AI Agent
 
-A bilingual (English/Chinese) AI chatbot with advanced memory and personalization features, powered by Google Gemini 2.5 Flash.
+A bilingual (English/Chinese) AI agent with advanced memory, personalization, and agentic capabilities, powered by Google Gemini 2.5 Flash.
 
 ## Features
 
@@ -221,7 +221,7 @@ For family use (5-10 users, ~1000 messages/month):
 
 ## Testing
 
-ArcherChat has comprehensive Jest + TypeScript test coverage:
+WhimCraft has comprehensive Jest + TypeScript test coverage:
 
 ```bash
 # Run all tests

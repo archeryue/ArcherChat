@@ -75,7 +75,7 @@ describe('Memory Loader Functions', () => {
       expect(context).toContain('- Name is Archer');
       expect(context).toContain('- Birthday is June 5th');
       expect(context).toContain('- Prefers dark mode');
-      expect(context).toContain('- Currently working on ArcherChat project');
+      expect(context).toContain('- Currently working on WhimCraft project');
     });
 
     it('TC-LOAD-003: should sort facts by tier (core first)', async () => {

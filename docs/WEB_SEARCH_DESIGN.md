@@ -78,7 +78,7 @@
 
 ## Executive Summary
 
-ArcherChat implements web search capability using **Google Custom Search API** integrated via the Intelligent Context Architecture. This provides real-time web information access with rate limiting and cost controls.
+WhimCraft implements web search capability using **Google Custom Search API** integrated via the Intelligent Context Architecture. This provides real-time web information access with rate limiting and cost controls.
 
 **Key Decision**: Google Custom Search API chosen over alternatives (Tavily AI, Gemini Grounding) due to:
 - ✅ Same GCP ecosystem (no new accounts needed)
@@ -137,7 +137,7 @@ Main LLM generates response with citations
 - $5 per 1,000 queries beyond free tier
 - Maximum 10,000 queries/day limit
 
-**Cost Scenarios for ArcherChat:**
+**Cost Scenarios for WhimCraft:**
 
 | Monthly Usage | Free Queries | Paid Queries | Total Cost |
 |---------------|--------------|--------------|------------|
@@ -249,7 +249,7 @@ GOOGLE_SEARCH_ENGINE_ID=your-search-engine-id
 
 ### Why Google Custom Search Won
 
-For ArcherChat specifically (already on GCP):
+For WhimCraft specifically (already on GCP):
 
 1. **Same ecosystem**: Everything in GCP, no new accounts
 2. **3x more free searches**: 3,000 vs 1,000 (Tavily) vs 0 (Gemini)
@@ -329,7 +329,7 @@ gcloud run services update archerchat \
 
 ---
 
-## Cost Impact on ArcherChat
+## Cost Impact on WhimCraft
 
 ### Before Web Search
 

@@ -1,5 +1,5 @@
 /**
- * Centralized keywords configuration for ArcherChat
+ * Centralized keywords configuration for WhimCraft
  * Supports both English and Chinese (中英文双语支持)
  */
 

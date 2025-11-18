@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Playwright configuration for ArcherChat E2E tests
+ * Playwright configuration for WhimCraft E2E tests
  * See https://playwright.dev/docs/test-configuration
  */
 export default defineConfig({

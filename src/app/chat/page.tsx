@@ -356,8 +356,8 @@ export default function ChatPage() {
               <div className="flex items-center justify-center h-full">
                 <div className="text-center space-y-4 px-6">
                   <div className="text-6xl mb-2">💬</div>
-                  <h2 className="text-2xl font-bold text-slate-900">
-                    Welcome to ArcherChat
+                  <h2 className="text-2xl font-bold">
+                    Welcome to <span className="text-blue-600">Whim</span><span className="text-slate-900">Craft</span>
                   </h2>
                   <p className="text-slate-600 max-w-md mx-auto">
                     Start a conversation with AI. I can help answer questions, generate images, and remember your preferences.

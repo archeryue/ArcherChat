@@ -1,4 +1,4 @@
-# Testing Checklist for ArcherChat
+# Testing Checklist for WhimCraft
 
 ## Pre-Testing Setup
 

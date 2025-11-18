@@ -12,7 +12,7 @@ function LoginContent() {
   return (
     <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full space-y-6">
       <div className="text-center">
-        <h1 className="text-3xl font-bold text-slate-900">Welcome to ArcherChat</h1>
+        <h1 className="text-3xl font-bold">Welcome to <span className="text-blue-600">Whim</span><span className="text-slate-900">Craft</span></h1>
         <p className="text-slate-600 mt-2">Sign in to start chatting with AI</p>
       </div>
 
@@ -68,7 +68,7 @@ export default function LoginPage() {
       <Suspense fallback={
         <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full space-y-6">
           <div className="text-center">
-            <h1 className="text-3xl font-bold text-slate-900">Welcome to ArcherChat</h1>
+            <h1 className="text-3xl font-bold">Welcome to <span className="text-blue-600">Whim</span><span className="text-slate-900">Craft</span></h1>
             <p className="text-slate-600 mt-2">Sign in to start chatting with AI</p>
           </div>
         </div>

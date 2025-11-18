@@ -22,8 +22,8 @@ test.describe('Application Basic Functionality', () => {
   test('should have correct page title', async ({ page }) => {
     await page.goto('/');
 
-    // The page should have "ArcherChat" in the title
-    await expect(page).toHaveTitle(/ArcherChat|Login/);
+    // The page should have "WhimCraft" in the title
+    await expect(page).toHaveTitle(/WhimCraft|Login/);
   });
 
   test('should render without JavaScript errors', async ({ page }) => {

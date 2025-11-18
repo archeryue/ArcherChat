@@ -49,7 +49,7 @@ export class PromptAnalyzer {
         .join("\n");
     }
 
-    return `You are a prompt analyzer for a bilingual AI chatbot. Analyze the user's input and determine:
+    return `You are a prompt analyzer for a bilingual AI agent. Analyze the user's input and determine:
 
 1. Primary intent (question/image_generation/casual_chat/command)
 2. Required actions:

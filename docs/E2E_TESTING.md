@@ -1,6 +1,6 @@
 # End-to-End Testing with Playwright
 
-This document describes the E2E testing setup for ArcherChat using Playwright.
+This document describes the E2E testing setup for WhimCraft using Playwright.
 
 ## Overview
 

@@ -1,5 +1,5 @@
 /**
- * Centralized Keyword System for ArcherChat
+ * Centralized Keyword System for WhimCraft
  *
  * This system provides a unified way to:
  * - Define keyword triggers with bilingual support (English/Chinese)

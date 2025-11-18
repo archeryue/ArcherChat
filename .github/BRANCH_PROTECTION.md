@@ -27,7 +27,7 @@ Branch protection ensures:
 
 ### 1. Go to Repository Settings
 
-Navigate to: `https://github.com/archeryue/ArcherChat/settings/branches`
+Navigate to: `https://github.com/archeryue/WhimCraft/settings/branches`
 
 ### 2. Add Branch Protection Rule
 
