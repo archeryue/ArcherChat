@@ -184,7 +184,7 @@ describe('Agent', () => {
   });
 
   describe('parseReasoning', () => {
-    it('throws error after retries when model outputs invalid JSON', async () => {
+    it('falls back to raw text after retries fail', async () => {
       // Mock returns plain text twice (retry fails both times)
       mockGenerateResponse.mockResolvedValue({
         content: 'Just a plain text response without JSON',
@@ -193,10 +193,13 @@ describe('Agent', () => {
 
       const agent = new Agent(mockConfig);
 
-      await expect(agent.run({
+      const result = await agent.run({
         message: 'Test',
         conversationHistory: [],
-      })).rejects.toThrow('Failed to parse agent response after multiple retries');
+      });
+
+      // Falls back to using raw text as response
+      expect(result.response).toBe('Just a plain text response without JSON');
     });
 
     it('succeeds on retry when model corrects to valid JSON', async () => {
