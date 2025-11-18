@@ -400,9 +400,11 @@ Google Cloud Run creates TWO URLs for the same service:
 
 ### 6. 🤖 MODEL CONFIGURATION: Never Change Models Without Permission
 - **NEVER** change AI model configuration (Gemini models, model tiers) in `src/config/models.ts` without explicit user request
+- **NEVER** hardcode model names anywhere in the codebase - ALWAYS import from `src/config/models.ts`
+- **ALWAYS** use `GEMINI_MODELS[ModelTier.MAIN]`, `GEMINI_MODELS[ModelTier.IMAGE]`, or `GEMINI_MODELS[ModelTier.LITE]` when referencing models
 - **CAN** suggest model improvements but ALWAYS ask first
 - **TRUST** current model configuration is intentional and tested
-- Current models: `gemini-2.5-flash-experimental-0827` (main), `gemini-2.5-flash-preview-04-17` (image), `gemini-2.5-flash-lite` (analysis)
+- Current models: `gemini-2.5-flash` (main), `gemini-2.5-flash-image` (image), `gemini-2.5-flash-lite` (lite/background tasks)
 
 ### 7. 🧪 TESTING: Always Run Tests and Build Before Deployment
 - **ALWAYS** run the test suite after making code changes
