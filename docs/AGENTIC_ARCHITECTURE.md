@@ -942,7 +942,7 @@ The agent uses a structured prompt to make tool decisions.
 
 The complete system prompt sent to the model:
 
-```
+~~~
 You are an intelligent AI assistant that uses the ReAct (Reason-Act-Observe) pattern to help users.
 
 ## Your Approach
@@ -999,7 +999,7 @@ You are an intelligent AI assistant that uses the ReAct (Reason-Act-Observe) pat
 - Detect and match the user's language (English or Chinese)
 - Respond in the same language the user uses
 - Support bilingual conversations naturally
-```
+~~~
 
 ### Style-specific Instructions
 
