@@ -212,8 +212,9 @@ export class Agent {
         return parsed;
       }
 
-      // Log retry attempt
+      // Log retry attempt with actual response content
       console.log(`[Agent] Failed to parse response (attempt ${attempt}/${maxRetries}), retrying...`);
+      console.log(`[Agent] Raw response that failed parsing:\n${response.content.substring(0, 1000)}`);
 
       // Add a hint message for retry
       if (attempt < maxRetries) {
