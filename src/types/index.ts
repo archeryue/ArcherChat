@@ -16,12 +16,22 @@ export interface User {
   last_login: Timestamp;
 }
 
+// Whim context for contextual AI conversations
+export interface WhimContext {
+  selectedText?: string;
+  lineRange?: { start: number; end: number };
+}
+
 export interface Conversation {
   user_id: string;
   title: string;
   model: string;
   created_at: Timestamp;
   updated_at: Timestamp;
+  // Whim-specific fields (optional)
+  type?: 'chat' | 'whim';
+  whimId?: string;
+  whimContext?: WhimContext;
 }
 
 export interface Message {
@@ -56,6 +66,10 @@ export interface ConversationClient {
   model: string;
   created_at: Date;
   updated_at: Date;
+  // Whim-specific fields (optional)
+  type?: 'chat' | 'whim';
+  whimId?: string;
+  whimContext?: WhimContext;
 }
 
 export interface MessageClient {

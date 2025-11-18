@@ -25,6 +25,7 @@ interface WhimEditorProps {
   folders: FolderClient[];
   onUpdate: (whimId: string, updates: { title?: string; content?: string; folderId?: string }) => void;
   onDelete: (whimId: string) => void;
+  onOpenAIChat?: (selectedText?: string, range?: { start: number; end: number }) => void;
 }
 
 export function WhimEditor({
@@ -32,6 +33,7 @@ export function WhimEditor({
   folders,
   onUpdate,
   onDelete,
+  onOpenAIChat,
 }: WhimEditorProps) {
   const [title, setTitle] = useState(whim.title);
   const [selectedFolderId, setSelectedFolderId] = useState(whim.folderId || '');
@@ -161,6 +163,29 @@ export function WhimEditor({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [editor, title, selectedFolderId, handleSave]);
+
+  // Keyboard shortcut: Ctrl+I / Cmd+I to open AI assistant
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
+        e.preventDefault();
+        if (editor && onOpenAIChat) {
+          const { from, to, empty } = editor.state.selection;
+          if (!empty) {
+            // Get selected text
+            const selectedText = editor.state.doc.textBetween(from, to, ' ');
+            onOpenAIChat(selectedText, { start: from, end: to });
+          } else {
+            // Open with full document context
+            onOpenAIChat();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editor, onOpenAIChat]);
 
   if (!editor) {
     return <div className="flex-1 flex items-center justify-center">Loading editor...</div>;

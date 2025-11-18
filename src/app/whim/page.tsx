@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { WhimClient, FolderClient } from '@/types/whim';
 import { WhimEditor } from '@/components/whim/WhimEditor';
 import { WhimSidebar } from '@/components/whim/WhimSidebar';
+import { AIChatSidebar } from '@/components/whim/AIChatSidebar';
 
 export default function WhimPage() {
   const { data: session, status } = useSession();
@@ -15,6 +16,11 @@ export default function WhimPage() {
   const [selectedWhim, setSelectedWhim] = useState<WhimClient | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // AI Sidebar state
+  const [aiSidebarOpen, setAiSidebarOpen] = useState(false);
+  const [selectedText, setSelectedText] = useState<string | undefined>();
+  const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | undefined>();
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -169,6 +175,39 @@ export default function WhimPage() {
     }
   };
 
+  // AI Sidebar handlers
+  const handleOpenAIChat = (text?: string, range?: { start: number; end: number }) => {
+    setSelectedText(text);
+    setSelectionRange(range);
+    setAiSidebarOpen(true);
+  };
+
+  const handleCloseAIChat = () => {
+    setAiSidebarOpen(false);
+    setSelectedText(undefined);
+    setSelectionRange(undefined);
+  };
+
+  const handleApplyEdit = async (newContent: string) => {
+    if (!selectedWhim) return;
+
+    // If we have a selection range, replace only that part
+    // Otherwise, append to the end or replace based on context
+    let updatedContent = selectedWhim.content;
+
+    if (selectedText && selectionRange) {
+      // Replace the selected text with new content
+      // Note: This is a simple replacement. For more complex scenarios,
+      // we might need to track positions in the TipTap editor
+      updatedContent = selectedWhim.content.replace(selectedText, newContent);
+    } else {
+      // Append to the end
+      updatedContent = selectedWhim.content + '\n\n' + newContent;
+    }
+
+    await handleWhimUpdate(selectedWhim.id, { content: updatedContent });
+  };
+
   if (status === 'loading' || loading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -195,44 +234,60 @@ export default function WhimPage() {
       />
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Error Display */}
-        {error && (
-          <div className="bg-red-50 border-l-4 border-red-500 p-4 m-4">
-            <p className="text-sm text-red-700">{error}</p>
-          </div>
-        )}
-
-        {/* Editor or Empty State */}
-        {selectedWhim ? (
-          <WhimEditor
-            whim={selectedWhim}
-            folders={folders}
-            onUpdate={handleWhimUpdate}
-            onDelete={handleWhimDelete}
-          />
-        ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center text-slate-500">
-              <svg
-                className="mx-auto h-12 w-12 text-slate-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-              <h3 className="mt-2 text-sm font-medium text-slate-900">No whim selected</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Select a whim from the sidebar or save a conversation using /save or /whim
-              </p>
+      <div className="flex-1 flex">
+        <div className="flex-1 flex flex-col">
+          {/* Error Display */}
+          {error && (
+            <div className="bg-red-50 border-l-4 border-red-500 p-4 m-4">
+              <p className="text-sm text-red-700">{error}</p>
             </div>
-          </div>
+          )}
+
+          {/* Editor or Empty State */}
+          {selectedWhim ? (
+            <WhimEditor
+              whim={selectedWhim}
+              folders={folders}
+              onUpdate={handleWhimUpdate}
+              onDelete={handleWhimDelete}
+              onOpenAIChat={handleOpenAIChat}
+            />
+          ) : (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center text-slate-500">
+                <svg
+                  className="mx-auto h-12 w-12 text-slate-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                </svg>
+                <h3 className="mt-2 text-sm font-medium text-slate-900">No whim selected</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Select a whim from the sidebar or save a conversation using /save or /whim
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* AI Chat Sidebar */}
+        {selectedWhim && (
+          <AIChatSidebar
+            whimId={selectedWhim.id}
+            whimContent={selectedWhim.content}
+            selectedText={selectedText}
+            selectionRange={selectionRange}
+            isOpen={aiSidebarOpen}
+            onClose={handleCloseAIChat}
+            onApplyEdit={handleApplyEdit}
+          />
         )}
       </div>
     </div>

@@ -13,13 +13,28 @@ export async function GET(req: NextRequest) {
       return new Response("Unauthorized", { status: 401 });
     }
 
-    const conversationsSnapshot = await db
+    // Check for whimId filter
+    const { searchParams } = new URL(req.url);
+    const whimId = searchParams.get('whimId');
+
+    let query = db
       .collection(COLLECTIONS.CONVERSATIONS)
-      .where("user_id", "==", session.user.id)
+      .where("user_id", "==", session.user.id);
+
+    if (whimId) {
+      // Filter by whimId for whim-specific conversations
+      query = query.where("whimId", "==", whimId);
+    } else {
+      // For regular chat, exclude whim conversations
+      // Note: This requires a composite index or we filter client-side
+      // For now, we'll filter in memory
+    }
+
+    const conversationsSnapshot = await query
       .orderBy("updated_at", "desc")
       .get();
 
-    const conversations = conversationsSnapshot.docs.map((doc) => {
+    let conversations = conversationsSnapshot.docs.map((doc) => {
       const data = doc.data();
       return {
         id: doc.id,
@@ -28,10 +43,18 @@ export async function GET(req: NextRequest) {
         model: data.model,
         created_at: data.created_at.toDate().toISOString(),
         updated_at: data.updated_at.toDate().toISOString(),
+        type: data.type || 'chat',
+        whimId: data.whimId,
+        whimContext: data.whimContext,
       };
     });
 
-    return Response.json(conversations);
+    // If no whimId filter, exclude whim conversations from regular chat list
+    if (!whimId) {
+      conversations = conversations.filter(c => c.type !== 'whim');
+    }
+
+    return Response.json({ conversations });
   } catch (error) {
     console.error("Error fetching conversations:", error);
     return new Response("Internal server error", { status: 500 });
@@ -47,15 +70,27 @@ export async function POST(req: NextRequest) {
       return new Response("Unauthorized", { status: 401 });
     }
 
-    const { title } = await req.json();
+    const { title, type, whimId, whimContext } = await req.json();
 
-    const conversationRef = await db.collection(COLLECTIONS.CONVERSATIONS).add({
+    // Build conversation data
+    const conversationData: Record<string, unknown> = {
       user_id: session.user.id,
-      title: title || "New Conversation",
+      title: title || (type === 'whim' ? "Whim Assistant" : "New Conversation"),
       model: MODEL_NAME,
       created_at: new Date(),
       updated_at: new Date(),
-    });
+      type: type || 'chat',
+    };
+
+    // Add whim-specific fields if provided
+    if (whimId) {
+      conversationData.whimId = whimId;
+    }
+    if (whimContext) {
+      conversationData.whimContext = whimContext;
+    }
+
+    const conversationRef = await db.collection(COLLECTIONS.CONVERSATIONS).add(conversationData);
 
     return Response.json({
       id: conversationRef.id,

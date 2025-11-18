@@ -97,8 +97,9 @@ export default function ChatPage() {
       const response = await fetch("/api/conversations");
       if (response.ok) {
         const data = await response.json();
+        const convList = data.conversations || [];
         setConversations(
-          data.map((conv: any) => ({
+          convList.map((conv: any) => ({
             ...conv,
             created_at: new Date(conv.created_at),
             updated_at: new Date(conv.updated_at),
