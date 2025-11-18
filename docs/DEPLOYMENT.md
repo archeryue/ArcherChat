@@ -1,6 +1,6 @@
-# ArcherChat Deployment Guide
+# WhimCraft Deployment Guide
 
-This guide covers deploying ArcherChat to Google Cloud Run for production use.
+This guide covers deploying WhimCraft to Google Cloud Run for production use.
 
 ## 🔴 CRITICAL: Production URL & Authentication
 
@@ -417,4 +417,4 @@ For issues or questions:
 
 ## License
 
-This deployment guide is part of the ArcherChat project.
+This deployment guide is part of the WhimCraft project.

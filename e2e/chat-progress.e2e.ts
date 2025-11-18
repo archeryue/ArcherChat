@@ -34,8 +34,8 @@ test.describe('Chat Progress Tracking', () => {
   test('should display homepage elements', async ({ page }) => {
     await page.goto('/');
 
-    // The page title should contain "ArcherChat"
-    await expect(page).toHaveTitle(/ArcherChat/);
+    // The page title should contain "WhimCraft"
+    await expect(page).toHaveTitle(/WhimCraft/);
   });
 });
 

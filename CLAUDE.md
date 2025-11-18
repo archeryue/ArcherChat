@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Philosophy
 
-**Mission**: Build a clean, professional AI chatbot that serves both English and Chinese-speaking family members with intelligent memory and personalization.
+**Mission**: Build a clean, professional AI agent that serves both English and Chinese-speaking family members with intelligent memory, personalization, and agentic capabilities.
 
 ## Essential Commands
 
@@ -99,7 +99,7 @@ npm run test:e2e:debug         # Debug mode with inspector
 - Create a feature branch
 - Make changes and push
 - CI runs automatically (no PR needed)
-- View results at: `https://github.com/archeryue/ArcherChat/actions`
+- View results at: `https://github.com/archeryue/WhimCraft/actions`
 - Create PR to merge to `main` → Branch protection enforces all checks
 
 ### Git Workflow (develop → main):

@@ -1,7 +1,7 @@
-# ArcherChat - AI Chatbot Design Document
+# WhimCraft - AI Agent Design Document
 
 ## Overview
-ArcherChat is a bilingual (English/Chinese) AI chatbot with advanced memory and personalization features, powered by Google's Gemini 2.5 Flash. The application features Google Account authentication with whitelist-based access control, automatic memory extraction, native image generation, and intelligent conversation personalization.
+WhimCraft is a bilingual (English/Chinese) AI agent with advanced memory, personalization, and agentic capabilities, powered by Google's Gemini 2.5 Flash. The application features Google Account authentication with whitelist-based access control, automatic memory extraction, native image generation, and intelligent conversation personalization.
 
 **Key Features:**
 - 🧠 **Intelligent Memory System**: Automatic extraction and tiered retention (CORE/IMPORTANT/CONTEXT)
@@ -111,7 +111,7 @@ ArcherChat is a bilingual (English/Chinese) AI chatbot with advanced memory and 
 
 ### Memory System Architecture
 
-ArcherChat includes an intelligent memory system that learns from conversations and provides personalized responses.
+WhimCraft includes an intelligent memory system that learns from conversations and provides personalized responses.
 
 **Hybrid Triggering:**
 - **Keyword-based**: Immediate extraction when user says "remember that", "my name is", etc. (138 triggers)
@@ -226,7 +226,7 @@ Admin-configurable system prompts stored in Firestore.
 
 **Status**: ✅ IMPLEMENTED (2025-11-17)
 
-ArcherChat uses the ReAct (Reason-Act-Observe) pattern for autonomous AI behavior.
+WhimCraft uses the ReAct (Reason-Act-Observe) pattern for autonomous AI behavior.
 
 **Feature Flag**: `NEXT_PUBLIC_USE_AGENTIC_MODE=true`
 

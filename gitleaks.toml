@@ -1,7 +1,7 @@
-# Gitleaks configuration for ArcherChat
+# Gitleaks configuration for WhimCraft
 # This file defines what secrets to detect in commits
 
-title = "ArcherChat Gitleaks Configuration"
+title = "WhimCraft Gitleaks Configuration"
 
 [extend]
 useDefault = true

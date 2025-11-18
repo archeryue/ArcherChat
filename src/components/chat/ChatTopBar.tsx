@@ -34,9 +34,9 @@ export function ChatTopBar({
       {/* Logo/Title */}
       <div className="flex items-center gap-2">
         <Target className="w-7 h-7 text-blue-600" strokeWidth={1.5} />
-        <h1 className="text-base font-bold">
-          <span className="text-blue-600">Archer</span>
-          <span className="text-slate-800">Chat</span>
+        <h1 className="text-base font-bold italic">
+          <span className="text-blue-600">Whim</span>
+          <span className="text-slate-800">Craft</span>
         </h1>
       </div>
 

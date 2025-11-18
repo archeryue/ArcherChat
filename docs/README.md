@@ -1,6 +1,6 @@
-# ArcherChat Documentation
+# WhimCraft Documentation
 
-This directory contains comprehensive documentation for ArcherChat, a bilingual AI chatbot with advanced memory and personalization features.
+This directory contains comprehensive documentation for WhimCraft, a bilingual AI agent with advanced memory, personalization, and agentic capabilities.
 
 ## 📚 Documentation Files
 
@@ -225,7 +225,7 @@ Tracks:
 **Purpose**: Central tracker for future work and nice-to-have features
 
 ### 🔌 [ADDING_PROVIDERS.md](./ADDING_PROVIDERS.md)
-**Guide for extending ArcherChat with additional AI providers.**
+**Guide for extending WhimCraft with additional AI providers.**
 
 Learn how to:
 - Implement the IAIProvider interface
@@ -240,7 +240,7 @@ Learn how to:
 
 ## 🚀 Quick Start
 
-1. **New to ArcherChat?** Start with [../README.md](../README.md) for local setup
+1. **New to WhimCraft?** Start with [../README.md](../README.md) for local setup
 2. **Understanding the system?** Read [DESIGN.md](./DESIGN.md)
 3. **Planning agentic refactor?** See [AGENTIC_ARCHITECTURE.md](./AGENTIC_ARCHITECTURE.md)
 4. **Ready to deploy?** Follow [DEPLOYMENT.md](./DEPLOYMENT.md)

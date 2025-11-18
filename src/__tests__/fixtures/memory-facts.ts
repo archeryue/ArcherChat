@@ -77,7 +77,7 @@ export const importantFact2: MemoryFact = {
 // Context tier facts
 export const contextFact1: MemoryFact = {
   id: 'fact-context-001',
-  content: 'Currently working on ArcherChat project',
+  content: 'Currently working on WhimCraft project',
   category: 'project' as MemoryCategory,
   tier: 'context' as MemoryTier,
   confidence: 0.8,
@@ -86,7 +86,7 @@ export const contextFact1: MemoryFact = {
   use_count: 15,
   expires_at: new Date('2025-02-04T00:00:00Z'), // 30 days
   auto_extracted: true,
-  keywords: ['archerchat', 'project'],
+  keywords: ['whimcraft', 'project'],
   source: 'AI analysis',
 };
 

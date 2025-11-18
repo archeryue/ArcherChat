@@ -36,7 +36,7 @@ If Gitleaks is not detecting secrets, check these first:
 
 2. **File Must Be in Repository Root**
    ```
-   ArcherChat/
+   WhimCraft/
    ├── gitleaks.toml          ✅ Correct location
    ├── .github/
    │   └── gitleaks.toml      ❌ Wrong location
@@ -293,7 +293,7 @@ Use online regex testers:
 Current working configuration in `gitleaks.toml`:
 
 ```toml
-title = "ArcherChat Gitleaks Configuration"
+title = "WhimCraft Gitleaks Configuration"
 
 [extend]
 useDefault = true  # Use Gitleaks built-in rules + our custom ones

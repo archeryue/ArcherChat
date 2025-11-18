@@ -4,7 +4,7 @@
 
 **Status**: ✅ **IMPLEMENTED** (2025-11-17)
 
-This document describes ArcherChat's agentic architecture using the ReAct (Reason-Act-Observe) pattern.
+This document describes WhimCraft's agentic architecture using the ReAct (Reason-Act-Observe) pattern.
 
 **Feature Flag**: `NEXT_PUBLIC_USE_AGENTIC_MODE=true`
 

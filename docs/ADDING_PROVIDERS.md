@@ -1,10 +1,10 @@
 # Adding New AI Providers
 
-This guide explains how to add support for new AI providers to ArcherChat.
+This guide explains how to add support for new AI providers to WhimCraft.
 
 ## Architecture Overview
 
-ArcherChat uses a provider abstraction layer to support three types of AI providers:
+WhimCraft uses a provider abstraction layer to support three types of AI providers:
 - **gemini** - Google Gemini API
 - **openai** - OpenAI API (GPT models)
 - **inhouse** - Self-hosted models (Ollama, LM Studio, etc.)

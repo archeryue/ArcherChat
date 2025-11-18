@@ -145,7 +145,7 @@ Technical Context:
 - Prefers us-central1 region
 
 Current Work:
-- Building ArcherChat application
+- Building WhimCraft application
 - Implementing memory system
 - Deploying to Cloud Run
 ```
@@ -190,7 +190,7 @@ For 1000 messages/month: **~$1.40 additional cost** (included in $2-5/month esti
 1. **Start a conversation** about yourself:
    ```
    "Hi! I'm Archer, a software engineer. I prefer TypeScript
-   and I'm currently building an AI chatbot."
+   and I'm currently building an AI agent."
    ```
 
 2. **Chat for a few messages** (>5 messages, >2 minutes)
