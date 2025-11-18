@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import { ConversationClient } from "@/types";
 import { ConversationList } from "./ConversationList";
 import { Button } from "@/components/ui/button";
@@ -21,10 +22,46 @@ export function ChatSidebar({
   onSelectConversation,
   onDeleteConversation,
 }: ChatSidebarProps) {
+  const [sidebarWidth, setSidebarWidth] = useState(256);
+  const [isResizing, setIsResizing] = useState(false);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      const newWidth = e.clientX;
+      if (newWidth >= 200 && newWidth <= 400) {
+        setSidebarWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing]);
+
   return (
-    <div className="w-64 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col h-full">
+    <div
+      ref={sidebarRef}
+      className="flex-shrink-0 bg-white border-r border-slate-200 flex flex-col h-full relative"
+      style={{ width: `${sidebarWidth}px` }}
+    >
       {/* Header */}
-      <div className="p-4 border-b border-slate-200 space-y-2">
+      <div className="p-4 border-b border-slate-200 space-y-2 select-none cursor-default">
         <Button
           onClick={onNewConversation}
           variant="outline"
@@ -55,6 +92,12 @@ export function ChatSidebar({
           onDeleteConversation={onDeleteConversation}
         />
       </div>
+
+      {/* Resize Handle */}
+      <div
+        className="absolute top-0 right-0 w-1 h-full cursor-ew-resize hover:bg-blue-400 bg-transparent transition-colors"
+        onMouseDown={() => setIsResizing(true)}
+      />
     </div>
   );
 }

@@ -19,32 +19,28 @@ export function ConversationList({
   onDeleteConversation,
 }: ConversationListProps) {
   return (
-    <div className="space-y-1">
+    <div className="space-y-0.5">
       {conversations.map((conversation) => (
         <div
           key={conversation.id}
           className={cn(
-            "group flex items-center gap-3 px-3 py-3 rounded-lg cursor-pointer transition-all duration-200",
+            "group relative px-3 py-1.5 rounded-lg cursor-pointer transition-all duration-200",
             activeConversationId === conversation.id
               ? "bg-blue-50 text-blue-900 shadow-sm"
               : "hover:bg-slate-50"
           )}
           onClick={() => onSelectConversation(conversation.id)}
         >
-          <MessageSquare className={cn(
-            "w-4 h-4 flex-shrink-0 transition-colors",
-            activeConversationId === conversation.id ? "text-blue-600" : "text-slate-400"
-          )} />
-          <div className="flex-1 min-w-0">
+          <div className="pr-2">
             <p className="text-sm font-medium truncate leading-snug">{conversation.title}</p>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
               {new Date(conversation.updated_at).toLocaleDateString()}
             </p>
           </div>
           <Button
             variant="ghost"
             size="icon"
-            className="opacity-0 group-hover:opacity-100 h-7 w-7 hover:bg-red-50 transition-all"
+            className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 h-7 w-7 hover:bg-red-50 transition-all"
             onClick={(e) => {
               e.stopPropagation();
               onDeleteConversation(conversation.id);

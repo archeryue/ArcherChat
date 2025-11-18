@@ -30,7 +30,7 @@ export function ChatTopBar({
   const [imageError, setImageError] = useState(false);
 
   return (
-    <div className="bg-white border-b border-slate-200 px-4 py-1 flex items-center justify-between shadow-sm">
+    <div className="bg-white border-b border-slate-200 px-4 py-1 flex items-center justify-between shadow-sm select-none cursor-default">
       {/* Logo/Title */}
       <div className="flex items-center gap-2">
         <Target className="w-7 h-7 text-blue-600" strokeWidth={1.5} />
@@ -78,7 +78,7 @@ export function ChatTopBar({
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <Link href="/admin" className="flex items-center cursor-pointer">
+                <Link href="/admin?from=chat" className="flex items-center cursor-pointer">
                   <Settings className="w-4 h-4 mr-2" />
                   Admin Panel
                 </Link>

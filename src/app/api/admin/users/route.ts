@@ -19,24 +19,44 @@ export async function GET(req: NextRequest) {
       .orderBy("last_login", "desc")
       .get();
 
+    // Get all conversations in one query
+    const allConversationsSnapshot = await db
+      .collection(COLLECTIONS.CONVERSATIONS)
+      .get();
+
+    // Group conversations by user_id
+    const conversationsByUser = new Map<string, string[]>();
+    for (const convDoc of allConversationsSnapshot.docs) {
+      const userId = convDoc.data().user_id;
+      if (!conversationsByUser.has(userId)) {
+        conversationsByUser.set(userId, []);
+      }
+      conversationsByUser.get(userId)!.push(convDoc.id);
+    }
+
+    // Count messages for each user using aggregation queries in parallel
     const userStats = await Promise.all(
       usersSnapshot.docs.map(async (userDoc) => {
         const userData = userDoc.data();
-
-        // Count messages for this user
-        const conversationsSnapshot = await db
-          .collection(COLLECTIONS.CONVERSATIONS)
-          .where("user_id", "==", userDoc.id)
-          .get();
+        const userConvIds = conversationsByUser.get(userDoc.id) || [];
 
         let totalMessages = 0;
 
-        for (const convDoc of conversationsSnapshot.docs) {
-          const messagesSnapshot = await convDoc.ref
-            .collection(COLLECTIONS.MESSAGES)
-            .where("role", "==", "user")
-            .get();
-          totalMessages += messagesSnapshot.size;
+        // Use Promise.all to count messages in parallel (batched)
+        if (userConvIds.length > 0) {
+          const messageCounts = await Promise.all(
+            userConvIds.map(async (convId) => {
+              const countSnapshot = await db
+                .collection(COLLECTIONS.CONVERSATIONS)
+                .doc(convId)
+                .collection(COLLECTIONS.MESSAGES)
+                .where("role", "==", "user")
+                .count()
+                .get();
+              return countSnapshot.data().count;
+            })
+          );
+          totalMessages = messageCounts.reduce((sum, count) => sum + count, 0);
         }
 
         return {
