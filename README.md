@@ -4,15 +4,17 @@ A bilingual (English/Chinese) AI agent with advanced memory, personalization, an
 
 ## Features
 
+- 🤖 **Agentic Architecture**: ReAct (Reason-Act-Observe) pattern for autonomous AI behavior
 - 🧠 **Intelligent Memory System**: Automatic extraction with tiered retention (CORE/IMPORTANT/CONTEXT)
+- 🔍 **Web Search Integration**: Real-time web search with Google Custom Search API
+- 📊 **Progress Tracking**: Real-time visual feedback during AI response generation
 - 🎨 **Native Image Generation**: Built-in Gemini 2.5 Flash Image generation
 - 🌏 **Bilingual Support**: Full English and Chinese support (175+ keywords)
 - 📎 **File Attachments**: Upload and analyze images, PDFs with multimodal AI
-- 🤖 **AI Chat**: Streaming responses with syntax highlighting
+- 💬 **Streaming Responses**: Real-time AI chat with syntax highlighting and LaTeX support
 - 🔐 **Google OAuth**: Secure authentication with whitelist control
-- 💬 **Conversation Management**: Auto-generated titles, full history
+- 📝 **Conversation Management**: Auto-generated titles, full history
 - 👨‍💼 **Admin Panel**: User management, whitelist, prompt configuration
-- 📊 **User Statistics**: Message counts, activity tracking
 - 🎯 **Smart Personalization**: AI remembers your preferences and context
 - ⚙️ **Dynamic Prompts**: Admin-configurable system prompts
 - 🎨 **Clean UI**: Modern interface with Tailwind CSS
@@ -23,9 +25,10 @@ A bilingual (English/Chinese) AI agent with advanced memory, personalization, an
 - **Language**: TypeScript
 - **Database**: Firestore (serverless)
 - **Authentication**: NextAuth.js (Google OAuth)
-- **AI**: Google Gemini API
+- **AI**: Google Gemini API (2.5 Flash, Image, Lite)
 - **Styling**: Tailwind CSS + shadcn/ui
-- **Testing**: Jest + TypeScript (53 tests, 100% pass rate)
+- **Unit Testing**: Jest + TypeScript (145+ tests, 100% pass rate)
+- **E2E Testing**: Playwright (26 tests)
 - **Deployment**: Cloud Run (GCP)
 
 ## Local Development Setup
@@ -64,8 +67,17 @@ FIREBASE_PROJECT_ID=your-firebase-project-id
 FIREBASE_PRIVATE_KEY="your-firebase-private-key"
 FIREBASE_CLIENT_EMAIL=your-firebase-client-email
 
+# Google Custom Search (for web search feature)
+GOOGLE_SEARCH_API_KEY=your-google-search-api-key
+GOOGLE_SEARCH_ENGINE_ID=your-search-engine-id
+
 # Admin Email
 ADMIN_EMAIL=archeryue7@gmail.com
+
+# Feature Flags (optional, all default to false)
+NEXT_PUBLIC_USE_INTELLIGENT_ANALYSIS=true
+NEXT_PUBLIC_USE_WEB_SEARCH=true
+NEXT_PUBLIC_USE_AGENTIC_MODE=true
 \`\`\`
 
 ### Step 3: Get API Keys and Credentials
@@ -125,10 +137,11 @@ src/
     chat/                 # Main chat interface
     admin/                # Admin panel
     profile/              # User memory profile page
+    whim/                 # Whim management page
     login/                # Login page
     layout.tsx            # Root layout with providers
   components/
-    chat/                 # Chat components (input, message, sidebar, topbar)
+    chat/                 # Chat components (input, message, sidebar, topbar, progress)
     admin/                # Admin components (whitelist, stats, prompts)
     ui/                   # UI components (shadcn/ui)
     providers/            # Context providers
@@ -139,23 +152,42 @@ src/
     providers/            # AI provider abstraction
       provider-factory.ts
       gemini.provider.ts
+    agent/                # Agentic architecture (ReAct pattern)
+      core/               # Agent core, context manager, prompts
+      tools/              # Tool implementations (web_search, memory, etc.)
+    prompt-analysis/      # AI-powered intent analysis
+      analyzer.ts         # PromptAnalyzer using Gemini Flash Lite
+    context-engineering/  # Context orchestration
+      orchestrator.ts     # Coordinates web search, memory, model selection
+    web-search/           # Web search integration
+      google-search.ts    # Google Custom Search API client
+      rate-limiter.ts     # Per-user rate limiting
+      content-fetcher.ts  # Fetch and extract web content
+    progress/             # Progress tracking system
+      emitter.ts          # Server-side event emitter
+      types.ts            # Progress step types
     memory/               # Memory system
       storage.ts          # CRUD operations
       extractor.ts        # AI-powered extraction
       loader.ts           # Memory loading for chat
       cleanup.ts          # Automatic cleanup
-    keywords/             # Keyword trigger system
+    keywords/             # Keyword trigger system (legacy)
       system.ts
       triggers.ts
   config/
     models.ts             # Gemini model tiering
     keywords.ts           # Bilingual keywords (175+ triggers)
+    feature-flags.ts      # Feature toggles
   types/
     index.ts              # Main types
     memory.ts             # Memory system types
     prompts.ts            # Prompt types
     file.ts               # File attachment types
     ai-providers.ts       # Provider interfaces
+    agent.ts              # Agent types
+    prompt-analysis.ts    # Analysis types
+  __tests__/              # Jest unit tests (145+ tests)
+e2e/                      # Playwright E2E tests (26 tests)
 ```
 
 ## Key Features Explained
@@ -192,6 +224,31 @@ Full Chinese and English support:
 - Language preference auto-detection
 - Hybrid mode for mixed conversations
 
+### 🤖 Agentic Architecture
+
+ReAct (Reason-Act-Observe) pattern for autonomous AI:
+- **Iterative loop**: Up to 5 iterations per request
+- **Available tools**: web_search, web_fetch, memory_save, memory_retrieve, get_current_time
+- **sourceCategory**: Target reliable sources (Wikipedia, StackOverflow, Reuters, etc.)
+- Agent autonomously decides when to use tools vs respond directly
+- Enable with `NEXT_PUBLIC_USE_AGENTIC_MODE=true`
+
+### 🔍 Web Search
+
+Real-time web search integration:
+- **Provider**: Google Custom Search API
+- **Rate limits**: 20/hour, 100/day per user
+- **Content extraction**: AI-powered extraction from top 3 results
+- Conservative mode: Only triggers for time-sensitive queries
+- Enable with `NEXT_PUBLIC_USE_WEB_SEARCH=true`
+
+### 📊 Progress Tracking
+
+Real-time visual feedback during AI responses:
+- **Steps**: Analyzing → Searching → Retrieving Memory → Building Context → Generating
+- Single updating badge shows current progress
+- Server-Sent Events protocol for streaming updates
+
 ## Admin Features
 
 As an admin, you can:
@@ -221,7 +278,9 @@ For family use (5-10 users, ~1000 messages/month):
 
 ## Testing
 
-WhimCraft has comprehensive Jest + TypeScript test coverage:
+WhimCraft has comprehensive test coverage with Jest (unit) and Playwright (E2E).
+
+### Unit Tests (Jest + TypeScript)
 
 ```bash
 # Run all tests
@@ -237,11 +296,33 @@ npx jest src/__tests__/lib/memory/cleanup.test.ts
 npx jest --watch
 ```
 
-**Current Status**: 53/53 tests passing (100% pass rate)
-- Memory cleanup (14 tests)
-- Memory extraction (11 tests)
-- Memory loading (17 tests)
-- Storage helpers (11 tests)
+**Current Status**: 145+ tests passing (100% pass rate)
+- Memory system (42 tests): cleanup, extraction, loading, storage
+- Agent system (58 tests): core, tools, context manager
+- Web search (6 tests): search, rate limiting
+- Context orchestration (8 tests)
+- Prompt analysis (31 tests)
+
+### E2E Tests (Playwright)
+
+```bash
+# Run all E2E tests (headless)
+npm run test:e2e
+
+# Interactive UI mode
+npm run test:e2e:ui
+
+# Run with visible browser
+npm run test:e2e:headed
+
+# Debug mode with inspector
+npm run test:e2e:debug
+```
+
+**Current Status**: 26 tests (22 passed, 2 minor failures, 2 skipped)
+- Application basics, login page, performance
+- SEO, accessibility, error handling
+- Progress tracking (requires auth)
 
 See [docs/TESTING_PLAN.md](./docs/TESTING_PLAN.md) for detailed testing strategy.
 
