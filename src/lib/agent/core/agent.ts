@@ -190,6 +190,8 @@ export class Agent {
 
     // Retry up to 2 times if parsing fails
     const maxRetries = 2;
+    let lastResponse = '';
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       // Generate reasoning
       const response = await provider.generateResponse(
@@ -201,6 +203,7 @@ export class Agent {
 
       // Update token usage
       this.state.totalTokens += response.usage?.totalTokens || 0;
+      lastResponse = response.content;
 
       // Parse the response to extract reasoning and actions
       const parsed = this.parseReasoning(response.content);
@@ -225,8 +228,14 @@ export class Agent {
       }
     }
 
-    // If all retries failed, throw an error
-    throw new Error('Failed to parse agent response after multiple retries. The model did not output valid JSON format.');
+    // Fallback: treat raw text as response (more resilient than throwing error)
+    console.log('[Agent] All retries failed, using raw text as fallback response');
+    return {
+      thinking: '',
+      action: 'respond',
+      toolCalls: [],
+      response: lastResponse,
+    };
   }
 
   /**
