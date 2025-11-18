@@ -188,25 +188,52 @@ export class Agent {
       });
     }
 
-    // Generate reasoning
-    const response = await provider.generateResponse(
-      messages,
-      systemPrompt,
-      this.config.temperature,
-      input.files
-    );
+    // Retry up to 2 times if parsing fails
+    const maxRetries = 2;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      // Generate reasoning
+      const response = await provider.generateResponse(
+        messages,
+        systemPrompt,
+        this.config.temperature,
+        input.files
+      );
 
-    // Update token usage
-    this.state.totalTokens += response.usage?.totalTokens || 0;
+      // Update token usage
+      this.state.totalTokens += response.usage?.totalTokens || 0;
 
-    // Parse the response to extract reasoning and actions
-    return this.parseReasoning(response.content);
+      // Parse the response to extract reasoning and actions
+      const parsed = this.parseReasoning(response.content);
+
+      if (parsed) {
+        return parsed;
+      }
+
+      // Log retry attempt
+      console.log(`[Agent] Failed to parse response (attempt ${attempt}/${maxRetries}), retrying...`);
+
+      // Add a hint message for retry
+      if (attempt < maxRetries) {
+        messages.push({
+          role: 'assistant',
+          content: response.content,
+        });
+        messages.push({
+          role: 'user',
+          content: 'Your response was not in valid JSON format. Please respond with valid JSON in the format specified (either with ```json code blocks or as a raw JSON object with "thinking", "action", etc. fields).',
+        });
+      }
+    }
+
+    // If all retries failed, throw an error
+    throw new Error('Failed to parse agent response after multiple retries. The model did not output valid JSON format.');
   }
 
   /**
    * Parse LLM response into structured reasoning
+   * Returns null if parsing fails (caller should retry)
    */
-  private parseReasoning(content: string): AgentReasoning {
+  private parseReasoning(content: string): AgentReasoning | null {
     // Try to extract JSON from code blocks first
     const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/);
 
@@ -278,13 +305,8 @@ export class Agent {
       };
     }
 
-    // Default: treat entire response as final answer
-    return {
-      thinking: '',
-      action: 'respond',
-      toolCalls: [],
-      response: content,
-    };
+    // Default: return null to indicate parsing failed (caller should retry)
+    return null;
   }
 
   /**
