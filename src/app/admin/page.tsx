@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { WhitelistManager } from "@/components/admin/WhitelistManager";
 import { UserStats } from "@/components/admin/UserStats";
 import { PromptManager } from "@/components/admin/PromptManager";
@@ -18,12 +18,19 @@ type Tab = "whitelist" | "users" | "prompts" | "utilities";
 export default function AdminPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const from = searchParams.get("from");
+  const [from, setFrom] = useState<string | null>(null);
+
+  // Get 'from' parameter on client side
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setFrom(params.get("from"));
+  }, []);
   const [activeTab, setActiveTab] = useState<Tab>("prompts");
   const [whitelist, setWhitelist] = useState<WhitelistEntryClient[]>([]);
   const [userStats, setUserStats] = useState<UserStatsType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [usersLoaded, setUsersLoaded] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -31,17 +38,15 @@ export default function AdminPage() {
     } else if (status === "authenticated" && !session?.user.isAdmin) {
       router.push("/chat");
     } else if (status === "authenticated" && session?.user.isAdmin) {
-      loadData();
+      loadInitialData();
     }
   }, [status, session, router]);
 
-  const loadData = async () => {
+  // Load only whitelist initially (fast)
+  const loadInitialData = async () => {
     setIsLoading(true);
     try {
-      const [whitelistRes, usersRes] = await Promise.all([
-        fetch("/api/admin/whitelist"),
-        fetch("/api/admin/users"),
-      ]);
+      const whitelistRes = await fetch("/api/admin/whitelist");
 
       if (whitelistRes.ok) {
         const data = await whitelistRes.json();
@@ -52,6 +57,20 @@ export default function AdminPage() {
           }))
         );
       }
+    } catch (error) {
+      console.error("Failed to load admin data:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Lazy load user stats when users tab is selected
+  const loadUserStats = async () => {
+    if (usersLoaded || isLoadingUsers) return;
+
+    setIsLoadingUsers(true);
+    try {
+      const usersRes = await fetch("/api/admin/users");
 
       if (usersRes.ok) {
         const data = await usersRes.json();
@@ -61,12 +80,25 @@ export default function AdminPage() {
             last_active: new Date(user.last_active),
           }))
         );
+        setUsersLoaded(true);
       }
     } catch (error) {
-      console.error("Failed to load admin data:", error);
+      console.error("Failed to load user stats:", error);
     } finally {
-      setIsLoading(false);
+      setIsLoadingUsers(false);
     }
+  };
+
+  // Load user stats when tab is selected
+  useEffect(() => {
+    if (activeTab === "users" && !usersLoaded && !isLoadingUsers) {
+      loadUserStats();
+    }
+  }, [activeTab, usersLoaded, isLoadingUsers]);
+
+  const loadData = async () => {
+    await loadInitialData();
+    setUsersLoaded(false); // Reset to allow reload
   };
 
   if (status === "loading" || isLoading) {
@@ -78,9 +110,9 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="h-full flex flex-col bg-slate-50">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 shadow-sm">
+      <header className="flex-shrink-0 bg-white border-b border-slate-200 shadow-sm select-none cursor-default">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -108,7 +140,8 @@ export default function AdminPage() {
       </header>
 
       {/* Content */}
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main className="flex-1 overflow-y-auto">
+        <div className="max-w-7xl mx-auto px-4 pt-2 pb-4">
         {/* Tabs */}
         <div className="border-b border-slate-200 mb-6">
           <nav className="-mb-px flex space-x-8">
@@ -161,8 +194,15 @@ export default function AdminPage() {
           {activeTab === "whitelist" && (
             <WhitelistManager initialWhitelist={whitelist} onUpdate={loadData} />
           )}
-          {activeTab === "users" && <UserStats users={userStats} />}
+          {activeTab === "users" && (
+            isLoadingUsers ? (
+              <div className="text-center py-8 text-slate-500">Loading user statistics...</div>
+            ) : (
+              <UserStats users={userStats} />
+            )
+          )}
           {activeTab === "utilities" && <AdminUtilities />}
+        </div>
         </div>
       </main>
     </div>
