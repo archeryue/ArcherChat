@@ -216,6 +216,16 @@ export async function POST(req: NextRequest) {
           if (isAgenticModeEnabled()) {
             console.log('[Chat API] Using agentic mode');
 
+            // Send initial progress event immediately so UI shows feedback
+            const initialProgressEvent: ProgressEvent = {
+              step: ProgressStep.ANALYZING_PROMPT,
+              status: 'started',
+              message: 'Analyzing your question...',
+              timestamp: Date.now(),
+            };
+            const initialProgressLine = `[PROGRESS]${JSON.stringify(initialProgressEvent)}\n`;
+            controller.enqueue(encoder.encode(initialProgressLine));
+
             // Create agent with user context
             const agent = createAgent({
               userId: session.user.id,
@@ -247,6 +257,10 @@ export async function POST(req: NextRequest) {
                 case 'observation':
                   progressStep = ProgressStep.BUILDING_CONTEXT;
                   progressMessage = 'Processing results...';
+                  break;
+                case 'tool_results':
+                  progressStep = ProgressStep.BUILDING_CONTEXT;
+                  progressMessage = 'Tool results received';
                   break;
                 case 'response':
                   progressStep = ProgressStep.GENERATING_RESPONSE;
