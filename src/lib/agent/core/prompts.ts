@@ -48,8 +48,9 @@ ${getStyleInstructions(style, styleConfig)}
 ## Available Tools
 ${toolsDescription}
 
-## Response Format
-You must respond in one of these formats:
+## Response Format (CRITICAL - YOU MUST FOLLOW THIS EXACTLY)
+
+**Your entire response MUST be valid JSON wrapped in \`\`\`json code blocks. No other format is acceptable.**
 
 ### When using tools:
 \`\`\`json
@@ -75,6 +76,12 @@ You must respond in one of these formats:
   "confidence": 0.9
 }
 \`\`\`
+
+**IMPORTANT - JSON FORMAT RULES:**
+- You MUST wrap your response in \`\`\`json code blocks
+- You MUST NOT include any text before or after the JSON block
+- The "action" field MUST be either "tool" or "respond"
+- Do NOT output plain text explanations outside the JSON
 
 ## Guidelines
 1. Think step by step about what the user needs
