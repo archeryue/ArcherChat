@@ -184,11 +184,36 @@ describe('Agent', () => {
   });
 
   describe('parseReasoning', () => {
-    it('handles plain text response as final answer', async () => {
+    it('throws error after retries when model outputs invalid JSON', async () => {
+      // Mock returns plain text twice (retry fails both times)
       mockGenerateResponse.mockResolvedValue({
         content: 'Just a plain text response without JSON',
         usage: { totalTokens: 20 },
       });
+
+      const agent = new Agent(mockConfig);
+
+      await expect(agent.run({
+        message: 'Test',
+        conversationHistory: [],
+      })).rejects.toThrow('Failed to parse agent response after multiple retries');
+    });
+
+    it('succeeds on retry when model corrects to valid JSON', async () => {
+      // First call: invalid format, second call: valid JSON
+      mockGenerateResponse
+        .mockResolvedValueOnce({
+          content: 'Plain text that will fail parsing',
+          usage: { totalTokens: 20 },
+        })
+        .mockResolvedValueOnce({
+          content: '```json\n' + JSON.stringify({
+            thinking: 'Corrected format',
+            action: 'respond',
+            response: 'Valid response after retry',
+          }) + '\n```',
+          usage: { totalTokens: 30 },
+        });
 
       const agent = new Agent(mockConfig);
 
@@ -197,7 +222,9 @@ describe('Agent', () => {
         conversationHistory: [],
       });
 
-      expect(result.response).toBe('Just a plain text response without JSON');
+      expect(result.response).toBe('Valid response after retry');
+      // Should have called generateResponse twice
+      expect(mockGenerateResponse).toHaveBeenCalledTimes(2);
     });
   });
 
