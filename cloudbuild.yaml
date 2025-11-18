@@ -7,6 +7,8 @@ steps:
       - 'NEXT_PUBLIC_USE_INTELLIGENT_ANALYSIS=true'
       - '--build-arg'
       - 'NEXT_PUBLIC_USE_WEB_SEARCH=true'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_USE_AGENTIC_MODE=true'
       - '-t'
       - 'us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:latest'
       - '.'
@@ -20,7 +22,7 @@ steps:
       - '--image=us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:latest'
       - '--region=us-central1'
       - '--platform=managed'
-      - '--update-env-vars=NEXT_PUBLIC_USE_INTELLIGENT_ANALYSIS=true,NEXT_PUBLIC_USE_WEB_SEARCH=true'
+      - '--update-env-vars=NEXT_PUBLIC_USE_INTELLIGENT_ANALYSIS=true,NEXT_PUBLIC_USE_WEB_SEARCH=true,NEXT_PUBLIC_USE_AGENTIC_MODE=true'
 
 images:
   - 'us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:latest'
