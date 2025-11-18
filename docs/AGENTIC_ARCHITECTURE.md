@@ -1708,6 +1708,53 @@ src/app/admin/
 
 ---
 
+## Tool Improvement Roadmap
+
+Future enhancements planned for each tool. Check items as they are implemented.
+
+### web_search
+- [ ] Add more sourceCategories (news, health, legal, sports)
+- [ ] Implement search result caching (reduce API calls for repeated queries)
+- [ ] Add date range filtering (recent, past week, past month)
+- [ ] Support for image/video search results
+- [ ] Query reformulation on zero results
+
+### web_fetch
+- [ ] Handle JavaScript-rendered pages (headless browser fallback)
+- [ ] Add retry logic with exponential backoff for 403/429 errors
+- [ ] Implement content summarization tiers (brief/detailed/full)
+- [ ] Support PDF and document extraction
+- [ ] Cache fetched content with TTL
+
+### memory_retrieve
+- [ ] Add semantic similarity search (vector embeddings)
+- [ ] Implement memory importance scoring based on usage patterns
+- [ ] Cross-conversation memory linking
+- [ ] Memory relevance decay over time
+- [ ] Fuzzy keyword matching
+
+### memory_save
+- [ ] Automatic fact merging for duplicates
+- [ ] Conflict detection with existing facts
+- [ ] Source attribution improvements
+- [ ] Batch save optimization
+- [ ] Memory validation rules (prevent saving nonsensical facts)
+
+### get_current_time
+- [ ] Add calendar event context (if calendar integration added)
+- [ ] Support for relative time calculations ("3 days from now")
+- [ ] Multiple timezone comparison
+- [ ] Holiday/business day awareness
+
+### Agent Core
+- [ ] Parallel tool execution for independent calls
+- [ ] Tool result streaming (show progress as tools complete)
+- [ ] Adaptive iteration limits based on query complexity
+- [ ] Cost prediction before execution
+- [ ] User preference learning for tool selection
+
+---
+
 **Document Version**: 2.0
 **Created**: 2024-11-17
 **Updated**: 2025-11-17 (Implemented and enhanced with sourceCategory)
