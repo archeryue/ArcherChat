@@ -352,10 +352,10 @@ export default function ChatPage() {
         {/* Main Chat Area */}
         <div className="flex-1 min-w-0 flex flex-col">
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto bg-slate-50">
+          <div className="flex-1 overflow-y-auto bg-slate-50 cursor-default">
             {messages.length === 0 ? (
               <div className="flex items-center justify-center h-full">
-                <div className="text-center space-y-4 px-6">
+                <div className="text-center space-y-4 px-6 select-none">
                   <div className="text-6xl mb-2">💬</div>
                   <h2 className="text-2xl font-bold">
                     Welcome to <span className="text-blue-600">Whim</span><span className="text-slate-900">Craft</span>

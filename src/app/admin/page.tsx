@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { WhitelistManager } from "@/components/admin/WhitelistManager";
 import { UserStats } from "@/components/admin/UserStats";
 import { PromptManager } from "@/components/admin/PromptManager";
@@ -18,6 +18,8 @@ type Tab = "whitelist" | "users" | "prompts" | "utilities";
 export default function AdminPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const from = searchParams.get("from");
   const [activeTab, setActiveTab] = useState<Tab>("prompts");
   const [whitelist, setWhitelist] = useState<WhitelistEntryClient[]>([]);
   const [userStats, setUserStats] = useState<UserStatsType[]>([]);
@@ -82,10 +84,10 @@ export default function AdminPage() {
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Link href="/chat">
+              <Link href={from === "whim" ? "/whim" : "/chat"}>
                 <Button variant="ghost" size="sm">
                   <ArrowLeft className="w-4 h-4 mr-2" />
-                  Back to Chat
+                  {from === "whim" ? "Back to Whims" : "Back to Chat"}
                 </Button>
               </Link>
               <h1 className="text-2xl font-bold text-slate-900">Admin Panel</h1>

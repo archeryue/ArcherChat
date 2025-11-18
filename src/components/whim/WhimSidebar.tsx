@@ -1,7 +1,18 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { signOut } from 'next-auth/react';
+import Link from 'next/link';
+import Image from 'next/image';
 import { WhimClient, FolderClient } from '@/types/whim';
+import { LogOut, Settings, Brain, MessageSquare } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface WhimSidebarProps {
   whims: WhimClient[];
@@ -11,6 +22,10 @@ interface WhimSidebarProps {
   onFolderCreate: (name: string) => void;
   onFolderUpdate: (folderId: string, name: string) => void;
   onFolderDelete: (folderId: string) => void;
+  userName?: string;
+  userEmail?: string;
+  userAvatar?: string;
+  isAdmin?: boolean;
 }
 
 export function WhimSidebar({
@@ -21,6 +36,9 @@ export function WhimSidebar({
   onFolderCreate,
   onFolderUpdate,
   onFolderDelete,
+  userName,
+  userAvatar,
+  isAdmin,
 }: WhimSidebarProps) {
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -29,6 +47,7 @@ export function WhimSidebar({
   const [editingFolderName, setEditingFolderName] = useState('');
   const [sidebarWidth, setSidebarWidth] = useState(256); // Default width in pixels
   const [isResizing, setIsResizing] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
   // Group whims by folder
@@ -100,7 +119,7 @@ export function WhimSidebar({
       style={{ width: `${sidebarWidth}px` }}
     >
       {/* Main Title */}
-      <div className="px-6 py-3 border-b border-slate-200">
+      <div className="px-6 py-3 border-b border-slate-200 select-none cursor-default">
         <h1 className="text-2xl font-semibold text-blue-600 italic m-0 p-0">Whims</h1>
         <p className="text-xs text-slate-500 mt-1">
           Your saved conversations and notes
@@ -272,6 +291,67 @@ export function WhimSidebar({
             </div>
           );
         })}
+      </div>
+
+      {/* Bottom Section - Chat Link & Profile */}
+      <div className="border-t border-slate-200 p-3 space-y-2">
+        {/* Back to Chat */}
+        <Link href="/chat" className="block">
+          <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+            <MessageSquare className="w-4 h-4" />
+            Back to Chat
+          </button>
+        </Link>
+
+        {/* Profile Dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors">
+              {userAvatar && !imageError ? (
+                <Image
+                  src={userAvatar}
+                  alt={userName || "User"}
+                  width={24}
+                  height={24}
+                  className="w-6 h-6 rounded-full"
+                  onError={() => setImageError(true)}
+                />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-xs font-semibold shadow-sm">
+                  {userName?.charAt(0).toUpperCase() || "U"}
+                </div>
+              )}
+              <span className="font-medium text-sm text-slate-700 truncate">{userName || "User"}</span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" side="top" className="w-56">
+            <DropdownMenuItem asChild>
+              <Link href="/profile" className="flex items-center cursor-pointer">
+                <Brain className="w-4 h-4 mr-2" />
+                Memory Profile
+              </Link>
+            </DropdownMenuItem>
+            {isAdmin && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/admin?from=whim" className="flex items-center cursor-pointer">
+                    <Settings className="w-4 h-4 mr-2" />
+                    Admin Panel
+                  </Link>
+                </DropdownMenuItem>
+              </>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="text-red-600 focus:text-red-600 cursor-pointer"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Resize Handle */}

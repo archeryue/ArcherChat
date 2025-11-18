@@ -231,6 +231,10 @@ export default function WhimPage() {
         onFolderCreate={handleFolderCreate}
         onFolderUpdate={handleFolderUpdate}
         onFolderDelete={handleFolderDelete}
+        userName={session?.user?.name || undefined}
+        userEmail={session?.user?.email || undefined}
+        userAvatar={session?.user?.image || undefined}
+        isAdmin={(session?.user as any)?.isAdmin}
       />
 
       {/* Main Content */}

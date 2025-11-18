@@ -90,7 +90,7 @@ export function ChatMessage({ message, userName, userAvatar, progressEvents: ext
       </div>
 
       <div className="flex-1 min-w-0 overflow-hidden">
-        <div className="font-semibold text-sm mb-2 text-slate-700">
+        <div className="font-semibold text-sm mb-2 text-slate-700 select-none cursor-default">
           {isUser ? userName || "You" : "Assistant"}
         </div>
 
