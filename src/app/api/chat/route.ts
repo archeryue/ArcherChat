@@ -33,11 +33,14 @@ export async function POST(req: NextRequest) {
       return new Response("Unauthorized", { status: 401 });
     }
 
-    const { conversationId, message, files } = await req.json();
+    const { conversationId, message, files, whimId, whimContext } = await req.json();
 
     if (!conversationId || (!message && (!files || files.length === 0))) {
       return new Response("Missing required fields", { status: 400 });
     }
+
+    // Check if this is a whim assistant request
+    const isWhimAssistant = !!(whimId && whimContext);
 
     // Verify conversation belongs to user
     const conversationRef = db
@@ -195,11 +198,160 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if this is the first message and update title
-    if (messages.length === 1) {
+    if (messages.length === 1 && !isWhimAssistant) {
       const title = await generateConversationTitle(message);
       await conversationRef.update({
         title: title,
         updated_at: new Date(),
+      });
+    }
+
+    // WHIM ASSISTANT MODE: Use agentic mode with whim context
+    if (isWhimAssistant && isAgenticModeEnabled()) {
+      console.log('[Chat API] Using whim assistant mode with agentic capabilities');
+
+      // Build whim context to prepend to the message
+      let contextPrefix = '';
+      if (whimContext.selectedText) {
+        contextPrefix = `[Context: I'm working on a document. Here's the selected text I want help with:]\n\n"${whimContext.selectedText}"\n\n[My question:] `;
+      } else {
+        contextPrefix = `[Context: I'm working on a document with the following content:]\n\n"${whimContext.fullContent}"\n\n[My question:] `;
+      }
+
+      // Combine context with user's message
+      const messageWithContext = contextPrefix + message;
+
+      // Create stream for agentic response
+      let fullResponse = "";
+
+      const stream = new ReadableStream({
+        async start(controller) {
+          try {
+            streamController = controller;
+
+            // Send initial progress event
+            const initialProgressEvent: ProgressEvent = {
+              step: ProgressStep.ANALYZING_PROMPT,
+              status: 'started',
+              message: 'Analyzing your question...',
+              timestamp: Date.now(),
+            };
+            controller.enqueue(encoder.encode(`[PROGRESS]${JSON.stringify(initialProgressEvent)}\n`));
+
+            // Create agent (same as regular chat)
+            const agent = createAgent({
+              userId: session.user.id,
+              conversationId,
+              style: 'balanced',
+            });
+
+            // Subscribe to agent events
+            agent.onEvent((event: AgentEvent) => {
+              let progressStep: ProgressStep;
+              let progressMessage: string = typeof event.content === 'string' ? event.content : '';
+
+              switch (event.type) {
+                case 'reasoning':
+                  progressStep = ProgressStep.ANALYZING_PROMPT;
+                  progressMessage = 'Reasoning about the question...';
+                  break;
+                case 'tool_call':
+                  if (event.toolName === 'web_search') {
+                    progressStep = ProgressStep.SEARCHING_WEB;
+                  } else if (event.toolName === 'memory_retrieve' || event.toolName === 'memory_save') {
+                    progressStep = ProgressStep.RETRIEVING_MEMORY;
+                  } else {
+                    progressStep = ProgressStep.BUILDING_CONTEXT;
+                  }
+                  progressMessage = `Using tool: ${event.toolName}`;
+                  break;
+                case 'observation':
+                  progressStep = ProgressStep.BUILDING_CONTEXT;
+                  progressMessage = 'Processing results...';
+                  break;
+                case 'tool_results':
+                  progressStep = ProgressStep.BUILDING_CONTEXT;
+                  progressMessage = 'Tool results received';
+                  break;
+                case 'response':
+                  progressStep = ProgressStep.GENERATING_RESPONSE;
+                  progressMessage = 'Generating response...';
+                  break;
+                case 'error':
+                  progressStep = ProgressStep.GENERATING_RESPONSE;
+                  progressMessage = `Error: ${event.content}`;
+                  break;
+                default:
+                  return;
+              }
+
+              const progressEvent: ProgressEvent = {
+                step: progressStep,
+                status: event.type === 'error' ? 'error' : 'started',
+                message: progressMessage,
+                timestamp: Date.now(),
+              };
+
+              controller.enqueue(encoder.encode(`[PROGRESS]${JSON.stringify(progressEvent)}\n`));
+            });
+
+            // Run the agent with message that includes whim context
+            const result = await agent.run({
+              message: messageWithContext,
+              conversationHistory: messages.slice(0, -1), // Exclude the current message since we're replacing it with context version
+              files,
+            });
+
+            fullResponse = result.response;
+
+            // Stream the final response
+            const contentLine = `[CONTENT]${JSON.stringify(fullResponse)}\n`;
+            controller.enqueue(encoder.encode(contentLine));
+
+            // Send completion event
+            const completionEvent: ProgressEvent = {
+              step: ProgressStep.GENERATING_RESPONSE,
+              status: 'completed',
+              message: 'Response complete',
+              timestamp: Date.now(),
+            };
+            controller.enqueue(encoder.encode(`[PROGRESS]${JSON.stringify(completionEvent)}\n`));
+
+            // Unsubscribe and cleanup
+            progressUnsubscribe();
+
+            // Save assistant message (save original message in DB, not the context-enhanced version)
+            const contentToSave = fullResponse.replace(
+              /data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g,
+              'data:image/png;base64,[image-data-removed-due-to-size]'
+            );
+
+            await conversationRef.collection(COLLECTIONS.MESSAGES).add({
+              role: "assistant",
+              content: contentToSave,
+              created_at: new Date(),
+            });
+
+            await conversationRef.update({
+              updated_at: new Date(),
+            });
+
+            console.log(`[Chat API] Whim assistant agentic request completed: ${requestId}, iterations: ${result.iterations}, tools: ${result.toolsUsed.join(', ')}`);
+
+            controller.close();
+          } catch (error) {
+            console.error("Whim assistant streaming error:", error);
+            controller.error(error);
+          }
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Transfer-Encoding": "chunked",
+          "X-Request-Id": requestId,
+        },
       });
     }
 
