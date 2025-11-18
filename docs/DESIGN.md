@@ -13,6 +13,7 @@ ArcherChat is a bilingual (English/Chinese) AI chatbot with advanced memory and 
 - 📊 **Progress Tracking**: Real-time visual feedback during AI response generation
 - 🔍 **Web Search**: Intelligent web search with rate limiting and global usage tracking
 - 🌐 **Web Scraping**: AI-powered content extraction from top search results for detailed answers
+- 🤖 **Agentic Architecture**: ReAct pattern with autonomous tool usage (IMPLEMENTED 2025-11-17)
 
 **Target Cost**: < $30/month for family use (5-10 users, ~1000 messages/month)
 **Actual Cost**: $8-18/month (well under budget)
@@ -220,6 +221,46 @@ Admin-configurable system prompts stored in Firestore.
 - Default prompt created on first run
 - Editable via /admin page
 - Memory context automatically injected
+
+### Agentic Architecture (ReAct Pattern)
+
+**Status**: ✅ IMPLEMENTED (2025-11-17)
+
+ArcherChat uses the ReAct (Reason-Act-Observe) pattern for autonomous AI behavior.
+
+**Feature Flag**: `NEXT_PUBLIC_USE_AGENTIC_MODE=true`
+
+**Architecture**:
+```
+User Input → Agent Loop (max 5 iterations)
+                ↓
+           REASON → ACT → OBSERVE → (repeat if needed)
+                ↓
+           Final Response
+```
+
+**Available Tools**:
+- `web_search` - Search with sourceCategory for reliable sources
+- `web_fetch` - Fetch and extract content from URLs
+- `memory_retrieve` - Get relevant user memories
+- `memory_save` - Save new facts to memory
+- `get_current_time` - Get current date/time
+
+**sourceCategory Parameter** (reduces 403 errors):
+- `encyclopedia`: Wikipedia, Britannica
+- `programming`: StackOverflow, GitHub, MDN
+- `finance`: Reuters, Bloomberg, SEC
+- `government`: *.gov sites
+- `academic`: arXiv, PubMed
+
+**Key Files**:
+- `src/lib/agent/core/agent.ts` - Agent class with ReAct loop
+- `src/lib/agent/tools/` - Tool implementations
+- `src/lib/agent/core/prompts.ts` - Agent system prompts
+
+**Test Coverage**: 58 unit tests (100% pass rate)
+
+See `docs/AGENTIC_ARCHITECTURE.md` for complete documentation.
 
 ## Data Models (Firestore Collections)
 
@@ -436,13 +477,26 @@ interface PromptConfig {
 │   │   ├── providers/         # AI provider abstraction
 │   │   │   ├── provider-factory.ts
 │   │   │   └── gemini.provider.ts
+│   │   ├── agent/             # Agentic architecture (ReAct pattern)
+│   │   │   ├── core/          # Agent loop and prompts
+│   │   │   │   ├── agent.ts
+│   │   │   │   ├── prompts.ts
+│   │   │   │   └── context-manager.ts
+│   │   │   └── tools/         # Tool implementations
+│   │   │       ├── base.ts
+│   │   │       ├── index.ts
+│   │   │       ├── web-search.ts
+│   │   │       ├── web-fetch.ts
+│   │   │       ├── memory-retrieve.ts
+│   │   │       ├── memory-save.ts
+│   │   │       └── get-current-time.ts
 │   │   ├── memory/            # Memory system
 │   │   │   ├── index.ts
 │   │   │   ├── storage.ts
 │   │   │   ├── extractor.ts
 │   │   │   ├── loader.ts
 │   │   │   └── cleanup.ts
-│   │   └── keywords/          # Keyword trigger system
+│   │   └── keywords/          # Keyword trigger system (legacy)
 │   │       ├── system.ts
 │   │       └── triggers.ts
 │   ├── config/                # Configuration
@@ -454,12 +508,17 @@ interface PromptConfig {
 │       ├── prompts.ts         # Prompt types
 │       ├── file.ts            # File attachment types
 │       ├── ai-providers.ts    # Provider interfaces
+│       ├── agent.ts           # Agent types
 │       └── next-auth.d.ts     # NextAuth extensions
 ├── docs/                      # Documentation
 │   ├── DESIGN.md
 │   ├── DEPLOYMENT.md
 │   ├── TESTING_CHECKLIST.md
+│   ├── TESTING_PLAN.md
 │   ├── MEMORY_SYSTEM_COMPLETE.md
+│   ├── AGENTIC_ARCHITECTURE.md
+│   ├── WEB_SEARCH_DESIGN.md
+│   ├── PROGRESS_TRACKING.md
 │   ├── ADDING_PROVIDERS.md
 │   └── README.md
 ├── scripts/                   # Utility scripts
