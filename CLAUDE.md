@@ -277,103 +277,25 @@ User Input → Agent Loop (max 5 iterations)
 
 ## 🔴 CRITICAL RULES - NEVER VIOLATE THESE
 
-### 1. 🚀 DEPLOYMENT: Production Deployment Guide
+### 1. 🚀 DEPLOYMENT: Production Deployment Rules
 
 **Production URL**: `https://archerchat-697285727061.us-central1.run.app`
 
+**📖 Before deploying, ALWAYS read `docs/DEPLOYMENT.md` for detailed steps and commands.**
+
 #### Deployment Rules
-- **NEVER** deploy code to production (Google Cloud Run) unless the user explicitly asks
-- **ALWAYS** wait for user to say "deploy", "ship online", or similar explicit commands
+- **NEVER** deploy unless user explicitly asks ("deploy", "ship online", etc.)
+- **ALWAYS** run `npm run build` and `npx jest` before deploying
+- **ALWAYS** use `--substitutions=SHORT_SHA=$(git rev-parse --short HEAD)` with Cloud Build
+- **ALWAYS** verify after deployment: check revision status, traffic routing, and image digest
 - **NEVER** assume deployment is wanted after committing code
-- **ALWAYS** ask for confirmation before deploying if unclear
-- **EXCEPTION**: Only deploy when user explicitly requests it
 
-#### Proper Deployment Workflow
-1. **Get credentials from .env.local**:
-   ```bash
-   cat .env.local  # ALWAYS use actual values from this file
-   ```
-2. **Build and test locally first**:
-   ```bash
-   npm run build   # Catch TypeScript errors
-   npx jest        # Ensure all tests pass
-   ```
-3. **Deploy using Cloud Build** (Preferred method):
-   ```bash
-   # Get current commit hash
-   SHORT_SHA=$(git rev-parse --short HEAD)
+#### Feature Flags (in `cloudbuild.yaml`)
+- `NEXT_PUBLIC_USE_INTELLIGENT_ANALYSIS=true`
+- `NEXT_PUBLIC_USE_WEB_SEARCH=true`
+- `NEXT_PUBLIC_USE_AGENTIC_MODE=true`
 
-   # Deploy with substitution (required when running locally)
-   gcloud builds submit --config cloudbuild.yaml --project=archerchat-3d462 --substitutions=SHORT_SHA=$SHORT_SHA
-   ```
-   **Note**: The `--substitutions` flag is required because Cloud Build only auto-provides `$SHORT_SHA` for GitHub triggers, not local submissions.
-
-4. **Verify deployment** (ALWAYS do this after deploy):
-   ```bash
-   # Check latest revisions and traffic routing
-   gcloud run revisions list --service=archerchat --region=us-central1 --project=archerchat-3d462 --limit=5
-
-   # Verify traffic is on latest revision
-   gcloud run services describe archerchat --region us-central1 --project archerchat-3d462 --format="value(status.traffic)"
-
-   # Verify image digest matches deployed commit
-   gcloud artifacts docker images describe us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:$SHORT_SHA --format="value(image_summary.digest)"
-   ```
-
-5. **Update traffic routing if needed**:
-   ```bash
-   gcloud run services update-traffic archerchat \
-     --to-revisions=REVISION_NAME=100 \
-     --region=us-central1 \
-     --project=archerchat-3d462
-   ```
-
-#### Post-Deployment Verification Checklist
-- [ ] New revision created and healthy (STATUS=True)
-- [ ] Traffic routed to new revision (100%)
-- [ ] Image digest matches commit tag
-- [ ] No errors in recent logs
-
-#### Critical: Dual URL Issue
-Google Cloud Run creates TWO URLs for the same service:
-1. **Project-based URL**: `https://archerchat-697285727061.us-central1.run.app` (ACTIVE)
-2. **Generated URL**: `https://archerchat-er7tpljqpa-uc.a.run.app` (alternate)
-
-**IMPORTANT**:
-- NEXTAUTH_URL must match the URL configured in Google OAuth redirect
-- Current configuration uses: `https://archerchat-697285727061.us-central1.run.app`
-- Authentication will fail if URLs don't match!
-
-#### Feature Flags (Build-time Configuration)
-- Feature flags (`NEXT_PUBLIC_*`) are configured in `cloudbuild.yaml` as build args
-- Changes to feature flags require rebuilding and redeploying (not just env var updates)
-- Current settings in `cloudbuild.yaml`:
-  - `NEXT_PUBLIC_USE_INTELLIGENT_ANALYSIS=true` (intelligent memory extraction)
-  - `NEXT_PUBLIC_USE_WEB_SEARCH=true` (web search ENABLED ✅)
-  - `NEXT_PUBLIC_USE_AGENTIC_MODE=true` (agentic ReAct pattern)
-
-#### Image Caching Issue (SOLVED)
-
-**Problem**: When deploying with `:latest` tag, Cloud Run caches the old image and doesn't pull the new one, causing deployments to use stale code.
-
-**Symptoms**:
-- New revision created but still shows old behavior
-- Logs show old errors even after "successful" deployment
-- Traffic routing to new revision doesn't help
-
-**Root Cause**: Cloud Run caches Docker images by tag. The `:latest` tag doesn't force a re-pull even when the image is updated.
-
-**Solution**: Use unique image tags based on git commit hash (`$SHORT_SHA`).
-
-The `cloudbuild.yaml` now:
-1. Tags images with `$SHORT_SHA` (e.g., `archerchat:a50b9ec`)
-2. Also tags with `:latest` for convenience
-3. Deploys using the `$SHORT_SHA` tag to guarantee correct image
-
-**If you still encounter caching issues**:
-1. Check the image digest: `gcloud artifacts docker images describe us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:latest --format="value(image_summary.digest)"`
-2. Check revision's image: `gcloud run revisions describe REVISION_NAME --region us-central1 --project archerchat-3d462 --format="value(spec.containers[0].image)"`
-3. If different, deploy with specific digest: `--image=us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat@sha256:DIGEST`
+Changes to feature flags require rebuilding and redeploying.
 
 ### 2. 🔐 SECURITY: Never Share Private Keys
 - **NEVER** commit API keys, private keys, or credentials to the repository
