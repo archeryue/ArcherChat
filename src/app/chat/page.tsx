@@ -348,8 +348,12 @@ export default function ChatPage() {
           <div
             className="flex-1 overflow-y-auto cursor-default pb-32 messages-container"
             onMouseDown={(e) => {
-              // Prevent clicks in empty area from focusing the input
+              // Prevent clicks in empty area from focusing the input, but allow text selection
               const target = e.target as HTMLElement;
+              // Allow selection in prose content (message text)
+              if (target.closest('.prose')) {
+                return;
+              }
               if (!target.closest('button') && !target.closest('a') && !target.closest('input') && !target.closest('textarea')) {
                 e.preventDefault();
               }
