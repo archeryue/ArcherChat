@@ -57,9 +57,9 @@ export async function POST(request: NextRequest) {
     const body: CreateWhimRequest = await request.json();
     const { title, content, folderId, conversationId } = body;
 
-    if (!title || !content || !conversationId) {
+    if (!title) {
       return NextResponse.json(
-        { error: 'Missing required fields: title, content, conversationId' },
+        { error: 'Missing required field: title' },
         { status: 400 }
       );
     }
@@ -68,10 +68,10 @@ export async function POST(request: NextRequest) {
     const whimData: Omit<Whim, 'id'> = {
       userId: session.user.id,
       title,
-      content,
-      conversationId,
+      content: content || '',
       createdAt: now,
       updatedAt: now,
+      ...(conversationId && { conversationId }),
       ...(folderId && { folderId })
     };
 

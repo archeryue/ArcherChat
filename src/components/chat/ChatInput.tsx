@@ -139,15 +139,19 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProps) {
   }, [message]);
 
   return (
-    <form onSubmit={handleSubmit} className="border-t border-slate-200 bg-white p-6">
-      <div className="max-w-4xl mx-auto">
+    <div className="p-4 pb-6">
+      <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
         {/* File Preview */}
-        <FilePreview files={files} onRemove={handleRemoveFile} />
+        {files.length > 0 && (
+          <div className="mb-3 bg-white/80 backdrop-blur-sm rounded-2xl p-3 shadow-lg border border-slate-200/50">
+            <FilePreview files={files} onRemove={handleRemoveFile} />
+          </div>
+        )}
 
-        {/* Input Area */}
+        {/* Floating Input Container */}
         <div
-          className={`relative flex gap-3 ${
-            isDragging ? "ring-4 ring-blue-300 rounded-xl" : ""
+          className={`relative bg-white rounded-2xl shadow-lg border border-slate-200/50 backdrop-blur-sm transition-all ${
+            isDragging ? "ring-2 ring-blue-400 border-blue-300" : "hover:shadow-xl"
           }`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -155,64 +159,67 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProps) {
         >
           {/* Drag Overlay */}
           {isDragging && (
-            <div className="absolute inset-0 bg-blue-50 bg-opacity-90 rounded-xl flex items-center justify-center z-10 border-2 border-dashed border-blue-400">
+            <div className="absolute inset-0 bg-blue-50/90 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10 border-2 border-dashed border-blue-400">
               <p className="text-blue-600 font-medium">Drop files here</p>
             </div>
           )}
 
-          {/* Add File Button */}
-          <Button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={disabled || isProcessing}
-            size="icon"
-            variant="outline"
-            className="h-[52px] w-[52px] rounded-xl shadow-sm hover:shadow-md transition-all flex-shrink-0"
-          >
-            {isProcessing ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Plus className="h-5 w-5" />
-            )}
-          </Button>
+          {/* Input Area */}
+          <div className="flex items-end gap-2 p-2">
+            {/* Add File Button */}
+            <Button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={disabled || isProcessing}
+              size="icon"
+              variant="ghost"
+              className="h-10 w-10 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-all flex-shrink-0"
+            >
+              {isProcessing ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Plus className="h-5 w-5" />
+              )}
+            </Button>
 
-          {/* Hidden File Input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*,.pdf"
-            onChange={(e) => handleFileSelect(e.target.files)}
-            className="hidden"
-          />
+            {/* Hidden File Input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,.pdf"
+              onChange={(e) => handleFileSelect(e.target.files)}
+              className="hidden"
+            />
 
-          {/* Text Input */}
-          <textarea
-            ref={textareaRef}
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type your message or drop files here..."
-            disabled={disabled || isProcessing}
-            rows={1}
-            className="flex-1 resize-none rounded-xl border-2 border-slate-200 px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400 min-h-[52px] max-h-[200px] transition-all shadow-sm"
-          />
+            {/* Text Input */}
+            <textarea
+              ref={textareaRef}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Message WhimCraft..."
+              disabled={disabled || isProcessing}
+              rows={1}
+              className="flex-1 resize-none bg-transparent px-2 py-2.5 focus:outline-none disabled:cursor-not-allowed disabled:text-slate-400 min-h-[40px] max-h-[200px] text-slate-700 placeholder:text-slate-400"
+            />
 
-          {/* Send Button */}
-          <Button
-            type="submit"
-            disabled={disabled || isProcessing || (!message.trim() && files.length === 0)}
-            size="icon"
-            className="h-[52px] w-[52px] rounded-xl shadow-sm hover:shadow-md transition-all flex-shrink-0"
-          >
-            <Send className="h-5 w-5" />
-          </Button>
+            {/* Send Button */}
+            <Button
+              type="submit"
+              disabled={disabled || isProcessing || (!message.trim() && files.length === 0)}
+              size="icon"
+              className="h-10 w-10 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 transition-all flex-shrink-0 shadow-sm"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
-        <p className="text-xs text-slate-500 text-center mt-3">
-          Press Enter to send • Shift+Enter for new line • Drag & drop files to upload
+        <p className="text-xs text-slate-400 text-center mt-3">
+          Enter to send • Shift+Enter for new line
         </p>
-      </div>
-    </form>
+      </form>
+    </div>
   );
 }

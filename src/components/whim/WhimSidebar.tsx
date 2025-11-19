@@ -5,7 +5,7 @@ import { signOut } from 'next-auth/react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { WhimClient, FolderClient } from '@/types/whim';
-import { LogOut, Settings, Brain, MessageSquare } from 'lucide-react';
+import { LogOut, Settings, Brain, MessageSquare, PlusCircle, FolderPlus, FileText, Target } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +19,7 @@ interface WhimSidebarProps {
   folders: FolderClient[];
   selectedWhim: WhimClient | null;
   onWhimSelect: (whim: WhimClient) => void;
+  onWhimCreate: () => void;
   onFolderCreate: (name: string) => void;
   onFolderUpdate: (folderId: string, name: string) => void;
   onFolderDelete: (folderId: string) => void;
@@ -33,6 +34,7 @@ export function WhimSidebar({
   folders,
   selectedWhim,
   onWhimSelect,
+  onWhimCreate,
   onFolderCreate,
   onFolderUpdate,
   onFolderDelete,
@@ -40,8 +42,6 @@ export function WhimSidebar({
   userAvatar,
   isAdmin,
 }: WhimSidebarProps) {
-  const [showNewFolderInput, setShowNewFolderInput] = useState(false);
-  const [newFolderName, setNewFolderName] = useState('');
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [editingFolder, setEditingFolder] = useState<string | null>(null);
   const [editingFolderName, setEditingFolderName] = useState('');
@@ -56,14 +56,6 @@ export function WhimSidebar({
     acc[folder.id] = whims.filter(w => w.folderId === folder.id);
     return acc;
   }, {} as Record<string, WhimClient[]>);
-
-  const handleCreateFolder = () => {
-    if (newFolderName.trim()) {
-      onFolderCreate(newFolderName.trim());
-      setNewFolderName('');
-      setShowNewFolderInput(false);
-    }
-  };
 
   const handleUpdateFolder = (folderId: string) => {
     if (editingFolderName.trim()) {
@@ -119,50 +111,45 @@ export function WhimSidebar({
       style={{ width: `${sidebarWidth}px` }}
     >
       {/* Main Title */}
-      <div className="px-6 py-3 border-b border-slate-200 select-none cursor-default">
-        <h1 className="text-2xl font-semibold text-blue-600 italic m-0 p-0">Whims</h1>
-        <p className="text-xs text-slate-500 mt-1">
-          Your saved conversations and notes
-        </p>
-      </div>
-
-      {/* Folders Header */}
-      <div className="px-4 py-4 border-b border-slate-200">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-700">Folders</h2>
-          <button
-            onClick={() => setShowNewFolderInput(true)}
-            className="text-xs text-slate-600 hover:text-slate-900 px-2 py-1 rounded hover:bg-slate-100"
-          >
-            + New
-          </button>
+      <div className="px-4 py-2.5 border-b border-slate-200 select-none cursor-default flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Target className="w-5 h-5 text-blue-600" strokeWidth={1.5} />
+          <h1 className="text-lg font-bold italic">
+            <span className="text-blue-600">Whim</span>
+            <span className="text-slate-800">Craft</span>
+          </h1>
         </div>
-
-        {showNewFolderInput && (
-          <div className="mt-2 flex gap-2">
-            <input
-              type="text"
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleCreateFolder();
-                if (e.key === 'Escape') {
-                  setShowNewFolderInput(false);
-                  setNewFolderName('');
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+              title="Create new"
+            >
+              <PlusCircle className="w-5 h-5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-40">
+            <DropdownMenuItem
+              onClick={onWhimCreate}
+              className="cursor-pointer"
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              New Whim
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                const name = window.prompt('Enter folder name:');
+                if (name && name.trim()) {
+                  onFolderCreate(name.trim());
                 }
               }}
-              placeholder="Folder name"
-              className="flex-1 px-2 py-1 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-slate-400"
-              autoFocus
-            />
-            <button
-              onClick={handleCreateFolder}
-              className="px-2 py-1 text-xs bg-slate-700 text-white rounded hover:bg-slate-800"
+              className="cursor-pointer"
             >
-              Add
-            </button>
-          </div>
-        )}
+              <FolderPlus className="w-4 h-4 mr-2" />
+              New Folder
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Folders and Whims */}
