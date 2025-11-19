@@ -7,7 +7,7 @@ export interface Whim {
   title: string;
   content: string; // Markdown content
   folderId?: string;
-  conversationId: string; // Reference to source conversation
+  conversationId?: string; // Optional reference to source conversation
   createdAt: Timestamp | string; // Timestamp on server, string on client
   updatedAt: Timestamp | string; // Timestamp on server, string on client
 }
@@ -26,7 +26,7 @@ export interface WhimClient {
   title: string;
   content: string;
   folderId?: string;
-  conversationId: string;
+  conversationId?: string;
   createdAt: string; // ISO string
   updatedAt: string; // ISO string
 }
@@ -42,7 +42,7 @@ export interface CreateWhimRequest {
   title: string;
   content: string;
   folderId?: string;
-  conversationId: string;
+  conversationId?: string;
 }
 
 export interface UpdateWhimRequest {

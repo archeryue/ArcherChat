@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
-import { ChatTopBar } from "@/components/chat/ChatTopBar";
 import { LoadingPage } from "@/components/ui/loading";
 import { MessageClient, ConversationClient } from "@/types";
 import { FileAttachment } from "@/types/file";
@@ -329,30 +328,33 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col">
-      {/* Top Bar */}
-      <ChatTopBar
+    <div className="h-screen flex">
+      {/* Sidebar */}
+      <ChatSidebar
+        conversations={conversations}
+        activeConversationId={conversationId || undefined}
+        onNewConversation={createConversation}
+        onSelectConversation={loadConversation}
+        onDeleteConversation={deleteConversation}
         userName={session.user.name || undefined}
         userEmail={session.user.email || undefined}
         userAvatar={session.user.image || undefined}
         isAdmin={session.user.isAdmin}
       />
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar */}
-        <ChatSidebar
-          conversations={conversations}
-          activeConversationId={conversationId || undefined}
-          onNewConversation={createConversation}
-          onSelectConversation={loadConversation}
-          onDeleteConversation={deleteConversation}
-        />
-
         {/* Main Chat Area */}
-        <div className="flex-1 min-w-0 flex flex-col">
+        <div className="flex-1 min-w-0 flex flex-col relative bg-slate-50">
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto bg-slate-50 cursor-default">
+          <div
+            className="flex-1 overflow-y-auto cursor-default pb-32 messages-container"
+            onMouseDown={(e) => {
+              // Prevent clicks in empty area from focusing the input
+              const target = e.target as HTMLElement;
+              if (!target.closest('button') && !target.closest('a') && !target.closest('input') && !target.closest('textarea')) {
+                e.preventDefault();
+              }
+            }}
+          >
             {messages.length === 0 ? (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center space-y-4 px-6 select-none">
@@ -388,10 +390,13 @@ export default function ChatPage() {
             )}
           </div>
 
-          {/* Input */}
-          <ChatInput onSendMessage={handleSendMessage} disabled={isLoading} />
+          {/* Floating Input */}
+          <div className="absolute bottom-0 left-0 right-0 pointer-events-none bg-gradient-to-t from-slate-50 via-slate-50 to-transparent pt-8">
+            <div className="pointer-events-auto">
+              <ChatInput onSendMessage={handleSendMessage} disabled={isLoading} />
+            </div>
+          </div>
         </div>
-      </div>
     </div>
   );
 }

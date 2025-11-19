@@ -175,6 +175,30 @@ export default function WhimPage() {
     }
   };
 
+  const handleWhimCreate = async () => {
+    try {
+      const res = await fetch('/api/whims', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Untitled Whim',
+          content: '',
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to create whim');
+      }
+
+      const { whim } = await res.json();
+      setWhims([whim, ...whims]);
+      setSelectedWhim(whim);
+    } catch (err) {
+      console.error('Error creating whim:', err);
+      setError('Failed to create whim');
+    }
+  };
+
   // AI Sidebar handlers
   const handleOpenAIChat = (text?: string, range?: { start: number; end: number }) => {
     setSelectedText(text);
@@ -228,6 +252,7 @@ export default function WhimPage() {
         folders={folders}
         selectedWhim={selectedWhim}
         onWhimSelect={handleWhimSelect}
+        onWhimCreate={handleWhimCreate}
         onFolderCreate={handleFolderCreate}
         onFolderUpdate={handleFolderUpdate}
         onFolderDelete={handleFolderDelete}
@@ -257,7 +282,7 @@ export default function WhimPage() {
               onOpenAIChat={handleOpenAIChat}
             />
           ) : (
-            <div className="flex-1 flex items-center justify-center">
+            <div className="flex-1 flex items-center justify-center cursor-default select-none">
               <div className="text-center text-slate-500">
                 <svg
                   className="mx-auto h-12 w-12 text-slate-400"
@@ -272,9 +297,9 @@ export default function WhimPage() {
                     d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                   />
                 </svg>
-                <h3 className="mt-2 text-sm font-medium text-slate-900">No whim selected</h3>
+                <h3 className="mt-2 text-sm font-medium text-slate-900">No <span className="text-blue-600 italic">whim</span> selected</h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Select a whim from the sidebar or save a conversation using /save or /whim
+                  Select a <span className="text-blue-600 italic">whim</span> from the sidebar or save a conversation using /save or /whim
                 </p>
               </div>
             </div>
