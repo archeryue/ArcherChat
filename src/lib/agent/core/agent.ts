@@ -18,6 +18,7 @@ import {
 } from '@/types/agent';
 import { AIMessage } from '@/types/ai-providers';
 import { ProviderFactory } from '@/lib/providers/provider-factory';
+import { GEMINI_MODELS, ModelTier } from '@/config/models';
 import { toolRegistry, storeResult } from '../tools';
 import { buildAgentPrompt, buildToolsDescription } from './prompts';
 import { compressResults, buildScratchpad } from './context-manager';
@@ -468,7 +469,7 @@ export function createAgent(config: Partial<AgentConfig> & {
 }): Agent {
   const defaultConfig: AgentConfig = {
     maxIterations: 5,
-    model: 'gemini-2.5-flash-preview-05-20',
+    model: GEMINI_MODELS[ModelTier.MAIN],
     temperature: 0.7,
     tools: Array.from(toolRegistry.values()),
     style: 'balanced',

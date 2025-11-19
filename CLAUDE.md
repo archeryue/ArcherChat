@@ -336,6 +336,29 @@ Google Cloud Run creates TWO URLs for the same service:
   - `NEXT_PUBLIC_USE_WEB_SEARCH=true` (web search ENABLED ✅)
   - `NEXT_PUBLIC_USE_AGENTIC_MODE=true` (agentic ReAct pattern)
 
+#### Image Caching Issue (SOLVED)
+
+**Problem**: When deploying with `:latest` tag, Cloud Run caches the old image and doesn't pull the new one, causing deployments to use stale code.
+
+**Symptoms**:
+- New revision created but still shows old behavior
+- Logs show old errors even after "successful" deployment
+- Traffic routing to new revision doesn't help
+
+**Root Cause**: Cloud Run caches Docker images by tag. The `:latest` tag doesn't force a re-pull even when the image is updated.
+
+**Solution**: Use unique image tags based on git commit hash (`$SHORT_SHA`).
+
+The `cloudbuild.yaml` now:
+1. Tags images with `$SHORT_SHA` (e.g., `archerchat:a50b9ec`)
+2. Also tags with `:latest` for convenience
+3. Deploys using the `$SHORT_SHA` tag to guarantee correct image
+
+**If you still encounter caching issues**:
+1. Check the image digest: `gcloud artifacts docker images describe us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:latest --format="value(image_summary.digest)"`
+2. Check revision's image: `gcloud run revisions describe REVISION_NAME --region us-central1 --project archerchat-3d462 --format="value(spec.containers[0].image)"`
+3. If different, deploy with specific digest: `--image=us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat@sha256:DIGEST`
+
 ### 2. 🔐 SECURITY: Never Share Private Keys
 - **NEVER** commit API keys, private keys, or credentials to the repository
 - **NEVER** expose sensitive environment variables in client-side code
@@ -400,9 +423,11 @@ Google Cloud Run creates TWO URLs for the same service:
 
 ### 6. 🤖 MODEL CONFIGURATION: Never Change Models Without Permission
 - **NEVER** change AI model configuration (Gemini models, model tiers) in `src/config/models.ts` without explicit user request
+- **NEVER** hardcode model names anywhere in the codebase - ALWAYS import from `src/config/models.ts`
+- **ALWAYS** use `GEMINI_MODELS[ModelTier.MAIN]`, `GEMINI_MODELS[ModelTier.IMAGE]`, or `GEMINI_MODELS[ModelTier.LITE]` when referencing models
 - **CAN** suggest model improvements but ALWAYS ask first
 - **TRUST** current model configuration is intentional and tested
-- Current models: `gemini-2.5-flash-experimental-0827` (main), `gemini-2.5-flash-preview-04-17` (image), `gemini-2.5-flash-lite` (analysis)
+- Current models: `gemini-2.5-flash` (main), `gemini-2.5-flash-image` (image), `gemini-2.5-flash-lite` (lite/background tasks)
 
 ### 7. 🧪 TESTING: Always Run Tests and Build Before Deployment
 - **ALWAYS** run the test suite after making code changes

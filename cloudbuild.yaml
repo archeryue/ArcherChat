@@ -1,5 +1,5 @@
 steps:
-  # Build the Docker image
+  # Build the Docker image with unique tag (prevents Cloud Run caching issues)
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
@@ -10,19 +10,22 @@ steps:
       - '--build-arg'
       - 'NEXT_PUBLIC_USE_AGENTIC_MODE=true'
       - '-t'
+      - 'us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:$SHORT_SHA'
+      - '-t'
       - 'us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:latest'
       - '.'
 
-  # Deploy to Cloud Run
+  # Deploy to Cloud Run using unique tag (guarantees correct image)
   - name: 'gcr.io/cloud-builders/gcloud'
     args:
       - 'run'
       - 'deploy'
       - 'archerchat'
-      - '--image=us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:latest'
+      - '--image=us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:$SHORT_SHA'
       - '--region=us-central1'
       - '--platform=managed'
       - '--update-env-vars=NEXT_PUBLIC_USE_INTELLIGENT_ANALYSIS=true,NEXT_PUBLIC_USE_WEB_SEARCH=true,NEXT_PUBLIC_USE_AGENTIC_MODE=true'
 
 images:
+  - 'us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:$SHORT_SHA'
   - 'us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:latest'
