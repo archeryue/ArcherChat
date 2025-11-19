@@ -300,23 +300,39 @@ User Input → Agent Loop (max 5 iterations)
    ```
 3. **Deploy using Cloud Build** (Preferred method):
    ```bash
-   gcloud builds submit --config cloudbuild.yaml --project=archerchat-3d462
+   # Get current commit hash
+   SHORT_SHA=$(git rev-parse --short HEAD)
+
+   # Deploy with substitution (required when running locally)
+   gcloud builds submit --config cloudbuild.yaml --project=archerchat-3d462 --substitutions=SHORT_SHA=$SHORT_SHA
    ```
-4. **Deploy with gcloud run** (use actual env vars from .env.local):
+   **Note**: The `--substitutions` flag is required because Cloud Build only auto-provides `$SHORT_SHA` for GitHub triggers, not local submissions.
+
+4. **Verify deployment** (ALWAYS do this after deploy):
    ```bash
-   gcloud run deploy archerchat \
-     --image us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:latest \
-     --region us-central1 \
-     --project archerchat-3d462 \
-     --set-env-vars "[USE_VALUES_FROM_ENV_LOCAL]"
+   # Check latest revisions and traffic routing
+   gcloud run revisions list --service=archerchat --region=us-central1 --project=archerchat-3d462 --limit=5
+
+   # Verify traffic is on latest revision
+   gcloud run services describe archerchat --region us-central1 --project archerchat-3d462 --format="value(status.traffic)"
+
+   # Verify image digest matches deployed commit
+   gcloud artifacts docker images describe us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:$SHORT_SHA --format="value(image_summary.digest)"
    ```
-4. **Update traffic routing if needed**:
+
+5. **Update traffic routing if needed**:
    ```bash
    gcloud run services update-traffic archerchat \
      --to-revisions=REVISION_NAME=100 \
      --region=us-central1 \
      --project=archerchat-3d462
    ```
+
+#### Post-Deployment Verification Checklist
+- [ ] New revision created and healthy (STATUS=True)
+- [ ] Traffic routed to new revision (100%)
+- [ ] Image digest matches commit tag
+- [ ] No errors in recent logs
 
 #### Critical: Dual URL Issue
 Google Cloud Run creates TWO URLs for the same service:

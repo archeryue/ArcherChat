@@ -46,21 +46,40 @@ Google Cloud Run automatically creates TWO URLs for your service:
 npm run build   # Catch TypeScript errors
 npx jest        # Ensure all tests pass
 
-# 2. Deploy using Cloud Build
-gcloud builds submit --config cloudbuild.yaml --project=archerchat-3d462
+# 2. Get current commit hash (required for local Cloud Build)
+SHORT_SHA=$(git rev-parse --short HEAD)
 
-# 3. Deploy the built image to Cloud Run
-gcloud run deploy archerchat \
-  --image us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:latest \
-  --region us-central1 \
-  --project archerchat-3d462
+# 3. Deploy using Cloud Build with substitution
+gcloud builds submit --config cloudbuild.yaml --project=archerchat-3d462 --substitutions=SHORT_SHA=$SHORT_SHA
+```
 
-# 4. Update traffic routing (if needed)
+**Note**: The `--substitutions` flag is required because Cloud Build only auto-provides `$SHORT_SHA` for GitHub/Cloud Source triggers, not local submissions.
+
+### Post-Deployment Verification (ALWAYS DO THIS)
+
+```bash
+# 1. Check latest revisions
+gcloud run revisions list --service=archerchat --region=us-central1 --project=archerchat-3d462 --limit=5 --format="table(metadata.name,status.conditions[0].status,metadata.creationTimestamp)"
+
+# 2. Check current traffic routing
+gcloud run services describe archerchat --region us-central1 --project archerchat-3d462 --format="value(status.traffic)"
+
+# 3. Verify image digest matches deployed commit
+gcloud artifacts docker images describe us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:$SHORT_SHA --format="value(image_summary.digest)"
+
+# 4. Update traffic to latest revision if needed
 gcloud run services update-traffic archerchat \
   --to-revisions=REVISION_NAME=100 \
   --region=us-central1 \
   --project=archerchat-3d462
 ```
+
+### Post-Deployment Checklist
+
+- [ ] New revision created and healthy (STATUS=True)
+- [ ] Traffic routed 100% to new revision
+- [ ] Image digest matches the deployed commit tag
+- [ ] No errors in recent logs
 
 ## Detailed Deployment Steps
 
