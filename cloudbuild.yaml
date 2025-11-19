@@ -15,6 +15,12 @@ steps:
       - 'us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:latest'
       - '.'
 
+  # Push the image to Artifact Registry (must happen before deploy)
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/archerchat-3d462/cloud-run-source-deploy/archerchat:$SHORT_SHA'
+
   # Deploy to Cloud Run using unique tag (guarantees correct image)
   - name: 'gcr.io/cloud-builders/gcloud'
     args:
