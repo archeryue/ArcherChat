@@ -6,7 +6,206 @@ This document tracks planned enhancements and known issues that need improvement
 
 ## High Priority
 
-### None currently
+### 1. Notion-like Whim Editing Experience with TipTap Extensions
+
+**Description**: Enhance the existing TipTap editor with advanced extensions to create a modern, Notion-like rich text editing experience. Add support for LaTeX math, syntax-highlighted code blocks, images, videos, and tables to achieve feature parity with the Chat page and provide a professional editing experience.
+
+**Current State**:
+- ✅ TipTap WYSIWYG editor already implemented (`src/components/whim/WhimEditor.tsx`)
+- ✅ Basic formatting: Bold, italic, headings (H2), bullet lists, code blocks
+- ✅ Floating toolbar with save status and folder selection
+- ✅ Auto-save (2-second debounce)
+- ✅ Keyboard shortcuts (Ctrl+S save, Ctrl+I AI assistant)
+- ✅ Markdown storage (HTML ↔ Markdown conversion with marked/turndown)
+
+**Current Gaps** (compared to Chat page):
+- ❌ No LaTeX/math rendering ($inline$ and $$block$$ formulas)
+- ❌ No syntax highlighting in code blocks (Chat has highlight.js)
+- ❌ No table creation/editing
+- ❌ No image insertion/upload
+- ❌ No video embedding
+- ❌ Limited markdown feature parity with Chat
+- ❌ No drag-and-drop block reordering
+- ❌ No slash commands for quick formatting
+
+**Proposed Enhancement**:
+Extend TipTap with professional plugins to match Notion's editing experience:
+
+**Phase 1: Feature Parity with Chat (Critical)**
+1. **LaTeX Math Support**
+   - Extension: `@tiptap/extension-mathematics`
+   - Renders: `$E = mc^2$` (inline) and `$$...$$` (block)
+   - Uses KaTeX (same as Chat page)
+
+2. **Syntax Highlighting**
+   - Extension: `@tiptap/extension-code-block-lowlight`
+   - Language selection dropdown
+   - Uses Lowlight (highlight.js wrapper)
+
+3. **Table Editing**
+   - Extension: `@tiptap/extension-table` + related packages
+   - Visual table creation and editing
+   - Column/row add/delete controls
+
+4. **Image Support**
+   - Extension: `@tiptap/extension-image`
+   - Drag-and-drop image upload
+   - Resize handles
+   - Alt text support
+
+**Phase 2: Notion-like Enhancements**
+5. **Slash Commands**
+   - Extension: Custom or `tiptap-extension-slash-command`
+   - Type `/` to insert blocks (heading, list, code, table, etc.)
+   - Searchable command palette
+
+6. **Drag & Drop Blocks**
+   - Extension: `@tiptap/extension-drag-handle`
+   - Reorder paragraphs, headings, lists by dragging
+   - Visual drop indicators
+
+7. **Video Embedding**
+   - Extension: Custom or use iframe/embed extensions
+   - Support YouTube, Vimeo URLs
+   - Responsive embeds
+
+8. **Enhanced Code Blocks**
+   - Line numbers
+   - Copy button
+   - Language badge
+
+**Benefits**:
+- ✅ **Feature parity**: Whim editor matches Chat rendering capabilities
+- ✅ **Professional experience**: Notion-like polish and usability
+- ✅ **Better content creation**: LaTeX formulas, syntax-highlighted code, rich media
+- ✅ **Consistent UX**: Same markdown features work in both Chat and Whim
+- ✅ **Encourages usage**: Users more likely to save complex conversations as whims
+
+**Technical Approach**:
+
+**Stick with TipTap** (already implemented, proven choice):
+```typescript
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Mathematics from '@tiptap/extension-mathematics';
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+import Table from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import TableCell from '@tiptap/extension-table-cell';
+import TableHeader from '@tiptap/extension-table-header';
+import Image from '@tiptap/extension-image';
+import { lowlight } from 'lowlight';
+import 'katex/dist/katex.min.css';
+
+const editor = useEditor({
+  extensions: [
+    StarterKit,
+    Mathematics.configure({
+      katexOptions: {
+        throwOnError: false,
+      },
+    }),
+    CodeBlockLowlight.configure({
+      lowlight,
+    }),
+    Table.configure({
+      resizable: true,
+    }),
+    TableRow,
+    TableHeader,
+    TableCell,
+    Image.configure({
+      inline: true,
+      allowBase64: true,
+    }),
+    // ... more extensions
+  ],
+});
+```
+
+**Packages to Install**:
+```bash
+npm install @tiptap/extension-mathematics katex
+npm install @tiptap/extension-code-block-lowlight lowlight
+npm install @tiptap/extension-table @tiptap/extension-table-row @tiptap/extension-table-cell @tiptap/extension-table-header
+npm install @tiptap/extension-image
+```
+
+**Implementation Plan**:
+
+**Phase 1 (Critical - 4-6 hours)**:
+1. ✅ Read `docs/CONTENT_ARCHITECTURE.md` for current architecture
+2. Install TipTap extensions for math, code, tables, images
+3. Update `src/components/whim/WhimEditor.tsx`:
+   - Add Mathematics extension with KaTeX
+   - Add CodeBlockLowlight with language selector
+   - Add Table extensions with insert/edit controls
+   - Add Image extension with upload/paste support
+4. Update toolbar with new formatting buttons:
+   - Insert table button
+   - Insert image button
+   - Math formula button (inline/block)
+5. Test markdown conversion (ensure extensions work with marked/turndown)
+6. Add CSS for KaTeX and code highlighting
+7. Test with complex content (formulas, code, tables)
+
+**Phase 2 (Enhancements - 4-6 hours)**:
+1. Add slash command menu component
+2. Implement drag-and-drop block reordering
+3. Add video embedding support
+4. Enhance code blocks (line numbers, copy button)
+5. Polish animations and transitions
+6. Add keyboard shortcuts for new features
+
+**Files to Modify**:
+
+**Phase 1**:
+- `src/components/whim/WhimEditor.tsx` - Add extensions and toolbar buttons
+- `package.json` - Add new TipTap extension dependencies
+- `src/app/whim/page.tsx` - Pass additional props if needed
+- Update styles for math/code rendering
+
+**Phase 2**:
+- New file: `src/components/whim/SlashCommandMenu.tsx` - Slash command palette
+- New file: `src/components/whim/BlockDragHandle.tsx` - Drag handle component
+- `src/components/whim/WhimEditor.tsx` - Integrate new components
+
+**Testing Checklist**:
+- [ ] LaTeX inline formulas render correctly
+- [ ] LaTeX block formulas render correctly
+- [ ] Code blocks show syntax highlighting
+- [ ] Language selector works for code blocks
+- [ ] Tables can be created and edited
+- [ ] Images can be uploaded/pasted
+- [ ] Markdown conversion preserves all features
+- [ ] Saved whims display correctly when reloaded
+- [ ] Auto-save works with new content types
+- [ ] Slash commands trigger correctly
+- [ ] Blocks can be dragged and reordered
+- [ ] Keyboard shortcuts work
+
+**Estimated Effort**:
+- Phase 1: 4-6 hours (critical features)
+- Phase 2: 4-6 hours (Notion-like polish)
+- **Total**: 8-12 hours
+
+**Cost Impact**: None (all client-side rendering)
+
+**References**:
+- TipTap docs: https://tiptap.dev/
+- Mathematics extension: https://tiptap.dev/api/extensions/mathematics
+- CodeBlockLowlight: https://tiptap.dev/api/nodes/code-block-lowlight
+- Table extension: https://tiptap.dev/api/nodes/table
+- Image extension: https://tiptap.dev/api/nodes/image
+- Current architecture: `docs/CONTENT_ARCHITECTURE.md`
+
+**Priority Rationale**:
+This is HIGH PRIORITY because:
+1. Users expect feature parity between Chat and Whim
+2. Currently, complex conversations with LaTeX/code can't be properly edited as whims
+3. Notion-like experience significantly improves user satisfaction
+4. Relatively quick implementation (TipTap already in place)
+5. No additional costs (client-side only)
 
 ---
 
@@ -117,88 +316,137 @@ When clicked:
 
 ---
 
-### 3. Notion-like Whim Editing Experience
+### 3. Rich Content Rendering in Whim AI Chat Sidebar
 
-**Description**: Enhance the Whim editing page with a modern, Notion-like rich text editing experience. Replace the current basic textarea with a sophisticated block-based editor that provides better formatting, organization, and visual appeal.
+**Description**: Enhance the Whim page's AI Chat Sidebar to display conversation messages with the same rich rendering as the main Chat page. Currently, the sidebar shows plain text with basic formatting, while the Chat page supports LaTeX math, syntax-highlighted code blocks, and full markdown rendering.
 
 **Current Behavior**:
-- Whim editing uses a simple textarea
-- Basic markdown support for formatting
-- Limited visual feedback during editing
-- No block-based content organization
+- AI Chat Sidebar (`src/components/whim/AIChatSidebar.tsx:494`) uses simple `<div className="whitespace-pre-wrap">` for message content
+- No markdown parsing or syntax highlighting
+- No LaTeX/math rendering
+- Plain text display only
+- Copy and Apply buttons work on raw content
 
 **Proposed Enhancement**:
-- **Block-based editing**: Each paragraph, heading, list item is a draggable block
-- **Slash commands**: Type `/` to insert headings, lists, code blocks, etc.
-- **Rich formatting toolbar**: Bold, italic, code, links with keyboard shortcuts
-- **Inline formatting**: Click to format, see results immediately
-- **Drag & drop**: Reorder content blocks by dragging
-- **Better typography**: Clean spacing, modern fonts, visual hierarchy
-- **Smooth animations**: Fade-ins, hover effects, smooth transitions
+- Use `ChatMessage` component or extract shared rendering logic
+- Full markdown support with ReactMarkdown
+- LaTeX math rendering (inline `$...$` and block `$$...$$`)
+- Syntax-highlighted code blocks with language detection
+- Code copy buttons within messages
+- Image rendering (if AI generates images)
+- Consistent visual style with Chat page
 
 **Benefits**:
-- Professional, polished editing experience
-- Faster content creation with slash commands
-- Better content organization with blocks
-- More intuitive for users familiar with Notion/modern editors
-- Encourages longer, better-structured Whims
+- ✅ **Consistent UX**: Same rendering quality in Chat and Whim AI assistant
+- ✅ **Better readability**: Formatted code, math formulas, structured content
+- ✅ **Professional experience**: No jarring difference between Chat and Whim
+- ✅ **Code assistance**: Syntax highlighting makes code suggestions more useful
+- ✅ **Math support**: LaTeX formulas render properly in AI responses
 
 **Technical Approach**:
 
-**Option 1: Lexical Editor** (Recommended - Meta's framework)
+**Option 1: Reuse ChatMessage Component** (Recommended)
 ```typescript
-// Modern, extensible, React-friendly
-import { LexicalComposer } from '@lexical/react/LexicalComposer';
-import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
-```
-- Pros: Lightweight, excellent React support, active maintenance
-- Cons: Newer framework, smaller ecosystem
+import { ChatMessage } from '@/components/chat/ChatMessage';
 
-**Option 2: Tiptap Editor** (Popular choice)
+// In AIChatSidebar.tsx
+{messages.map((message) => (
+  <ChatMessage
+    key={message.id}
+    message={message}
+    userName={userName}
+    userAvatar={userAvatar}
+  />
+))}
+```
+- Pros: Zero duplication, guaranteed consistency, inherits all improvements
+- Cons: May need to adjust styles for narrower sidebar
+
+**Option 2: Extract Shared Rendering Component**
 ```typescript
-// Built on ProseMirror, rich plugin ecosystem
-import { useEditor, EditorContent } from '@tiptap/react';
+// New file: src/components/shared/MessageContent.tsx
+export function MessageContent({ content }: { content: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeKatex, rehypeHighlight]}
+      // ... same config as ChatMessage
+    >
+      {content}
+    </ReactMarkdown>
+  );
+}
 ```
-- Pros: Mature, many plugins, great docs
-- Cons: Slightly heavier bundle size
+- Pros: More control over styling, can customize for sidebar
+- Cons: Duplication risk, need to maintain two components
 
-**Option 3: Slate.js** (Fully customizable)
-- Pros: Maximum control, highly customizable
-- Cons: More complex, requires more setup
+**Option 3: Hybrid Approach**
+- Extract markdown rendering config to shared module
+- Create `MessageRenderer` utility function
+- Use in both ChatMessage and AIChatSidebar
+- Customize wrapper styles per context
 
-**Recommendation**: Use **Lexical** for modern React integration and Meta's long-term support.
+**Recommendation**: **Option 1** (reuse ChatMessage) for consistency and maintainability. Adjust styles using CSS classes if needed.
 
 **Implementation Plan**:
-1. Install Lexical editor and plugins
-2. Create `WhimEditor` component replacing current textarea
-3. Add slash command menu for quick formatting
-4. Implement drag-and-drop block reordering
-5. Add formatting toolbar (sticky on scroll)
-6. Update Whim save/load to handle rich content
-7. Add keyboard shortcuts (Cmd+B for bold, etc.)
-8. Style to match Notion's clean aesthetic
+1. Import `ChatMessage` component into `AIChatSidebar.tsx`
+2. Replace current message rendering with `ChatMessage` component
+3. Pass necessary props (userName, userAvatar from session)
+4. Adjust styles for narrower sidebar width (280-600px)
+5. Test LaTeX, code blocks, and markdown in sidebar context
+6. Ensure Copy and Apply buttons still work correctly
+7. Verify auto-scroll behavior
 
 **Files to Modify**:
-- `src/app/whim/page.tsx` - Replace textarea with rich editor
-- New file: `src/components/whim/WhimEditor.tsx` - Lexical editor component
-- New file: `src/components/whim/SlashCommandMenu.tsx` - Slash commands
-- `src/types/index.ts` - Update Whim content type if needed
-- `src/app/api/whims/route.ts` - Handle rich content format
+- `src/components/whim/AIChatSidebar.tsx` - Replace message rendering
+- Add imports for ChatMessage component
+- Remove custom message rendering code (lines ~470-520)
+- Adjust container styles for narrower width
 
-**UI Components Needed**:
-- Block-based editor canvas
-- Floating formatting toolbar
-- Slash command popup menu
-- Drag handle for blocks
-- Block type selector (heading, list, code, etc.)
+**Code Changes**:
+```typescript
+// Before (line 494):
+<div className="whitespace-pre-wrap break-words">{message.content}</div>
 
-**Estimated Effort**: 6-8 hours
+// After:
+<ChatMessage
+  key={message.id}
+  message={message}
+  userName={session?.user?.name}
+  userAvatar={session?.user?.image}
+/>
+```
+
+**Testing Checklist**:
+- [ ] Markdown formatting renders correctly (bold, italic, lists)
+- [ ] LaTeX inline formulas display properly
+- [ ] LaTeX block formulas display properly
+- [ ] Code blocks show syntax highlighting
+- [ ] Code copy buttons work
+- [ ] Copy message button still works
+- [ ] Apply to whim button still works
+- [ ] Sidebar scrolling works smoothly
+- [ ] Narrow width (280px) doesn't break layout
+- [ ] Wide width (600px) looks good
+
+**Estimated Effort**: 1-2 hours
+
+**Cost Impact**: None (all client-side rendering)
+
+**Priority Rationale**:
+This is MEDIUM PRIORITY because:
+1. Current plain text rendering works, but lacks polish
+2. Users working with code/math in whims would benefit greatly
+3. Consistency improves perceived quality
+4. Quick win with minimal effort (reuse existing component)
+5. No backend changes required
 
 **References**:
-- Lexical docs: https://lexical.dev/
-- Notion-like editor tutorial: https://lexical.dev/docs/getting-started/tutorials
+- Chat Message component: `src/components/chat/ChatMessage.tsx`
+- AI Chat Sidebar: `src/components/whim/AIChatSidebar.tsx`
+- ReactMarkdown: Same setup as Chat page
 
 ---
 
-**Last Updated**: November 19, 2025
+**Last Updated**: November 20, 2025
 **Maintained By**: Archer & Claude Code

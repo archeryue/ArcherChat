@@ -25,6 +25,32 @@ Learn about:
 - 175+ bilingual keywords
 - Dynamic prompt management
 
+### 📝 [CONTENT_ARCHITECTURE.md](./CONTENT_ARCHITECTURE.md)
+**Content format, storage, conversion, and display logic.**
+
+**NEW**: Comprehensive documentation (2025-11-20)
+
+Learn about:
+- Content formats (Markdown vs HTML)
+- Storage layer (Firestore structure for conversations and whims)
+- Display systems (ReactMarkdown for Chat, TipTap for Whim)
+- Conversion pipeline (conversation → whim with `/save` and `/whim` commands)
+- File references for all components
+- Future improvement options for Whim editor
+
+**Key Topics:**
+- Markdown as single source of truth
+- Chat rendering: ReactMarkdown with LaTeX (KaTeX) and syntax highlighting
+- Whim rendering: TipTap WYSIWYG with markdown ↔ HTML conversion
+- AI-powered title generation for whim conversion
+- Feature parity gap analysis (Chat vs Whim)
+
+**Use Cases:**
+- Understanding content flow across systems
+- Planning Whim editor enhancements
+- Debugging rendering issues
+- Adding new content features
+
 ### 🤖 [AGENTIC_ARCHITECTURE.md](./AGENTIC_ARCHITECTURE.md)
 **Agentic architecture with ReAct pattern - IMPLEMENTED**
 
@@ -242,13 +268,14 @@ Learn how to:
 
 1. **New to WhimCraft?** Start with [../README.md](../README.md) for local setup
 2. **Understanding the system?** Read [DESIGN.md](./DESIGN.md)
-3. **Planning agentic refactor?** See [AGENTIC_ARCHITECTURE.md](./AGENTIC_ARCHITECTURE.md)
-4. **Ready to deploy?** Follow [DEPLOYMENT.md](./DEPLOYMENT.md)
-5. **Testing your deployment?** Use [TESTING_CHECKLIST.md](./TESTING_CHECKLIST.md)
-6. **Learning about memory?** See [MEMORY_SYSTEM_COMPLETE.md](./MEMORY_SYSTEM_COMPLETE.md)
-7. **Understanding progress tracking?** Check [PROGRESS_TRACKING.md](./PROGRESS_TRACKING.md)
-8. **Adding AI providers?** Check [ADDING_PROVIDERS.md](./ADDING_PROVIDERS.md)
-9. **Planning future work?** See [FUTURE_IMPROVEMENTS.md](./FUTURE_IMPROVEMENTS.md)
+3. **Understanding content flow?** See [CONTENT_ARCHITECTURE.md](./CONTENT_ARCHITECTURE.md)
+4. **Planning agentic refactor?** See [AGENTIC_ARCHITECTURE.md](./AGENTIC_ARCHITECTURE.md)
+5. **Ready to deploy?** Follow [DEPLOYMENT.md](./DEPLOYMENT.md)
+6. **Testing your deployment?** Use [TESTING_CHECKLIST.md](./TESTING_CHECKLIST.md)
+7. **Learning about memory?** See [MEMORY_SYSTEM_COMPLETE.md](./MEMORY_SYSTEM_COMPLETE.md)
+8. **Understanding progress tracking?** Check [PROGRESS_TRACKING.md](./PROGRESS_TRACKING.md)
+9. **Adding AI providers?** Check [ADDING_PROVIDERS.md](./ADDING_PROVIDERS.md)
+10. **Planning future work?** See [FUTURE_IMPROVEMENTS.md](./FUTURE_IMPROVEMENTS.md)
 
 ## 🎯 Key Features Documented
 
@@ -323,6 +350,14 @@ When updating documentation:
 **Test Summary**: 145+ unit tests (87 original + 58 agent tests), 26 E2E tests
 
 ## Recent Updates
+
+### 2025-11-20 - Content Architecture Documentation
+- ✅ **CONTENT_ARCHITECTURE.md**: Comprehensive documentation of content formats, storage, and rendering
+- ✅ **Markdown Source of Truth**: Documented how markdown serves as universal format
+- ✅ **Display Systems**: Detailed explanation of ReactMarkdown (Chat) vs TipTap (Whim)
+- ✅ **Conversion Pipeline**: Complete flow for `/save` and `/whim` commands
+- ✅ **Future Improvements**: Four improvement options for Whim editor enhancement
+- ✅ **File References**: Complete mapping of all components involved
 
 ### 2025-11-17 - Agentic Architecture Implementation
 - ✅ **AGENTIC_ARCHITECTURE.md**: Fully implemented ReAct pattern
