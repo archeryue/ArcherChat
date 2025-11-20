@@ -1,11 +1,13 @@
 import { Timestamp } from 'firebase-admin/firestore';
+import { JSONContent } from '@tiptap/core';
 
 // Server-side types (with Firestore Timestamps)
 export interface Whim {
   id: string;
   userId: string;
   title: string;
-  content: string; // Markdown content
+  content?: string; // Markdown content (legacy, for backward compatibility)
+  blocks?: JSONContent; // TipTap JSON blocks (new format)
   folderId?: string;
   conversationId?: string; // Optional reference to source conversation
   createdAt: Timestamp | string; // Timestamp on server, string on client
@@ -24,7 +26,8 @@ export interface WhimClient {
   id: string;
   userId: string;
   title: string;
-  content: string;
+  content?: string; // Markdown content (legacy, for backward compatibility)
+  blocks?: JSONContent; // TipTap JSON blocks (new format)
   folderId?: string;
   conversationId?: string;
   createdAt: string; // ISO string
@@ -40,14 +43,16 @@ export interface FolderClient {
 
 export interface CreateWhimRequest {
   title: string;
-  content: string;
+  content?: string; // Legacy markdown
+  blocks?: JSONContent; // New JSON blocks format
   folderId?: string;
   conversationId?: string;
 }
 
 export interface UpdateWhimRequest {
   title?: string;
-  content?: string;
+  content?: string; // Legacy markdown
+  blocks?: JSONContent; // New JSON blocks format
   folderId?: string;
 }
 

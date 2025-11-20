@@ -5,21 +5,40 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import { useEffect, useState, useCallback } from 'react';
 import { WhimClient, FolderClient } from '@/types/whim';
-import { marked } from 'marked';
-import TurndownService from 'turndown';
+import { JSONContent } from '@tiptap/core';
 import { MoreVertical, Trash2 } from 'lucide-react';
 
-// Configure marked options
-marked.setOptions({
-  breaks: true,
-  gfm: true,
-});
+// Deep equality check for JSON objects
+function isJSONEqual(a: JSONContent, b: JSONContent): boolean {
+  if (a === b) return true;
+  if (a == null || b == null) return false;
+  if (typeof a !== 'object' || typeof b !== 'object') return a === b;
 
-// Configure turndown for HTML to markdown conversion
-const turndownService = new TurndownService({
-  headingStyle: 'atx',
-  codeBlockStyle: 'fenced',
-});
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+
+  if (keysA.length !== keysB.length) return false;
+
+  for (const key of keysA) {
+    if (!keysB.includes(key)) return false;
+
+    const valA = (a as any)[key];
+    const valB = (b as any)[key];
+
+    if (Array.isArray(valA) && Array.isArray(valB)) {
+      if (valA.length !== valB.length) return false;
+      for (let i = 0; i < valA.length; i++) {
+        if (!isJSONEqual(valA[i], valB[i])) return false;
+      }
+    } else if (typeof valA === 'object' && typeof valB === 'object') {
+      if (!isJSONEqual(valA, valB)) return false;
+    } else if (valA !== valB) {
+      return false;
+    }
+  }
+
+  return true;
+}
 
 interface WhimEditorProps {
   whim: WhimClient;
@@ -44,10 +63,12 @@ export function WhimEditor({
   const [noChanges, setNoChanges] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  // Convert markdown to HTML for display
-  const htmlContent = marked.parse(whim.content) as string;
+  // Get initial content from blocks (all whims have been migrated)
+  const getInitialContent = (): JSONContent => {
+    return whim.blocks || { type: 'doc', content: [] };
+  };
 
-  // Initialize editor with HTML content
+  // Initialize editor with JSON content
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -55,7 +76,7 @@ export function WhimEditor({
         placeholder: 'Start writing your whim...',
       }),
     ],
-    content: htmlContent,
+    content: getInitialContent(),
     editorProps: {
       attributes: {
         class: 'prose prose-sm prose-slate max-w-none focus:outline-none px-8 leading-relaxed',
@@ -75,9 +96,9 @@ export function WhimEditor({
   useEffect(() => {
     if (!editor || !isInitialized) return;
 
-    const editorHTML = editor.getHTML();
+    const editorJSON = editor.getJSON();
     const handleUpdate = () => {
-      handleSave(title, editorHTML, selectedFolderId);
+      handleSave(title, editorJSON, selectedFolderId);
     };
 
     const timeoutId = setTimeout(handleUpdate, 2000); // Auto-save after 2 seconds of inactivity
@@ -88,23 +109,29 @@ export function WhimEditor({
 
   // Update editor content when whim changes
   useEffect(() => {
-    if (editor && whim.content !== editor.getHTML()) {
-      const newHtmlContent = marked.parse(whim.content) as string;
-      editor.commands.setContent(newHtmlContent);
+    if (editor) {
+      const newContent = getInitialContent();
+      // Only update if content actually changed (avoid infinite loops)
+      const currentJSON = JSON.stringify(editor.getJSON());
+      const newJSON = JSON.stringify(newContent);
+      if (currentJSON !== newJSON) {
+        editor.commands.setContent(newContent);
+      }
     }
     setTitle(whim.title);
     setSelectedFolderId(whim.folderId || '');
-  }, [whim.id, whim.content, whim.title, whim.folderId, editor]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [whim.id, whim.title, whim.folderId, editor]);
 
   const handleSave = useCallback(
-    async (newTitle: string, newContentHTML: string, newFolderId: string): Promise<boolean> => {
-      // Convert HTML back to markdown before saving
-      const newContentMarkdown = turndownService.turndown(newContentHTML);
-
+    async (newTitle: string, newContentJSON: JSONContent, newFolderId: string): Promise<boolean> => {
       // Only save if something changed
+      const currentBlocks = whim.blocks || { type: 'doc', content: [] };
+      const blocksChanged = !isJSONEqual(currentBlocks, newContentJSON);
+
       if (
         newTitle === whim.title &&
-        newContentMarkdown === whim.content &&
+        !blocksChanged &&
         newFolderId === (whim.folderId || '')
       ) {
         return false;
@@ -114,7 +141,7 @@ export function WhimEditor({
       try {
         await onUpdate(whim.id, {
           title: newTitle,
-          content: newContentMarkdown,
+          blocks: newContentJSON, // Save JSON blocks only (no markdown content)
           folderId: newFolderId || undefined,
         });
         setLastSaved(new Date());
@@ -135,14 +162,14 @@ export function WhimEditor({
 
   const handleTitleBlur = () => {
     if (title !== whim.title && editor) {
-      handleSave(title, editor.getHTML(), selectedFolderId);
+      handleSave(title, editor.getJSON(), selectedFolderId);
     }
   };
 
   const handleFolderChange = (folderId: string) => {
     setSelectedFolderId(folderId);
     if (editor) {
-      handleSave(title, editor.getHTML(), folderId);
+      handleSave(title, editor.getJSON(), folderId);
     }
   };
 
@@ -152,7 +179,7 @@ export function WhimEditor({
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         if (editor) {
-          const saved = await handleSave(title, editor.getHTML(), selectedFolderId);
+          const saved = await handleSave(title, editor.getJSON(), selectedFolderId);
           if (!saved) {
             // Show "No changes" briefly
             setNoChanges(true);

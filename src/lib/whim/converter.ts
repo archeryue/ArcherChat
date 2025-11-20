@@ -1,7 +1,17 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AIMessage } from '@/types/ai-providers';
+import { generateJSON } from '@tiptap/html/server';
+import StarterKit from '@tiptap/starter-kit';
+import { marked } from 'marked';
+import { JSONContent } from '@tiptap/core';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+
+// Configure marked options
+marked.setOptions({
+  breaks: true,
+  gfm: true,
+});
 
 /**
  * Convert a conversation to markdown format
@@ -83,7 +93,25 @@ Title:`;
 }
 
 /**
+ * Convert a conversation to TipTap JSON blocks format
+ * This parses markdown content into structured blocks
+ */
+export function conversationToBlocks(messages: AIMessage[]): JSONContent {
+  // Build markdown first
+  const markdown = conversationToMarkdown(messages);
+
+  // Convert markdown to HTML
+  const html = marked.parse(markdown) as string;
+
+  // Parse HTML to TipTap JSON using StarterKit extensions
+  const json = generateJSON(html, [StarterKit]);
+
+  return json;
+}
+
+/**
  * Convert conversation to whim (markdown + title)
+ * @deprecated Use convertConversationToWhimBlocks instead for new whims
  */
 export async function convertConversationToWhim(messages: AIMessage[]): Promise<{
   title: string;
@@ -95,4 +123,19 @@ export async function convertConversationToWhim(messages: AIMessage[]): Promise<
   ]);
 
   return { title, content };
+}
+
+/**
+ * Convert conversation to whim with JSON blocks (new format)
+ */
+export async function convertConversationToWhimBlocks(messages: AIMessage[]): Promise<{
+  title: string;
+  blocks: JSONContent;
+}> {
+  const [title, blocks] = await Promise.all([
+    generateConversationTitle(messages),
+    Promise.resolve(conversationToBlocks(messages))
+  ]);
+
+  return { title, blocks };
 }

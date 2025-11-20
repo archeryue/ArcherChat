@@ -16,14 +16,15 @@ This document explains how WhimCraft handles content formatting, storage, conver
 
 ## Overview
 
-WhimCraft uses **markdown as the universal source of truth** for all content, but renders it differently depending on the context:
+WhimCraft uses different content formats optimized for each context:
 
-- **Chat Page**: Read-only markdown rendering with full LaTeX and code support
-- **Whim Page**: Editable WYSIWYG editor with markdown storage
+- **Chat Page**: Markdown messages with read-only rendering (LaTeX, code highlighting)
+- **Whim Page**: **TipTap JSON blocks** with WYSIWYG editing (new format as of 2025-11-20)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    MARKDOWN (Source of Truth)               │
+│              Chat: MARKDOWN (messages)                       │
+│              Whim: JSON BLOCKS (TipTap format)              │
 │                   Stored in Firestore                       │
 └────────────┬────────────────────────────────┬───────────────┘
              │                                │
@@ -34,6 +35,8 @@ WhimCraft uses **markdown as the universal source of truth** for all content, bu
     │   (Read-only)  │              │   (Editable)     │
     └────────────────┘              └──────────────────┘
 ```
+
+**Migration Note**: As of 2025-11-20, all whims use JSON blocks. The `content` field (markdown) is preserved for backward compatibility but is no longer written to for new whims.
 
 ---
 
@@ -70,26 +73,85 @@ def derivative(x):
 ---
 ```
 
-### HTML (Intermediate Format)
+### TipTap JSON Blocks (Whim Storage Format)
 
-**What it is**: Rich text markup language
+**What it is**: Structured JSON representing document content as nested blocks (based on ProseMirror's document model)
 
 **Used for**:
-- TipTap editor internal representation
-- Temporary display format (converted from markdown)
+- Primary storage format for whims (as of 2025-11-20)
+- TipTap editor native format
+- Notion-like block-based editing
 
-**Example**:
-```html
-<h2>User</h2>
-<p>How do I calculate the derivative of x²?</p>
-<hr />
-<h2>AI</h2>
-<p>The derivative of <span class="math-inline">x^2</span> is <span class="math-inline">2x</span>.</p>
+**Structure**:
+```typescript
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "paragraph",
+      "content": [
+        { "type": "text", "text": "Plain text" },
+        {
+          "type": "text",
+          "marks": [{ "type": "bold" }],
+          "text": "Bold text"
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": { "level": 2 },
+      "content": [
+        { "type": "text", "text": "Heading" }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": { "language": "python" },
+      "content": [
+        { "type": "text", "text": "def hello():\n    print('world')" }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                { "type": "text", "text": "List item" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
 ```
 
+**Node Types**:
+- **Blocks**: `paragraph`, `heading`, `codeBlock`, `bulletList`, `orderedList`, `listItem`, `blockquote`
+- **Inline**: `text` (with optional `marks`)
+- **Marks**: `bold`, `italic`, `code`, `strike`, `link`
+
+**Attributes**:
+- `heading`: `{ level: 1-6 }`
+- `codeBlock`: `{ language: string | null }`
+- `link`: `{ href: string }`
+
+**Key Benefits**:
+- ✅ **Block-level operations**: Move, delete, duplicate blocks easily
+- ✅ **Type safety**: Each node has a defined structure
+- ✅ **Extensible**: Custom block types and marks
+- ✅ **Collaborative editing**: Operational Transform (OT) compatible
+- ✅ **Notion-like UX**: Natural foundation for slash commands, drag-and-drop
+
 **Conversion libraries**:
-- `marked`: Markdown → HTML (parsing)
-- `turndown`: HTML → Markdown (serialization)
+- `@tiptap/html/server`: Markdown → HTML → JSON blocks (server-side, used in migration)
+- `marked`: Markdown → HTML (intermediate step)
 
 ---
 
@@ -124,14 +186,19 @@ whims/{whimId}
 ├── id: string
 ├── userId: string
 ├── title: string
-├── content: string  // ⬅️ MARKDOWN
+├── blocks: JSONContent  // ⬅️ TIPTAP JSON BLOCKS (primary, new format)
+├── content?: string     // ⬅️ MARKDOWN (legacy, kept for backward compatibility)
 ├── folderId?: string
 ├── conversationId?: string  // Reference to source conversation
 ├── createdAt: Timestamp
 └── updatedAt: Timestamp
 ```
 
-**Key insight**: Both collections store content as **markdown strings**, ensuring consistency and portability.
+**Key insights**:
+- **Chat messages**: Stored as markdown strings (simple, AI-friendly)
+- **Whims**: Stored as TipTap JSON blocks (rich editing, Notion-like UX)
+- **Migration**: All existing whims migrated to JSON blocks (2025-11-20)
+- **Backward compatibility**: `content` field preserved but no longer written to
 
 ---
 
@@ -230,51 +297,43 @@ import "katex/dist/katex.min.css";
 
 **Component**: `src/components/whim/WhimEditor.tsx`
 
-#### Rendering Pipeline
+#### Rendering Pipeline (Updated 2025-11-20)
 
 ```
-Whim.content (markdown stored in Firestore)
+Whim.blocks (TipTap JSON stored in Firestore)
     ↓
-marked.parse() // Markdown → HTML
-    ↓
-TipTap Editor (loaded with HTML)
+TipTap Editor (loaded with JSON blocks directly)
     ↓
 User edits (WYSIWYG)
     ↓
-turndownService.turndown() // HTML → Markdown
+editor.getJSON() // Get current JSON state
     ↓
-Save to Firestore (markdown)
+Save to Firestore (JSON blocks)
 ```
+
+**Key change**: No more markdown ↔ HTML conversion! JSON blocks are stored and loaded directly.
 
 #### Key Features
 
-**Libraries** (`src/components/whim/WhimEditor.tsx:3-21`):
+**Libraries** (`src/components/whim/WhimEditor.tsx:1-9`):
 ```typescript
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import { marked } from 'marked';              // Markdown → HTML
-import TurndownService from 'turndown';       // HTML → Markdown
+import { JSONContent } from '@tiptap/core';
 
-// Configure marked
-marked.setOptions({
-  breaks: true,       // Treat \n as <br>
-  gfm: true,         // GitHub Flavored Markdown
-});
-
-// Configure turndown
-const turndownService = new TurndownService({
-  headingStyle: 'atx',        // Use # for headings (not underline)
-  codeBlockStyle: 'fenced',   // Use ``` for code blocks
-});
+// No more markdown/HTML conversion libraries needed!
+// JSON blocks are used directly
 ```
 
-**Loading whim** (lines 45-63):
+**Loading whim** (lines 35-54):
 ```typescript
-// 1. Convert markdown to HTML for display
-const htmlContent = marked.parse(whim.content) as string;
+// Get initial content from JSON blocks
+const getInitialContent = (): JSONContent => {
+  return whim.blocks || { type: 'doc', content: [] };
+};
 
-// 2. Initialize TipTap editor with HTML
+// Initialize TipTap editor with JSON content directly
 const editor = useEditor({
   extensions: [
     StarterKit,
@@ -282,36 +341,47 @@ const editor = useEditor({
       placeholder: 'Start writing your whim...',
     }),
   ],
-  content: htmlContent,
+  content: getInitialContent(),  // ⬅️ JSON blocks loaded directly
   editorProps: {
     attributes: {
-      class: 'prose prose-sm prose-slate max-w-none focus:outline-none',
+      class: 'prose prose-sm prose-slate max-w-none focus:outline-none px-8',
     },
   },
-});
+  immediatelyRender: false,
+}, []);
 ```
 
-**Saving edits** (lines 97-128):
+**Saving edits** (lines 126-155):
 ```typescript
-const handleSave = async (newTitle: string, newContentHTML: string, newFolderId: string) => {
-  // Convert HTML back to markdown before saving
-  const newContentMarkdown = turndownService.turndown(newContentHTML);
+// Deep equality check for JSON objects
+function isJSONEqual(a: JSONContent, b: JSONContent): boolean {
+  // Recursive comparison of JSON structure
+  // (See WhimEditor.tsx:12-41 for full implementation)
+}
 
-  // Only save if something changed
-  if (newTitle === whim.title && newContentMarkdown === whim.content) {
-    return false;
-  }
+const handleSave = useCallback(
+  async (newTitle: string, newContentJSON: JSONContent, newFolderId: string) => {
+    // Compare JSON structures using deep equality
+    const currentBlocks = whim.blocks || { type: 'doc', content: [] };
+    const blocksChanged = !isJSONEqual(currentBlocks, newContentJSON);
 
-  // Save to Firestore
-  await onUpdate(whim.id, {
-    title: newTitle,
-    content: newContentMarkdown,  // ⬅️ Store as markdown
-    folderId: newFolderId || undefined,
-  });
+    // Only save if something changed
+    if (newTitle === whim.title && !blocksChanged && newFolderId === (whim.folderId || '')) {
+      return false;
+    }
 
-  setLastSaved(new Date());
-  return true;
-};
+    // Save to Firestore
+    await onUpdate(whim.id, {
+      title: newTitle,
+      blocks: newContentJSON,  // ⬅️ Store JSON blocks directly
+      folderId: newFolderId || undefined,
+    });
+
+    setLastSaved(new Date());
+    return true;
+  },
+  [whim, onUpdate]
+);
 ```
 
 **Editor features** (lines 224-308):
@@ -326,12 +396,20 @@ const handleSave = async (newTitle: string, newContentHTML: string, newFolderId:
 - `Ctrl+S` / `Cmd+S`: Manual save
 - `Ctrl+I` / `Cmd+I`: Open AI assistant with selected text
 
-**Current limitations** (to be improved):
-- ❌ No LaTeX/math support in editor
-- ❌ No syntax highlighting in code blocks
-- ❌ No table editing UI
-- ❌ No image insertion
-- ❌ Limited markdown feature parity with Chat
+**Current features**:
+- ✅ JSON blocks storage (Notion-like foundation)
+- ✅ WYSIWYG editing with TipTap
+- ✅ Basic formatting (bold, italic, headings, lists, code blocks)
+- ✅ Deep equality comparison (no false auto-saves)
+- ✅ Auto-save with debouncing
+
+**Future enhancements** (see FUTURE_IMPROVEMENTS.md):
+- ⏳ LaTeX/math support (`@tiptap/extension-mathematics`)
+- ⏳ Syntax highlighting (`@tiptap/extension-code-block-lowlight`)
+- ⏳ Table editing UI (`@tiptap/extension-table`)
+- ⏳ Image insertion (`@tiptap/extension-image`)
+- ⏳ Slash commands for block insertion
+- ⏳ Drag-and-drop block reordering
 
 ---
 
@@ -358,18 +436,18 @@ if (trimmedMessage === '/save' || trimmedMessage === '/whim') {
 const messagesWithoutCommand = messages.slice(0, -1);
 ```
 
-**3. Call converter** (line 146):
+**3. Call converter** (updated 2025-11-20):
 ```typescript
-const { title, content } = await convertConversationToWhim(messagesWithoutCommand);
+const { title, blocks } = await convertConversationToWhimBlocks(messagesWithoutCommand);
 ```
 
-**4. Save to Firestore** (lines 149-170):
+**4. Save to Firestore**:
 ```typescript
 const now = Timestamp.now();
 const whimData: Omit<Whim, 'id'> = {
   userId: session.user.id,
   title,
-  content,
+  blocks,  // ⬅️ JSON blocks (new format)
   conversationId: conversationId,
   createdAt: now,
   updatedAt: now,
@@ -439,10 +517,26 @@ Title:`;
 
 **Cost**: ~$0.000002 per title (using Flash Lite, ~50 tokens)
 
-#### B. Convert to Markdown
+#### B. Convert to TipTap JSON Blocks
 
-**Function**: `conversationToMarkdown()` (lines 9-20)
+**Function**: `conversationToBlocks()` (lines 99-110)
 
+```typescript
+export function conversationToBlocks(messages: AIMessage[]): JSONContent {
+  // 1. Build markdown first
+  const markdown = conversationToMarkdown(messages);
+
+  // 2. Convert markdown to HTML
+  const html = marked.parse(markdown) as string;
+
+  // 3. Parse HTML to TipTap JSON using StarterKit extensions
+  const json = generateJSON(html, [StarterKit]);
+
+  return json;
+}
+```
+
+**Helper**: `conversationToMarkdown()` (lines 19-30)
 ```typescript
 export function conversationToMarkdown(messages: AIMessage[]): string {
   let markdown = '';
@@ -458,39 +552,60 @@ export function conversationToMarkdown(messages: AIMessage[]): string {
 }
 ```
 
-**Example output**:
-```markdown
-## User
-
-How do I calculate derivatives in calculus?
-
----
-
-## AI
-
-The derivative of a function $f(x)$ represents the rate of change...
-
----
-```
-
-#### C. Main Converter
-
-**Function**: `convertConversationToWhim()` (lines 88-98)
-
-```typescript
-export async function convertConversationToWhim(messages: AIMessage[]): Promise<{
-  title: string;
-  content: string;
-}> {
-  // Run in parallel for performance
-  const [title, content] = await Promise.all([
-    generateConversationTitle(messages),
-    Promise.resolve(conversationToMarkdown(messages))
-  ]);
-
-  return { title, content };
+**Example JSON output**:
+```json
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "heading",
+      "attrs": { "level": 2 },
+      "content": [{ "type": "text", "text": "User" }]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        { "type": "text", "text": "How do I calculate derivatives in calculus?" }
+      ]
+    },
+    {
+      "type": "horizontalRule"
+    },
+    {
+      "type": "heading",
+      "attrs": { "level": 2 },
+      "content": [{ "type": "text", "text": "AI" }]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        { "type": "text", "text": "The derivative of a function..." }
+      ]
+    }
+  ]
 }
 ```
+
+#### C. Main Converter (Updated 2025-11-20)
+
+**Function**: `convertConversationToWhimBlocks()` (lines 131-141)
+
+```typescript
+export async function convertConversationToWhimBlocks(messages: AIMessage[]): Promise<{
+  title: string;
+  blocks: JSONContent;
+}> {
+  // Run in parallel for performance
+  const [title, blocks] = await Promise.all([
+    generateConversationTitle(messages),
+    Promise.resolve(conversationToBlocks(messages))
+  ]);
+
+  return { title, blocks };
+}
+```
+
+**Note**: The old `convertConversationToWhim()` function (returns markdown) is deprecated but kept for backward compatibility.
 
 ---
 
@@ -529,6 +644,19 @@ export async function convertConversationToWhim(messages: AIMessage[]): Promise<
 | Whim Types | `src/types/whim.ts` | Whim, Folder interfaces |
 | AI Provider Types | `src/types/ai-providers.ts` | AIMessage interface |
 | File Types | `src/types/file.ts` | FileAttachment interface |
+
+### Migration Scripts (2025-11-20)
+
+| Script | Path | Purpose |
+|--------|------|---------|
+| Migration | `scripts/migrate-whims-to-blocks.ts` | One-time migration: markdown → JSON blocks |
+| Verification | `scripts/verify-whim-migration.ts` | Verify migration status |
+
+**Migration details**:
+- Converted 13 whims from markdown to JSON blocks
+- Preserved `content` field for rollback safety
+- Used `@tiptap/html/server` for server-side conversion
+- Can be run multiple times (idempotent)
 
 ---
 
@@ -625,34 +753,52 @@ npm install @tiptap/extension-table @tiptap/extension-image
 
 ## Summary
 
-### Content Format Strategy
+### Content Format Strategy (Updated 2025-11-20)
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│         MARKDOWN = Single Source of Truth                    │
+│   Chat: MARKDOWN (simple, AI-friendly)                      │
+│   Whim: JSON BLOCKS (rich editing, Notion-like)             │
 │                                                              │
-│  ✅ Portable across systems                                  │
-│  ✅ Version control friendly                                 │
-│  ✅ AI-friendly (easy to parse/generate)                     │
-│  ✅ Future-proof                                             │
+│  ✅ Optimized for each use case                              │
+│  ✅ TipTap JSON blocks = Extensible, block-based editing     │
+│  ✅ Future-proof (supports custom extensions)                │
+│  ✅ Collaborative editing ready (with Y.js)                  │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 ### Display Strategy
 
-| System | Library | Mode | Features |
-|--------|---------|------|----------|
-| **Chat** | ReactMarkdown | Read-only | ✅ Full markdown, LaTeX, code highlighting |
-| **Whim** | TipTap (HTML) | Editable | ⚠️ Basic formatting only |
+| System | Storage Format | Library | Mode | Features |
+|--------|---------------|---------|------|----------|
+| **Chat** | Markdown | ReactMarkdown | Read-only | ✅ Full markdown, LaTeX, code highlighting |
+| **Whim** | JSON Blocks | TipTap | Editable | ✅ Block-based WYSIWYG, extensible |
 
 ### Key Takeaways
 
-1. **Markdown everywhere**: All content stored as markdown in Firestore
-2. **Different renderers**: Chat (ReactMarkdown) vs Whim (TipTap)
-3. **Feature gap**: Whim editor lacks LaTeX, syntax highlighting, advanced markdown
-4. **Improvement path**: Gradual enhancement starting with preview mode
+1. **Different formats for different needs**:
+   - Chat: Markdown (AI-generated content, read-only)
+   - Whim: JSON blocks (user-edited content, Notion-like)
+
+2. **JSON blocks benefits**:
+   - ✅ No conversion overhead (direct load/save)
+   - ✅ Block-level operations (move, delete, duplicate)
+   - ✅ Foundation for Notion-like features (slash commands, drag-drop)
+   - ✅ Type-safe structure
+   - ✅ Extensible (custom blocks and marks)
+
+3. **Migration complete**:
+   - All 13 existing whims migrated to JSON blocks
+   - Legacy `content` field preserved for safety
+   - New whims only save JSON blocks
+
+4. **Future path**:
+   - Add TipTap extensions (LaTeX, syntax highlighting, tables, images)
+   - Implement Notion-like UX (slash commands, drag handles)
+   - See `docs/FUTURE_IMPROVEMENTS.md` for roadmap
 
 ---
 
 **Last Updated**: 2025-11-20
-**Next Review**: After implementing preview mode for Whim editor
+**Migration Date**: 2025-11-20 (Markdown → JSON blocks)
+**Next Review**: After implementing Phase 1 extensions (LaTeX, syntax highlighting)

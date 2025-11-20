@@ -21,7 +21,7 @@ import { ProgressStep, ProgressEvent } from "@/lib/progress/types";
 import { SearchResult } from "@/types/web-search";
 import { PromptAnalysisResult } from "@/types/prompt-analysis";
 import { MemoryFact } from "@/types/memory";
-import { convertConversationToWhim } from "@/lib/whim/converter";
+import { convertConversationToWhimBlocks } from "@/lib/whim/converter";
 import { Timestamp } from 'firebase-admin/firestore';
 import { Whim } from "@/types/whim";
 
@@ -142,15 +142,15 @@ export async function POST(req: NextRequest) {
       // Filter out the last message (which is the /save or /whim command)
       const messagesWithoutCommand = messages.slice(0, -1);
 
-      // Convert conversation to whim
-      const { title, content } = await convertConversationToWhim(messagesWithoutCommand);
+      // Convert conversation to whim (using new JSON blocks format)
+      const { title, blocks } = await convertConversationToWhimBlocks(messagesWithoutCommand);
 
-      // Save whim to database
+      // Save whim to database (only blocks, no content field for new whims)
       const now = Timestamp.now();
       const whimData: Omit<Whim, 'id'> = {
         userId: session.user.id,
         title,
-        content,
+        blocks,
         conversationId,
         createdAt: now,
         updatedAt: now,

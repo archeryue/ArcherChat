@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body: CreateWhimRequest = await request.json();
-    const { title, content, folderId, conversationId } = body;
+    const { title, content, blocks, folderId, conversationId } = body;
 
     if (!title) {
       return NextResponse.json(
@@ -68,11 +68,13 @@ export async function POST(request: NextRequest) {
     const whimData: Omit<Whim, 'id'> = {
       userId: session.user.id,
       title,
-      content: content || '',
       createdAt: now,
       updatedAt: now,
       ...(conversationId && { conversationId }),
-      ...(folderId && { folderId })
+      ...(folderId && { folderId }),
+      // Support both old (content) and new (blocks) format
+      ...(content && { content }),
+      ...(blocks && { blocks })
     };
 
     const docRef = await db.collection('whims').add(whimData);
