@@ -7,6 +7,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { WhimClient, FolderClient } from '@/types/whim';
 import { marked } from 'marked';
 import TurndownService from 'turndown';
+import { MoreVertical, Trash2 } from 'lucide-react';
 
 // Configure marked options
 marked.setOptions({
@@ -41,6 +42,7 @@ export function WhimEditor({
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [noChanges, setNoChanges] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
 
   // Convert markdown to HTML for display
   const htmlContent = marked.parse(whim.content) as string;
@@ -193,19 +195,95 @@ export function WhimEditor({
 
   return (
     <div className="flex-1 flex flex-col bg-white overflow-hidden relative">
-      {/* Title */}
+      {/* Title Header */}
       <div className="px-6 py-3 border-b border-slate-200 bg-slate-50">
-        <input
-          type="text"
-          value={title}
-          onChange={(e) => handleTitleChange(e.target.value)}
-          onBlur={handleTitleBlur}
-          className="w-full text-2xl font-semibold text-slate-900 focus:outline-none bg-transparent p-0 m-0 border-0"
-          placeholder="Untitled"
-        />
-        <div className="text-xs text-slate-600 mt-1">
-          Created: {new Date(whim.createdAt).toLocaleDateString()} • Updated:{' '}
-          {new Date(whim.updatedAt).toLocaleDateString()}
+        <div className="flex items-center justify-between gap-4">
+          {/* Title Input */}
+          <div className="flex-1 min-w-0">
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => handleTitleChange(e.target.value)}
+              onBlur={handleTitleBlur}
+              className="w-full text-2xl font-semibold text-slate-900 focus:outline-none bg-transparent p-0 m-0 border-0"
+              placeholder="Untitled"
+            />
+            <div className="flex items-center gap-2 text-xs text-slate-600 mt-1">
+              <span>
+                Created: {new Date(whim.createdAt).toLocaleDateString()} • Updated:{' '}
+                {new Date(whim.updatedAt).toLocaleDateString()}
+              </span>
+              {/* Save Status */}
+              {isSaving ? (
+                <>
+                  <span>•</span>
+                  <span className="text-slate-500">Saving...</span>
+                </>
+              ) : noChanges ? (
+                <>
+                  <span>•</span>
+                  <span className="text-slate-500">No changes</span>
+                </>
+              ) : lastSaved ? (
+                <>
+                  <span>•</span>
+                  <span className="text-green-600">✓ Saved</span>
+                </>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Document Controls */}
+          <div className="flex items-center gap-2 flex-shrink-0 select-none">
+            {/* Folder Selection */}
+            <select
+              value={selectedFolderId}
+              onChange={(e) => handleFolderChange(e.target.value)}
+              className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white hover:bg-slate-50 transition-colors cursor-pointer select-none"
+            >
+              <option value="">Uncategorized</option>
+              {folders.map((folder) => (
+                <option key={folder.id} value={folder.id}>
+                  {folder.name}
+                </option>
+              ))}
+            </select>
+
+            {/* Three-dot Menu */}
+            <div className="relative">
+              <button
+                onClick={() => setShowDropdown(!showDropdown)}
+                className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer select-none"
+                title="More options"
+              >
+                <MoreVertical className="w-5 h-5 text-slate-600" />
+              </button>
+
+              {/* Dropdown Menu */}
+              {showDropdown && (
+                <>
+                  {/* Backdrop to close dropdown */}
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setShowDropdown(false)}
+                  />
+                  {/* Dropdown */}
+                  <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-20">
+                    <button
+                      onClick={() => {
+                        setShowDropdown(false);
+                        onDelete(whim.id);
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -307,43 +385,6 @@ export function WhimEditor({
               </svg>
             </button>
           </div>
-
-          {/* Divider */}
-          <div className="w-px h-6 bg-slate-300"></div>
-
-          {/* Folder Selection */}
-          <select
-            value={selectedFolderId}
-            onChange={(e) => handleFolderChange(e.target.value)}
-            className="px-2 py-1 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-400"
-          >
-            <option value="">Uncategorized</option>
-            {folders.map((folder) => (
-              <option key={folder.id} value={folder.id}>
-                {folder.name}
-              </option>
-            ))}
-          </select>
-
-          {/* Divider */}
-          <div className="w-px h-6 bg-slate-300"></div>
-
-          {/* Save Status */}
-          {isSaving ? (
-            <span className="text-xs text-slate-500">Saving...</span>
-          ) : noChanges ? (
-            <span className="text-xs text-slate-500">No changes</span>
-          ) : lastSaved ? (
-            <span className="text-xs text-green-600">Saved</span>
-          ) : null}
-
-          {/* Delete */}
-          <button
-            onClick={() => onDelete(whim.id)}
-            className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-          >
-            Delete
-          </button>
         </div>
       </div>
     </div>
