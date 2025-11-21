@@ -28,7 +28,7 @@ export default defineConfig({
   // Shared settings for all the projects below
   use: {
     // Base URL to use in actions like `await page.goto('/')`
-    baseURL: 'http://localhost:3000',
+    baseURL: 'http://localhost:8080',
 
     // Collect trace when retrying the failed test
     trace: 'on-first-retry',
@@ -50,8 +50,8 @@ export default defineConfig({
 
   // Run your local dev server before starting the tests
   webServer: {
-    command: 'NODE_OPTIONS="--no-deprecation" next dev',
-    url: 'http://localhost:3000',
+    command: 'NODE_OPTIONS="--no-deprecation" PORT=8080 next dev',
+    url: 'http://localhost:8080',
     reuseExistingServer: true, // Always reuse if server is running
     timeout: 120 * 1000,
   },

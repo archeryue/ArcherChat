@@ -16,7 +16,7 @@ test.describe('Application Basic Functionality', () => {
 
     // Should redirect to login or show homepage
     const url = page.url();
-    expect(url).toMatch(/localhost:3000/);
+    expect(url).toMatch(/localhost:8080/);
   });
 
   test('should have correct page title', async ({ page }) => {

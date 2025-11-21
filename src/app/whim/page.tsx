@@ -217,16 +217,16 @@ export default function WhimPage() {
 
     // If we have a selection range, replace only that part
     // Otherwise, append to the end or replace based on context
-    let updatedContent = selectedWhim.content;
+    let updatedContent = selectedWhim.content || '';
 
     if (selectedText && selectionRange) {
       // Replace the selected text with new content
       // Note: This is a simple replacement. For more complex scenarios,
       // we might need to track positions in the TipTap editor
-      updatedContent = selectedWhim.content.replace(selectedText, newContent);
+      updatedContent = (selectedWhim.content || '').replace(selectedText, newContent);
     } else {
       // Append to the end
-      updatedContent = selectedWhim.content + '\n\n' + newContent;
+      updatedContent = (selectedWhim.content || '') + '\n\n' + newContent;
     }
 
     await handleWhimUpdate(selectedWhim.id, { content: updatedContent });
@@ -310,7 +310,7 @@ export default function WhimPage() {
         {selectedWhim && (
           <AIChatSidebar
             whimId={selectedWhim.id}
-            whimContent={selectedWhim.content}
+            whimContent={selectedWhim.content || ''}
             selectedText={selectedText}
             selectionRange={selectionRange}
             isOpen={aiSidebarOpen}

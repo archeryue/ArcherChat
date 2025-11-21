@@ -3,10 +3,24 @@
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
+import { Mathematics } from '@tiptap/extension-mathematics';
+import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight';
+import { Table } from '@tiptap/extension-table';
+import { TableRow } from '@tiptap/extension-table-row';
+import { TableCell } from '@tiptap/extension-table-cell';
+import { TableHeader } from '@tiptap/extension-table-header';
+import { Image } from '@tiptap/extension-image';
+import { Markdown } from '@tiptap/markdown';
+import { common, createLowlight } from 'lowlight';
 import { useEffect, useState, useCallback } from 'react';
 import { WhimClient, FolderClient } from '@/types/whim';
 import { JSONContent } from '@tiptap/core';
 import { MoreVertical, Trash2 } from 'lucide-react';
+import 'katex/dist/katex.min.css';
+import 'highlight.js/styles/github-dark.css';
+
+// Initialize lowlight with common languages
+const lowlight = createLowlight(common);
 
 // Deep equality check for JSON objects
 function isJSONEqual(a: JSONContent, b: JSONContent): boolean {
@@ -43,7 +57,7 @@ function isJSONEqual(a: JSONContent, b: JSONContent): boolean {
 interface WhimEditorProps {
   whim: WhimClient;
   folders: FolderClient[];
-  onUpdate: (whimId: string, updates: { title?: string; content?: string; folderId?: string }) => void;
+  onUpdate: (whimId: string, updates: { title?: string; content?: string; blocks?: any; folderId?: string }) => void;
   onDelete: (whimId: string) => void;
   onOpenAIChat?: (selectedText?: string, range?: { start: number; end: number }) => void;
 }
@@ -65,39 +79,128 @@ export function WhimEditor({
 
   // Get initial content from blocks (all whims have been migrated)
   const getInitialContent = (): JSONContent => {
-    return whim.blocks || { type: 'doc', content: [] };
+    const content = whim.blocks || { type: 'doc', content: [] };
+    console.log('WhimEditor getInitialContent:', {
+      hasBlocks: !!whim.blocks,
+      contentType: content.type,
+      contentLength: content.content?.length,
+      firstItems: content.content?.slice(0, 3),
+    });
+    return content;
   };
 
-  // Initialize editor with JSON content
+  // Initialize editor empty, content set via useEffect below
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        codeBlock: false, // Disable default code block (we use CodeBlockLowlight)
+      }),
       Placeholder.configure({
         placeholder: 'Start writing your whim...',
       }),
+      Mathematics.configure({
+        katexOptions: {
+          throwOnError: false,
+        },
+      }),
+      CodeBlockLowlight.configure({
+        lowlight,
+      }),
+      Table.configure({
+        resizable: true,
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
+      Image.configure({
+        inline: true,
+        allowBase64: true,
+      }),
+      Markdown.configure({
+        markedOptions: {
+          gfm: true, // Enable GitHub Flavored Markdown (includes tables)
+        },
+      }),
     ],
-    content: getInitialContent(),
     editorProps: {
       attributes: {
         class: 'prose prose-sm prose-slate max-w-none focus:outline-none px-8 leading-relaxed',
       },
+      handlePaste: (view, event) => {
+        const text = event.clipboardData?.getData('text/plain');
+        if (!text) return false;
+
+        // Check if the pasted text looks like a markdown table
+        const lines = text.trim().split('\n');
+        const hasTableStructure = lines.length >= 2 &&
+          lines[0].includes('|') &&
+          lines[1].includes('|') &&
+          lines[1].includes('-');
+
+        if (hasTableStructure) {
+          // Prevent default paste behavior
+          event.preventDefault();
+
+          try {
+            // Use TipTap's insertContent command with markdown parsing
+            const editor = (view.state as any).editor;
+            if (editor && editor.commands) {
+              editor.commands.insertContent(text, {
+                contentType: 'markdown',
+              });
+              return true;
+            }
+          } catch (error) {
+            console.error('Failed to parse markdown table:', error);
+          }
+        }
+
+        return false;
+      },
     },
     immediatelyRender: false,
-  }, []);
+  });
 
-  // Mark as initialized after first render
+  // Expose editor to window for E2E testing
   useEffect(() => {
-    if (editor) {
-      setIsInitialized(true);
+    if (editor && typeof window !== 'undefined') {
+      (window as any).__testEditor = editor;
     }
   }, [editor]);
+
+  // Mark as initialized after first render and set content
+  useEffect(() => {
+    if (editor) {
+      if (!isInitialized) {
+        // Force set content when editor first becomes available
+        const initialContent = whim.blocks || { type: 'doc', content: [] };
+        console.log('Setting initial content on editor mount:', {
+          contentLength: initialContent.content?.length,
+          firstBlock: initialContent.content?.[0]?.type
+        });
+        editor.commands.setContent(initialContent);
+
+        // Verify content was set
+        setTimeout(() => {
+          const editorContent = editor.getJSON();
+          console.log('Content after setContent:', {
+            editorContentLength: editorContent.content?.length,
+            editorFirstBlock: editorContent.content?.[0]?.type
+          });
+        }, 100);
+
+        setIsInitialized(true);
+      }
+    }
+  }, [editor, isInitialized, whim.blocks]);
 
   // Auto-save when content changes (debounced)
   useEffect(() => {
     if (!editor || !isInitialized) return;
 
-    const editorJSON = editor.getJSON();
     const handleUpdate = () => {
+      // Capture editor JSON when timeout fires, not when effect runs
+      const editorJSON = editor.getJSON();
       handleSave(title, editorJSON, selectedFolderId);
     };
 
@@ -408,6 +511,172 @@ export function WhimEditor({
                   strokeLinejoin="round"
                   strokeWidth={2}
                   d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+                />
+              </svg>
+            </button>
+
+            {/* Divider */}
+            <div className="w-px h-4 bg-slate-300"></div>
+
+            {/* Insert Table */}
+            <button
+              onClick={() => {
+                // Check if there's selected text
+                const { from, to } = editor.state.selection;
+                const selectedText = editor.state.doc.textBetween(from, to, '\n');
+
+                if (selectedText.trim()) {
+                  // Check if selected text looks like a markdown table
+                  const lines = selectedText.trim().split('\n');
+                  const hasTableStructure = lines.length >= 2 &&
+                    lines[0].includes('|') &&
+                    lines[1].includes('|') &&
+                    lines[1].includes('-');
+
+                  if (hasTableStructure) {
+                    // Convert selected markdown to table
+                    editor.chain()
+                      .focus()
+                      .deleteSelection()
+                      .insertContent(selectedText, { contentType: 'markdown' })
+                      .run();
+                    return;
+                  }
+                }
+
+                // No selection or not a table format - show modal
+                // Create a modal dialog with textarea
+                const modal = document.createElement('div');
+                modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
+
+                const dialog = document.createElement('div');
+                dialog.style.cssText = 'background:white;padding:24px;border-radius:8px;max-width:600px;width:90%;box-shadow:0 4px 6px rgba(0,0,0,0.1);';
+
+                dialog.innerHTML = `
+                  <h3 style="margin:0 0 16px 0;font-size:18px;font-weight:600;color:#1e293b;">Insert Markdown Table</h3>
+                  <p style="margin:0 0 12px 0;font-size:14px;color:#64748b;">Paste your markdown table below:</p>
+                  <textarea id="markdown-input" style="width:100%;height:200px;padding:12px;border:1px solid #cbd5e1;border-radius:6px;font-family:monospace;font-size:13px;resize:vertical;" placeholder="| Header 1 | Header 2 |
+|----------|----------|
+| Cell 1   | Cell 2   |"></textarea>
+                  <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;">
+                    <button id="cancel-btn" style="padding:8px 16px;border:1px solid #cbd5e1;background:white;border-radius:6px;cursor:pointer;font-size:14px;">Cancel</button>
+                    <button id="insert-btn" style="padding:8px 16px;background:#4F46E5;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:500;">Insert Table</button>
+                  </div>
+                `;
+
+                modal.appendChild(dialog);
+                document.body.appendChild(modal);
+
+                const textarea = document.getElementById('markdown-input') as HTMLTextAreaElement;
+                const insertBtn = document.getElementById('insert-btn');
+                const cancelBtn = document.getElementById('cancel-btn');
+
+                textarea.focus();
+
+                const cleanup = () => document.body.removeChild(modal);
+
+                cancelBtn?.addEventListener('click', cleanup);
+                modal.addEventListener('click', (e) => {
+                  if (e.target === modal) cleanup();
+                });
+
+                insertBtn?.addEventListener('click', () => {
+                  const markdownTable = textarea.value.trim();
+
+                  if (markdownTable) {
+                    // Check if input looks like markdown table
+                    const lines = markdownTable.split('\n');
+                    const hasTableStructure = lines.length >= 2 &&
+                      lines[0].includes('|') &&
+                      lines[1].includes('|') &&
+                      lines[1].includes('-');
+
+                    if (hasTableStructure) {
+                      // Parse markdown and insert as table
+                      editor.commands.insertContent(markdownTable, {
+                        contentType: 'markdown',
+                      });
+                      cleanup();
+                    } else {
+                      alert('Invalid markdown table format. Please ensure:\n- Each row starts and ends with |\n- Second row contains dashes (---)\n- At least 2 rows (header + separator)');
+                    }
+                  }
+                });
+              }}
+              className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+              title="Insert Table from Markdown"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                />
+              </svg>
+            </button>
+
+            {/* Insert Image */}
+            <button
+              onClick={() => {
+                const url = window.prompt('Enter image URL:');
+                if (url) {
+                  editor.chain().focus().setImage({ src: url }).run();
+                }
+              }}
+              className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+              title="Insert Image"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+            </button>
+
+            {/* Insert Math (inline) */}
+            <button
+              onClick={() => {
+                const formula = window.prompt('Enter LaTeX formula (e.g., E = mc^2):');
+                if (formula) {
+                  // Use the correct Mathematics extension command
+                  editor.commands.insertInlineMath({ latex: formula });
+                }
+              }}
+              className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+              title="Insert Math Formula (Inline)"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+                />
+              </svg>
+            </button>
+
+            {/* Insert Math (display/block) */}
+            <button
+              onClick={() => {
+                const formula = window.prompt('Enter LaTeX formula for display mode (e.g., \\int_0^\\infty e^{-x^2} dx):');
+                if (formula) {
+                  // Use block math for display equations
+                  editor.commands.insertBlockMath({ latex: formula });
+                }
+              }}
+              className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+              title="Insert Math Formula (Display)"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
                 />
               </svg>
             </button>
