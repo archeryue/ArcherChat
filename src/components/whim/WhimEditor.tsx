@@ -358,6 +358,17 @@ export function WhimEditor({
     <div className="flex-1 flex flex-col bg-white overflow-hidden relative">
       {/* Custom CSS for task lists */}
       <style jsx global>{`
+        /* Reduce spacing between regular list items */
+        .ProseMirror ul:not([data-type="taskList"]) > li,
+        .ProseMirror ol > li {
+          margin-bottom: 0.25rem;
+        }
+
+        .ProseMirror ul:not([data-type="taskList"]) > li > p,
+        .ProseMirror ol > li > p {
+          margin: 0;
+        }
+
         /* Remove list-style dots from task lists */
         ul[data-type="taskList"] {
           list-style: none;
@@ -370,6 +381,7 @@ export function WhimEditor({
           align-items: center;
           gap: 0.5rem;
           list-style: none;
+          margin-bottom: 0.25rem;
         }
 
         /* Checkbox label styling */
