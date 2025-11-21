@@ -5,6 +5,7 @@ import { X, Sparkles, BookOpen, Languages, Send, Loader2, Copy, Check, Plus, Mes
 import { Button } from '@/components/ui/button';
 import { MessageClient, ConversationClient, WhimContext } from '@/types';
 import { cn } from '@/lib/utils';
+import { ChatMessage } from '@/components/chat/ChatMessage';
 
 interface AIChatSidebarProps {
   whimId: string;
@@ -125,7 +126,7 @@ export function AIChatSidebar({
               const latestConv = data.conversations[0];
               setConversationId(latestConv.id);
               // Load messages for this conversation
-              const msgRes = await fetch(`/api/conversations/${latestConv.id}/messages`);
+              const msgRes = await fetch(`/api/conversations/${latestConv.id}`);
               if (msgRes.ok) {
                 const msgData = await msgRes.json();
                 setMessages(msgData.messages || []);
@@ -162,7 +163,7 @@ export function AIChatSidebar({
     setConversationId(convId);
     setShowConversationList(false);
     try {
-      const msgRes = await fetch(`/api/conversations/${convId}/messages`);
+      const msgRes = await fetch(`/api/conversations/${convId}`);
       if (msgRes.ok) {
         const msgData = await msgRes.json();
         setMessages(msgData.messages || []);
@@ -336,27 +337,12 @@ export function AIChatSidebar({
     onApplyEdit(textToApply);
   };
 
-  const startNewConversation = async () => {
-    // Create new conversation immediately
-    try {
-      const convId = await createConversation();
-      const newConv: ConversationClient = {
-        id: convId,
-        user_id: '',
-        title: 'Whim Assistant',
-        model: '',
-        created_at: new Date(),
-        updated_at: new Date(),
-        type: 'whim',
-        whimId,
-      };
-      setConversations(prev => [newConv, ...prev]);
-      setConversationId(convId);
-      setMessages([]);
-      setShowConversationList(false);
-    } catch (err) {
-      console.error('Error creating new conversation:', err);
-    }
+  const startNewConversation = () => {
+    // Don't create conversation in database yet - wait until first message is sent
+    // Just reset the UI state to prepare for a new conversation
+    setConversationId(null);
+    setMessages([]);
+    setShowConversationList(false);
   };
 
   // Get conversation preview text
@@ -474,53 +460,47 @@ export function AIChatSidebar({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (
-          <div className="text-center text-sm text-slate-500 py-8">
+          <div className="text-center text-sm text-slate-500 py-8 px-4">
             <p>Ask me to help improve, explain, or edit your content.</p>
             <p className="mt-2 text-xs">Use quick actions above or type your question below.</p>
           </div>
         ) : (
-          messages.map((message) => (
-            <div
-              key={message.id}
-              className={cn(
-                'rounded-lg p-3 text-sm',
-                message.role === 'user'
-                  ? 'bg-blue-50 text-blue-900 ml-4'
-                  : 'bg-slate-100 text-slate-900 mr-4'
-              )}
-            >
-              <div className="whitespace-pre-wrap break-words">{message.content}</div>
-              {message.role === 'assistant' && message.content && (
-                <div className="flex gap-1 mt-2 pt-2 border-t border-slate-200">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleCopy(message.content, message.id)}
-                    className="h-6 px-2 text-xs text-slate-500 hover:text-slate-700"
-                  >
-                    {copiedId === message.id ? (
-                      <><Check className="w-3 h-3 mr-1" /> Copied</>
-                    ) : (
-                      <><Copy className="w-3 h-3 mr-1" /> Copy</>
-                    )}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleApply(message.content)}
-                    className="h-6 px-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                  >
-                    Apply
-                  </Button>
-                </div>
-              )}
-            </div>
-          ))
+          <div className="[&>*]:border-b [&>*]:border-slate-100 last:[&>*]:border-0">
+            {messages.map((message) => (
+              <div key={message.id}>
+                <ChatMessage message={message} />
+                {message.role === 'assistant' && message.content && (
+                  <div className="flex gap-1 px-6 pb-4 -mt-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleCopy(message.content, message.id)}
+                      className="h-6 px-2 text-xs text-slate-500 hover:text-slate-700"
+                    >
+                      {copiedId === message.id ? (
+                        <><Check className="w-3 h-3 mr-1" /> Copied</>
+                      ) : (
+                        <><Copy className="w-3 h-3 mr-1" /> Copy</>
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleApply(message.content)}
+                      className="h-6 px-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         )}
         {isLoading && messages[messages.length - 1]?.role === 'user' && (
-          <div className="flex items-center gap-2 text-sm text-slate-500">
+          <div className="flex items-center gap-2 text-sm text-slate-500 px-6 py-4">
             <Loader2 className="w-4 h-4 animate-spin" />
             Thinking...
           </div>
