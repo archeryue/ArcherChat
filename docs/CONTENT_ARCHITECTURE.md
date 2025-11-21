@@ -133,7 +133,7 @@ def derivative(x):
 ```
 
 **Node Types**:
-- **Blocks**: `paragraph`, `heading`, `codeBlock`, `bulletList`, `orderedList`, `listItem`, `blockquote`
+- **Blocks**: `paragraph`, `heading`, `codeBlock`, `bulletList`, `orderedList`, `listItem`, `taskList`, `taskItem`, `blockquote`
 - **Inline**: `text` (with optional `marks`)
 - **Marks**: `bold`, `italic`, `code`, `strike`, `link`
 
@@ -386,11 +386,13 @@ const handleSave = useCallback(
 
 **Editor features** (lines 224-308):
 - Bold, italic buttons
-- Heading (H2) toggle
-- Bullet lists
+- **Heading dropdown** (Text, H1, H2, H3)
+- **List dropdown** (Bullet, Number)
+- **Todo list** (checkboxes with inline text layout)
 - Code blocks
 - Folder selection
 - Auto-save (2-second debounce)
+- Click-outside-to-close for dropdown menus
 
 **Keyboard shortcuts** (lines 147-188):
 - `Ctrl+S` / `Cmd+S`: Manual save
@@ -399,9 +401,13 @@ const handleSave = useCallback(
 **Current features**:
 - ✅ JSON blocks storage (Notion-like foundation)
 - ✅ WYSIWYG editing with TipTap
-- ✅ Basic formatting (bold, italic, headings, lists, code blocks)
+- ✅ Basic formatting (bold, italic, code blocks)
+- ✅ Heading dropdown (Text, H1, H2, H3)
+- ✅ List dropdown (Bullet, Number)
+- ✅ Todo list with checkboxes (inline layout)
 - ✅ Deep equality comparison (no false auto-saves)
 - ✅ Auto-save with debouncing
+- ✅ Click-outside-to-close dropdown menus
 
 **Future enhancements** (see FUTURE_IMPROVEMENTS.md):
 - ⏳ LaTeX/math support (`@tiptap/extension-mathematics`)
