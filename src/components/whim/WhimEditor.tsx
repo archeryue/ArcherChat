@@ -11,8 +11,10 @@ import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
 import { Image } from '@tiptap/extension-image';
 import { Markdown } from '@tiptap/markdown';
+import TaskList from '@tiptap/extension-task-list';
+import TaskItem from '@tiptap/extension-task-item';
 import { common, createLowlight } from 'lowlight';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { WhimClient, FolderClient } from '@/types/whim';
 import { JSONContent } from '@tiptap/core';
 import { MoreVertical, Trash2 } from 'lucide-react';
@@ -76,6 +78,12 @@ export function WhimEditor({
   const [isInitialized, setIsInitialized] = useState(false);
   const [noChanges, setNoChanges] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showHeadingMenu, setShowHeadingMenu] = useState(false);
+  const [showListMenu, setShowListMenu] = useState(false);
+
+  // Refs for click-outside detection
+  const headingMenuRef = useRef<HTMLDivElement>(null);
+  const listMenuRef = useRef<HTMLDivElement>(null);
 
   // Get initial content from blocks (all whims have been migrated)
   const getInitialContent = (): JSONContent => {
@@ -120,6 +128,10 @@ export function WhimEditor({
         markedOptions: {
           gfm: true, // Enable GitHub Flavored Markdown (includes tables)
         },
+      }),
+      TaskList,
+      TaskItem.configure({
+        nested: true,
       }),
     ],
     editorProps: {
@@ -226,6 +238,25 @@ export function WhimEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [whim.id, whim.title, whim.folderId, editor]);
 
+  // Click outside to close dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      // Close heading menu if clicking outside
+      if (showHeadingMenu && headingMenuRef.current && !headingMenuRef.current.contains(event.target as Node)) {
+        setShowHeadingMenu(false);
+      }
+      // Close list menu if clicking outside
+      if (showListMenu && listMenuRef.current && !listMenuRef.current.contains(event.target as Node)) {
+        setShowListMenu(false);
+      }
+    };
+
+    if (showHeadingMenu || showListMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showHeadingMenu, showListMenu]);
+
   const handleSave = useCallback(
     async (newTitle: string, newContentJSON: JSONContent, newFolderId: string): Promise<boolean> => {
       // Only save if something changed
@@ -325,6 +356,44 @@ export function WhimEditor({
 
   return (
     <div className="flex-1 flex flex-col bg-white overflow-hidden relative">
+      {/* Custom CSS for task lists */}
+      <style jsx global>{`
+        /* Remove list-style dots from task lists */
+        ul[data-type="taskList"] {
+          list-style: none;
+          padding-left: 0;
+        }
+
+        /* Task item styling - target li[data-checked] which is what TipTap actually generates */
+        ul[data-type="taskList"] > li[data-checked] {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          list-style: none;
+        }
+
+        /* Checkbox label styling */
+        ul[data-type="taskList"] > li[data-checked] > label {
+          display: flex;
+          align-items: center;
+          cursor: pointer;
+          flex-shrink: 0;
+        }
+
+        ul[data-type="taskList"] > li[data-checked] > label > input[type="checkbox"] {
+          cursor: pointer;
+        }
+
+        /* Content div styling */
+        ul[data-type="taskList"] > li[data-checked] > div {
+          flex: 1;
+        }
+
+        /* Remove margins from paragraphs inside task items */
+        ul[data-type="taskList"] > li[data-checked] > div > p {
+          margin: 0;
+        }
+      `}</style>
       {/* Title Header */}
       <div className="px-6 py-3 border-b border-slate-200 bg-slate-50">
         <div className="flex items-center justify-between gap-4">
@@ -468,32 +537,104 @@ export function WhimEditor({
             {/* Divider */}
             <div className="w-px h-4 bg-slate-300"></div>
 
-            {/* Heading */}
-            <button
-              onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-              className={`px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors ${
-                editor.isActive('heading', { level: 2 }) ? 'bg-slate-200' : ''
-              }`}
-              title="Heading"
-            >
-              <span className="text-sm font-semibold">H2</span>
-            </button>
+            {/* Heading Button with Dropdown */}
+            <div className="relative" ref={headingMenuRef}>
+              <button
+                onClick={() => setShowHeadingMenu(!showHeadingMenu)}
+                className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+                title="Heading"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                </svg>
+              </button>
+              {showHeadingMenu && (
+                <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-white border border-slate-300 rounded-lg shadow-lg py-1 min-w-[120px] z-50 flex flex-col">
+                  <button
+                    onClick={() => {
+                      editor.chain().focus().setParagraph().run();
+                      setShowHeadingMenu(false);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-slate-100"
+                  >
+                    Text
+                  </button>
+                  <button
+                    onClick={() => {
+                      editor.chain().focus().toggleHeading({ level: 1 }).run();
+                      setShowHeadingMenu(false);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-slate-100 font-bold"
+                  >
+                    H1
+                  </button>
+                  <button
+                    onClick={() => {
+                      editor.chain().focus().toggleHeading({ level: 2 }).run();
+                      setShowHeadingMenu(false);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-slate-100 font-semibold"
+                  >
+                    H2
+                  </button>
+                  <button
+                    onClick={() => {
+                      editor.chain().focus().toggleHeading({ level: 3 }).run();
+                      setShowHeadingMenu(false);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-slate-100 font-medium"
+                  >
+                    H3
+                  </button>
+                </div>
+              )}
+            </div>
 
-            {/* Bullet List */}
+            {/* List Button with Dropdown */}
+            <div className="relative" ref={listMenuRef}>
+              <button
+                onClick={() => setShowListMenu(!showListMenu)}
+                className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+                title="List"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+              {showListMenu && (
+                <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-white border border-slate-300 rounded-lg shadow-lg py-1 min-w-[120px] z-50 flex flex-col">
+                  <button
+                    onClick={() => {
+                      editor.chain().focus().toggleBulletList().run();
+                      setShowListMenu(false);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-slate-100"
+                  >
+                    • Bullet
+                  </button>
+                  <button
+                    onClick={() => {
+                      editor.chain().focus().toggleOrderedList().run();
+                      setShowListMenu(false);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-slate-100"
+                  >
+                    1. Number
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Todo List */}
             <button
-              onClick={() => editor.chain().focus().toggleBulletList().run()}
+              onClick={() => editor.chain().focus().toggleTaskList().run()}
               className={`p-2 rounded-lg hover:bg-slate-100 transition-colors ${
-                editor.isActive('bulletList') ? 'bg-slate-200' : ''
+                editor.isActive('taskList') ? 'bg-slate-200' : ''
               }`}
-              title="Bullet List"
+              title="Todo List"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
               </svg>
             </button>
 
@@ -649,13 +790,13 @@ export function WhimEditor({
               className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
               title="Insert Math Formula (Inline)"
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-                />
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                <text x="8" y="13" fontFamily="serif" fontSize="20" fontStyle="italic" fontWeight="bold" textAnchor="middle" dominantBaseline="middle">
+                  f
+                </text>
+                <text x="16" y="13" fontFamily="serif" fontSize="16" fontStyle="italic" fontWeight="bold" textAnchor="middle" dominantBaseline="middle">
+                  x
+                </text>
               </svg>
             </button>
 
@@ -676,7 +817,7 @@ export function WhimEditor({
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
+                  d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"
                 />
               </svg>
             </button>
