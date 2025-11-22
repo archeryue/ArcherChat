@@ -6,65 +6,7 @@ This document tracks planned enhancements and known issues that need improvement
 
 ## High Priority
 
-### 1. Image-to-Image Generation
-
-**Description**: Enable users to upload one or more images and use them as reference/basis for generating new images. This includes image editing, style transfer, variations, and modifications.
-
-**Current Behavior**:
-- Image generation only accepts text prompts
-- Users cannot upload reference images
-- No image editing or modification capabilities
-- File upload exists but not connected to image generation
-
-**Proposed Feature**:
-```
-User uploads image(s) + Text prompt → Image Generation Tool → Modified/New Image
-```
-
-**Use Cases**:
-1. **Style Transfer**: Upload a photo, ask to make it look like a painting
-2. **Image Editing**: Upload image, ask to change specific elements
-3. **Variations**: Upload image, generate similar variations
-4. **Background Removal/Replacement**: Upload image, modify background
-5. **Object Addition/Removal**: Upload image, add or remove objects
-6. **Image Enhancement**: Upscale, colorize, restore old photos
-
-**Example Interactions**:
-- "Make this photo look like a Van Gogh painting" + [user photo]
-- "Remove the background from this image" + [product photo]
-- "Change the sunset to a sunrise" + [landscape photo]
-- "Generate 3 variations of this design" + [logo image]
-
-**Technical Requirements**:
-1. Extend `image_generate` tool to accept image files as parameter
-2. Pass uploaded images to Gemini IMAGE model via multimodal API
-3. Update prompt enhancer to handle image-based prompts
-4. Ensure base64 images are NOT included in conversation history (already implemented)
-5. Add UI indicator for image-to-image vs text-to-image mode
-
-**Implementation Plan**:
-1. Add `referenceImages` parameter to image-generate tool
-2. Modify `ToolParameter` type to support file attachments
-3. Update agent to pass files to tools via ToolContext
-4. Enhance prompt builder to include image descriptions
-5. Test with various image formats (PNG, JPEG, WebP)
-
-**Files to Modify**:
-- `src/lib/agent/tools/image-generate.ts` - Add image file parameters
-- `src/types/agent.ts` - Extend ToolParameter for file support
-- `src/lib/agent/core/agent.ts` - Pass files to tools
-- `src/lib/image/prompt-enhancer.ts` - Handle image-based prompts
-- `src/components/chat/ChatInput.tsx` - UI for image upload workflow
-
-**Estimated Effort**: 4-6 hours
-
-**Cost Impact**: Similar to text-to-image (~$0.000002 per generation)
-
-**Priority Rationale**: Medium priority - enhances creative capabilities significantly, but text-to-image covers most basic use cases.
-
----
-
-### 2. Per-Conversation PRO Model Toggle
+### 1. Per-Conversation PRO Model Toggle
 
 **Description**: Add a UI button/toggle to enable a more powerful "PRO" tier model (e.g., Gemini 2.5 Pro) for specific conversations where higher quality is needed, while keeping the default fast/free tier for general use.
 
@@ -123,6 +65,64 @@ When clicked:
 **Estimated Effort**: 3-4 hours
 
 **Cost Impact**: User-controlled, opt-in for specific conversations
+
+---
+
+## Medium Priority
+
+### 1. Image-to-Image Generation
+
+**Description**: Enable users to upload one or more images and use them as reference/basis for generating new images. This includes image editing, style transfer, variations, and modifications.
+
+**Current Behavior**:
+- Image generation only accepts text prompts
+- Users cannot upload reference images
+- No image editing or modification capabilities
+- File upload exists but not connected to image generation
+
+**Proposed Feature**:
+```
+User uploads image(s) + Text prompt → Image Generation Tool → Modified/New Image
+```
+
+**Use Cases**:
+1. **Style Transfer**: Upload a photo, ask to make it look like a painting
+2. **Image Editing**: Upload image, ask to change specific elements
+3. **Variations**: Upload image, generate similar variations
+4. **Background Removal/Replacement**: Upload image, modify background
+5. **Object Addition/Removal**: Upload image, add or remove objects
+6. **Image Enhancement**: Upscale, colorize, restore old photos
+
+**Example Interactions**:
+- "Make this photo look like a Van Gogh painting" + [user photo]
+- "Remove the background from this image" + [product photo]
+- "Change the sunset to a sunrise" + [landscape photo]
+- "Generate 3 variations of this design" + [logo image]
+
+**Technical Requirements**:
+1. Extend `image_generate` tool to accept image files as parameter
+2. Pass uploaded images to Gemini IMAGE model via multimodal API
+3. Update prompt enhancer to handle image-based prompts
+4. Ensure base64 images are NOT included in conversation history (already implemented)
+5. Add UI indicator for image-to-image vs text-to-image mode
+
+**Implementation Plan**:
+1. Add `referenceImages` parameter to image-generate tool
+2. Modify `ToolParameter` type to support file attachments
+3. Update agent to pass files to tools via ToolContext
+4. Enhance prompt builder to include image descriptions
+5. Test with various image formats (PNG, JPEG, WebP)
+
+**Files to Modify**:
+- `src/lib/agent/tools/image-generate.ts` - Add image file parameters
+- `src/types/agent.ts` - Extend ToolParameter for file support
+- `src/lib/agent/core/agent.ts` - Pass files to tools
+- `src/lib/image/prompt-enhancer.ts` - Handle image-based prompts
+- `src/components/chat/ChatInput.tsx` - UI for image upload workflow
+
+**Estimated Effort**: 4-6 hours
+
+**Cost Impact**: Similar to text-to-image (~$0.000002 per generation)
 
 ---
 
