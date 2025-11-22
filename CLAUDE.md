@@ -76,6 +76,22 @@ Centralized in `src/config/models.ts`:
 - `ModelTier.IMAGE`: Gemini 2.5 Flash Image
 - `ModelTier.LITE`: Gemini 2.5 Flash Lite (analysis)
 
+### 5. Whim Architecture
+```
+Conversation → /save command → AI Title + JSON Blocks → Whim (TipTap Editor)
+```
+- **Storage**: TipTap JSON blocks (Notion-like structure)
+- **Editing**: WYSIWYG editor with block-based operations
+- **Conversion**: `/save` or `/whim` commands convert chat to whim
+- **Title Generation**: AI-powered using Gemini Flash Lite (~$0.000002/title)
+- **Files**:
+  - `src/components/whim/WhimEditor.tsx` - TipTap editor
+  - `src/lib/whim/converter.ts` - Conversation → Whim conversion
+  - `src/app/api/whims/route.ts` - CRUD operations
+- **Features**: Bold, italic, headings, lists, code blocks, todo lists, auto-save
+
+**Note**: See `docs/CONTENT_ARCHITECTURE.md` for detailed content format strategy.
+
 ## 🔴 CRITICAL RULES
 
 ### 1. 🔐 SECURITY: Never Expose Credentials
