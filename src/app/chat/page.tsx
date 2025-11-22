@@ -228,22 +228,39 @@ export default function ChatPage() {
 
       if (reader) {
         let assistantContent = "";
+        let extractedImageData: string | undefined = undefined; // Store extracted image data persistently
         let buffer = ""; // Buffer for incomplete lines
         const progressEventsList: any[] = [];
         let lastUpdateTime = 0;
         const UPDATE_THROTTLE_MS = 50; // Update UI every 50ms max
 
         const updateUI = () => {
-          // Extract image data if present and store separately
-          const imageMatch = assistantContent.match(/!\[Generated Image\]\(data:(image\/[^;]+);base64,([A-Za-z0-9+/=]+)\)/);
-
           let contentToDisplay = assistantContent;
-          let imageData = undefined;
 
-          if (imageMatch) {
-            // Extract image data and remove from content
-            imageData = imageMatch[2];
-            contentToDisplay = assistantContent.replace(/!\[Generated Image\]\(data:image\/[^;]+;base64,[A-Za-z0-9+/=]+\)/, '');
+          // Only extract image if we haven't already extracted it
+          if (!extractedImageData) {
+            // DEBUG: Log first 500 chars to see what we're matching against
+            if (assistantContent.includes('Generated Image') || assistantContent.includes('data:image')) {
+              console.log('[Image Debug] assistantContent contains image, first 500 chars:', assistantContent.substring(0, 500));
+              console.log('[Image Debug] assistantContent length:', assistantContent.length);
+            }
+
+            // More permissive regex that handles newlines and whitespace in base64
+            const imageMatch = assistantContent.match(/!\[Generated Image\]\(data:(image\/[^;]+);base64,([A-Za-z0-9+/=\s]+?)\)/);
+            if (imageMatch) {
+              console.log('[Image Debug] MATCH FOUND! Image type:', imageMatch[1]);
+              console.log('[Image Debug] Base64 length:', imageMatch[2].length);
+              // Extract image data and remove from content (strip whitespace from base64)
+              extractedImageData = imageMatch[2].replace(/\s/g, '');
+              contentToDisplay = assistantContent.replace(/!\[Generated Image\]\(data:image\/[^;]+;base64,[A-Za-z0-9+/=\s]+?\)/, '');
+              console.log('[Image Debug] Extracted image data length:', extractedImageData.length);
+            } else if (assistantContent.includes('Generated Image')) {
+              console.log('[Image Debug] NO MATCH - but content has "Generated Image"');
+              console.log('[Image Debug] Full content:', assistantContent);
+            }
+          } else {
+            // Image already extracted, just remove the markdown from content
+            contentToDisplay = assistantContent.replace(/!\[Generated Image\]\(data:image\/[^;]+;base64,[A-Za-z0-9+/=\s]+?\)/, '');
           }
 
           // Update assistant message with streamed content AND progress events
@@ -253,7 +270,7 @@ export default function ChatPage() {
                 ? {
                     ...msg,
                     content: contentToDisplay,
-                    image_data: imageData,
+                    image_data: extractedImageData, // Use the persistently stored image data
                     progressEvents: progressEventsList.length > 0 ? [...progressEventsList] : undefined,
                   }
                 : msg

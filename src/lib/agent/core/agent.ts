@@ -109,6 +109,38 @@ export class Agent {
             iteration: this.state.iteration,
             results,
           });
+
+          // Check if image was generated - if so, use it as final answer and terminate
+          // Image generation is a terminal action that completes the user's request
+          const imageGenerateIndex = reasoning.toolCalls.findIndex(
+            (call) => call.tool === 'image_generate'
+          );
+          if (imageGenerateIndex !== -1 && results[imageGenerateIndex]?.success) {
+            // Extract image from tool result and use as final answer
+            const imageResult = results[imageGenerateIndex];
+            const imageData = imageResult.data as {
+              generatedContent?: string;
+              originalPrompt?: string;
+              prompt?: string;
+            };
+
+            // Build response with both description and image
+            // If generatedContent has no text (only image), add descriptive text
+            const content = imageData?.generatedContent || '';
+            const hasText = content.includes('![Generated Image]') &&
+                           content.replace(/!\[Generated Image\]\(data:image\/[^)]+\)/g, '').trim().length > 0;
+
+            if (!hasText && content.includes('![Generated Image]')) {
+              // Image-only response, add descriptive text
+              const prompt = imageData?.originalPrompt || imageData?.prompt || 'your request';
+              this.state.finalAnswer = `I've generated an image for: ${prompt}\n\n${content}`;
+            } else {
+              this.state.finalAnswer = content || 'Image generated successfully.';
+            }
+
+            this.state.shouldContinue = false;
+            break;
+          }
         }
 
         // Check cost budget
