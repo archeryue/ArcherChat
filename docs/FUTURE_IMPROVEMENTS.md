@@ -4,48 +4,91 @@ This document tracks planned enhancements and known issues that need improvement
 
 ---
 
+## High Priority
+
+### ✅ COMPLETED: Automated E2E Testing with Mock Authentication
+
+**Status**: ✅ **COMPLETED** (November 2025)
+
+Fully automated end-to-end testing is now implemented with secure mock authentication.
+
+**What Was Implemented**:
+- 17 core feature tests (100% pass rate)
+- Triple-guard security system for test auth provider
+- Playwright test infrastructure with reusable auth state
+- Test user whitelist setup automation
+- Comprehensive security analysis and documentation
+
+**Documentation**:
+- See `docs/TESTING.md` for complete testing guide
+- See `docs/SECURITY_ANALYSIS_TEST_AUTH.md` for security analysis
+
+**Run E2E Tests**:
+```bash
+npm run test:e2e          # Run all E2E tests
+npm run test:e2e:ui       # Interactive UI mode
+npx jest                  # Run unit tests (145+ tests)
+```
+
+---
+
 ## Medium Priority
 
-### 1. Image Generation Prompt Enhancement
+### 1. Image-to-Image Generation
 
-**Description**: Add an AI-powered prompt enhancement step before sending user's image generation request to the model. This will improve image quality and ensure better results by expanding brief descriptions into detailed, well-structured prompts.
+**Description**: Enable users to upload one or more images and use them as reference/basis for generating new images. This includes image editing, style transfer, variations, and modifications.
 
 **Current Behavior**:
-- User provides image description (e.g., "a cat playing piano")
-- System sends prompt directly to Gemini 2.5 Flash Image model
-- Results vary depending on prompt quality
+- Image generation only accepts text prompts
+- Users cannot upload reference images
+- No image editing or modification capabilities
+- File upload exists but not connected to image generation
 
-**Proposed Enhancement**:
+**Proposed Feature**:
 ```
-User Input → Prompt Enhancer (Gemini Flash Lite) → Enhanced Prompt → Image Model → Generated Image
+User uploads image(s) + Text prompt → Image Generation Tool → Modified/New Image
 ```
 
-**Benefits**:
-- Better image quality from concise user inputs
-- Consistent prompt structure (style, lighting, composition details)
-- Educational - users can see what makes a good image prompt
-- Minimal cost (~$0.000002 per enhancement with Flash Lite)
+**Use Cases**:
+1. **Style Transfer**: Upload a photo, ask to make it look like a painting
+2. **Image Editing**: Upload image, ask to change specific elements
+3. **Variations**: Upload image, generate similar variations
+4. **Background Removal/Replacement**: Upload image, modify background
+5. **Object Addition/Removal**: Upload image, add or remove objects
+6. **Image Enhancement**: Upscale, colorize, restore old photos
 
-**Example Enhancement**:
-- User input: "a cat playing piano"
-- Enhanced: "A fluffy orange tabby cat sitting at a grand piano, paws on the keys, warm studio lighting, photorealistic style, detailed fur texture, elegant composition, shallow depth of field, professional photography"
+**Example Interactions**:
+- "Make this photo look like a Van Gogh painting" + [user photo]
+- "Remove the background from this image" + [product photo]
+- "Change the sunset to a sunrise" + [landscape photo]
+- "Generate 3 variations of this design" + [logo image]
+
+**Technical Requirements**:
+1. Extend `image_generate` tool to accept image files as parameter
+2. Pass uploaded images to Gemini IMAGE model via multimodal API
+3. Update prompt enhancer to handle image-based prompts
+4. Ensure base64 images are NOT included in conversation history (already implemented)
+5. Add UI indicator for image-to-image vs text-to-image mode
 
 **Implementation Plan**:
-1. Create `src/lib/image/prompt-enhancer.ts`
-2. Use Gemini 2.5 Flash Lite for enhancement (fast, cheap)
-3. Add system prompt with image generation best practices
-4. Show original and enhanced prompts in UI (optional)
-5. Allow users to edit enhanced prompt before generating
+1. Add `referenceImages` parameter to image-generate tool
+2. Modify `ToolParameter` type to support file attachments
+3. Update agent to pass files to tools via ToolContext
+4. Enhance prompt builder to include image descriptions
+5. Test with various image formats (PNG, JPEG, WebP)
 
 **Files to Modify**:
-- `src/app/api/chat/route.ts` - Add enhancement step before image gen
-- `src/lib/prompt-analysis/analyzer.ts` - Detect image gen intent
-- New file: `src/lib/image/prompt-enhancer.ts`
-- `src/components/chat/ChatMessage.tsx` - Show enhancement details (optional)
+- `src/lib/agent/tools/image-generate.ts` - Add image file parameters
+- `src/types/agent.ts` - Extend ToolParameter for file support
+- `src/lib/agent/core/agent.ts` - Pass files to tools
+- `src/lib/image/prompt-enhancer.ts` - Handle image-based prompts
+- `src/components/chat/ChatInput.tsx` - UI for image upload workflow
 
-**Estimated Effort**: 2-3 hours
+**Estimated Effort**: 4-6 hours
 
-**Cost Impact**: ~$0.000002 per image generation (negligible)
+**Cost Impact**: Similar to text-to-image (~$0.000002 per generation)
+
+**Priority Rationale**: Medium priority - enhances creative capabilities significantly, but text-to-image covers most basic use cases.
 
 ---
 
@@ -157,5 +200,5 @@ This is LOW PRIORITY because Phase 1 already provides core functionality. These 
 
 ---
 
-**Last Updated**: November 21, 2025
+**Last Updated**: November 22, 2025
 **Maintained By**: Archer & Claude Code
