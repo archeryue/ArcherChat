@@ -2,12 +2,14 @@
  * Image Generate Tool
  *
  * Generates images using Gemini's native image generation capabilities.
+ * Uses AI-powered prompt enhancement to improve image quality.
  */
 
 import { ToolParameter, ToolResult } from '@/types/agent';
 import { BaseTool, successResult, errorResult } from './base';
 import { ProviderFactory } from '@/lib/providers/provider-factory';
 import { GEMINI_MODELS, ModelTier } from '@/config/models';
+import { promptEnhancer } from '@/lib/image/prompt-enhancer';
 
 export class ImageGenerateTool extends BaseTool {
   name = 'image_generate';
@@ -49,13 +51,24 @@ Guidelines:
     const aspectRatio = (params.aspectRatio as string) || 'square';
 
     try {
-      // Build enhanced prompt
-      let enhancedPrompt = prompt;
+      // Step 1: AI-powered prompt enhancement using Gemini Flash Lite
+      console.log('[ImageGenerateTool] Enhancing prompt with AI...');
+      const enhancementResult = await promptEnhancer.enhance(prompt);
+
+      let enhancedPrompt = enhancementResult.enhancedPrompt;
+
+      console.log('[ImageGenerateTool] Prompt enhancement complete:', {
+        original: enhancementResult.originalPrompt,
+        enhanced: enhancementResult.enhancedPrompt,
+        enhancements: enhancementResult.enhancements,
+      });
+
+      // Step 2: Add style if user specified one
       if (style) {
-        enhancedPrompt = `${prompt}, in ${style} style`;
+        enhancedPrompt = `${enhancedPrompt}, in ${style} style`;
       }
 
-      // Add aspect ratio hint
+      // Step 3: Add aspect ratio hint
       switch (aspectRatio) {
         case 'landscape':
           enhancedPrompt += ', wide landscape composition';
