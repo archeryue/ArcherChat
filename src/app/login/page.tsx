@@ -4,13 +4,12 @@ import { Suspense, useEffect, useState } from "react";
 import { signIn, getProviders } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import type { LiteralUnion, ClientSafeProvider } from "next-auth/react";
-import type { BuiltInProviderType } from "next-auth/providers";
+import type { ClientSafeProvider } from "next-auth/react";
 
 function LoginContent() {
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
-  const [providers, setProviders] = useState<Record<LiteralUnion<BuiltInProviderType>, ClientSafeProvider> | null>(null);
+  const [providers, setProviders] = useState<Record<string, ClientSafeProvider> | null>(null);
 
   useEffect(() => {
     getProviders().then(setProviders);
