@@ -5,13 +5,11 @@ import { defineConfig, devices } from '@playwright/test';
  * See https://playwright.dev/docs/test-configuration
  */
 export default defineConfig({
-  testDir: './e2e',
+  testDir: './',
+  testMatch: ['e2e/**/*.e2e.ts', 'tests/**/*.spec.ts'],
 
   // Maximum time one test can run for
   timeout: 60 * 1000,
-
-  // Test files pattern
-  testMatch: '**/*.e2e.ts',
 
   // Run tests in files in parallel
   fullyParallel: false,
@@ -42,17 +40,32 @@ export default defineConfig({
 
   // Configure projects for major browsers
   projects: [
+    // Setup project - runs authentication before tests
+    {
+      name: 'setup',
+      testMatch: 'tests/auth.setup.ts',
+    },
+
+    // Chromium tests - uses authenticated state
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // Use authenticated state from setup
+        storageState: 'tests/.auth/user.json',
+      },
+      dependencies: ['setup'],
     },
   ],
 
   // Run your local dev server before starting the tests
   webServer: {
-    command: 'NODE_OPTIONS="--no-deprecation" PORT=8080 next dev',
+    command: 'npm run dev',
     url: 'http://localhost:8080',
-    reuseExistingServer: true, // Always reuse if server is running
+    cwd: './', // Ensure command runs from project root where .env files are
+    reuseExistingServer: false, // Force fresh server with ENABLE_TEST_AUTH from .env.development.local
+    stdout: 'pipe', // Capture stdout for debugging
+    stderr: 'pipe', // Capture stderr for debugging
     timeout: 120 * 1000,
   },
 });

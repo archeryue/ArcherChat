@@ -6,251 +6,89 @@ This document tracks planned enhancements and known issues that need improvement
 
 ## High Priority
 
-### 1. Notion-like Whim Editing Experience with TipTap Extensions
+### ✅ COMPLETED: Automated E2E Testing with Mock Authentication
 
-**Description**: Enhance the existing TipTap editor with advanced extensions to create a modern, Notion-like rich text editing experience. Add support for LaTeX math, syntax-highlighted code blocks, images, videos, and tables to achieve feature parity with the Chat page and provide a professional editing experience.
+**Status**: ✅ **COMPLETED** (November 2025)
 
-**Current State**:
-- ✅ TipTap WYSIWYG editor already implemented (`src/components/whim/WhimEditor.tsx`)
-- ✅ Basic formatting: Bold, italic, headings (H2), bullet lists, code blocks
-- ✅ Floating toolbar with save status and folder selection
-- ✅ Auto-save (2-second debounce)
-- ✅ Keyboard shortcuts (Ctrl+S save, Ctrl+I AI assistant)
-- ✅ Markdown storage (HTML ↔ Markdown conversion with marked/turndown)
+Fully automated end-to-end testing is now implemented with secure mock authentication.
 
-**Current Gaps** (compared to Chat page):
-- ❌ No LaTeX/math rendering ($inline$ and $$block$$ formulas)
-- ❌ No syntax highlighting in code blocks (Chat has highlight.js)
-- ❌ No table creation/editing
-- ❌ No image insertion/upload
-- ❌ No video embedding
-- ❌ Limited markdown feature parity with Chat
-- ❌ No drag-and-drop block reordering
-- ❌ No slash commands for quick formatting
+**What Was Implemented**:
+- 17 core feature tests (100% pass rate)
+- Triple-guard security system for test auth provider
+- Playwright test infrastructure with reusable auth state
+- Test user whitelist setup automation
+- Comprehensive security analysis and documentation
 
-**Proposed Enhancement**:
-Extend TipTap with professional plugins to match Notion's editing experience:
+**Documentation**:
+- See `docs/TESTING.md` for complete testing guide
+- See `docs/SECURITY_ANALYSIS_TEST_AUTH.md` for security analysis
 
-**Phase 1: Feature Parity with Chat (Critical)**
-1. **LaTeX Math Support**
-   - Extension: `@tiptap/extension-mathematics`
-   - Renders: `$E = mc^2$` (inline) and `$$...$$` (block)
-   - Uses KaTeX (same as Chat page)
-
-2. **Syntax Highlighting**
-   - Extension: `@tiptap/extension-code-block-lowlight`
-   - Language selection dropdown
-   - Uses Lowlight (highlight.js wrapper)
-
-3. **Table Editing**
-   - Extension: `@tiptap/extension-table` + related packages
-   - Visual table creation and editing
-   - Column/row add/delete controls
-
-4. **Image Support**
-   - Extension: `@tiptap/extension-image`
-   - Drag-and-drop image upload
-   - Resize handles
-   - Alt text support
-
-**Phase 2: Notion-like Enhancements**
-5. **Slash Commands**
-   - Extension: Custom or `tiptap-extension-slash-command`
-   - Type `/` to insert blocks (heading, list, code, table, etc.)
-   - Searchable command palette
-
-6. **Drag & Drop Blocks**
-   - Extension: `@tiptap/extension-drag-handle`
-   - Reorder paragraphs, headings, lists by dragging
-   - Visual drop indicators
-
-7. **Video Embedding**
-   - Extension: Custom or use iframe/embed extensions
-   - Support YouTube, Vimeo URLs
-   - Responsive embeds
-
-8. **Enhanced Code Blocks**
-   - Line numbers
-   - Copy button
-   - Language badge
-
-**Benefits**:
-- ✅ **Feature parity**: Whim editor matches Chat rendering capabilities
-- ✅ **Professional experience**: Notion-like polish and usability
-- ✅ **Better content creation**: LaTeX formulas, syntax-highlighted code, rich media
-- ✅ **Consistent UX**: Same markdown features work in both Chat and Whim
-- ✅ **Encourages usage**: Users more likely to save complex conversations as whims
-
-**Technical Approach**:
-
-**Stick with TipTap** (already implemented, proven choice):
-```typescript
-import { useEditor, EditorContent } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import Mathematics from '@tiptap/extension-mathematics';
-import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
-import Table from '@tiptap/extension-table';
-import TableRow from '@tiptap/extension-table-row';
-import TableCell from '@tiptap/extension-table-cell';
-import TableHeader from '@tiptap/extension-table-header';
-import Image from '@tiptap/extension-image';
-import { lowlight } from 'lowlight';
-import 'katex/dist/katex.min.css';
-
-const editor = useEditor({
-  extensions: [
-    StarterKit,
-    Mathematics.configure({
-      katexOptions: {
-        throwOnError: false,
-      },
-    }),
-    CodeBlockLowlight.configure({
-      lowlight,
-    }),
-    Table.configure({
-      resizable: true,
-    }),
-    TableRow,
-    TableHeader,
-    TableCell,
-    Image.configure({
-      inline: true,
-      allowBase64: true,
-    }),
-    // ... more extensions
-  ],
-});
-```
-
-**Packages to Install**:
+**Run E2E Tests**:
 ```bash
-npm install @tiptap/extension-mathematics katex
-npm install @tiptap/extension-code-block-lowlight lowlight
-npm install @tiptap/extension-table @tiptap/extension-table-row @tiptap/extension-table-cell @tiptap/extension-table-header
-npm install @tiptap/extension-image
+npm run test:e2e          # Run all E2E tests
+npm run test:e2e:ui       # Interactive UI mode
+npx jest                  # Run unit tests (145+ tests)
 ```
-
-**Implementation Plan**:
-
-**Phase 1 (Critical - 4-6 hours)**:
-1. ✅ Read `docs/CONTENT_ARCHITECTURE.md` for current architecture
-2. Install TipTap extensions for math, code, tables, images
-3. Update `src/components/whim/WhimEditor.tsx`:
-   - Add Mathematics extension with KaTeX
-   - Add CodeBlockLowlight with language selector
-   - Add Table extensions with insert/edit controls
-   - Add Image extension with upload/paste support
-4. Update toolbar with new formatting buttons:
-   - Insert table button
-   - Insert image button
-   - Math formula button (inline/block)
-5. Test markdown conversion (ensure extensions work with marked/turndown)
-6. Add CSS for KaTeX and code highlighting
-7. Test with complex content (formulas, code, tables)
-
-**Phase 2 (Enhancements - 4-6 hours)**:
-1. Add slash command menu component
-2. Implement drag-and-drop block reordering
-3. Add video embedding support
-4. Enhance code blocks (line numbers, copy button)
-5. Polish animations and transitions
-6. Add keyboard shortcuts for new features
-
-**Files to Modify**:
-
-**Phase 1**:
-- `src/components/whim/WhimEditor.tsx` - Add extensions and toolbar buttons
-- `package.json` - Add new TipTap extension dependencies
-- `src/app/whim/page.tsx` - Pass additional props if needed
-- Update styles for math/code rendering
-
-**Phase 2**:
-- New file: `src/components/whim/SlashCommandMenu.tsx` - Slash command palette
-- New file: `src/components/whim/BlockDragHandle.tsx` - Drag handle component
-- `src/components/whim/WhimEditor.tsx` - Integrate new components
-
-**Testing Checklist**:
-- [ ] LaTeX inline formulas render correctly
-- [ ] LaTeX block formulas render correctly
-- [ ] Code blocks show syntax highlighting
-- [ ] Language selector works for code blocks
-- [ ] Tables can be created and edited
-- [ ] Images can be uploaded/pasted
-- [ ] Markdown conversion preserves all features
-- [ ] Saved whims display correctly when reloaded
-- [ ] Auto-save works with new content types
-- [ ] Slash commands trigger correctly
-- [ ] Blocks can be dragged and reordered
-- [ ] Keyboard shortcuts work
-
-**Estimated Effort**:
-- Phase 1: 4-6 hours (critical features)
-- Phase 2: 4-6 hours (Notion-like polish)
-- **Total**: 8-12 hours
-
-**Cost Impact**: None (all client-side rendering)
-
-**References**:
-- TipTap docs: https://tiptap.dev/
-- Mathematics extension: https://tiptap.dev/api/extensions/mathematics
-- CodeBlockLowlight: https://tiptap.dev/api/nodes/code-block-lowlight
-- Table extension: https://tiptap.dev/api/nodes/table
-- Image extension: https://tiptap.dev/api/nodes/image
-- Current architecture: `docs/CONTENT_ARCHITECTURE.md`
-
-**Priority Rationale**:
-This is HIGH PRIORITY because:
-1. Users expect feature parity between Chat and Whim
-2. Currently, complex conversations with LaTeX/code can't be properly edited as whims
-3. Notion-like experience significantly improves user satisfaction
-4. Relatively quick implementation (TipTap already in place)
-5. No additional costs (client-side only)
 
 ---
 
 ## Medium Priority
 
-### 1. Image Generation Prompt Enhancement
+### 1. Image-to-Image Generation
 
-**Description**: Add an AI-powered prompt enhancement step before sending user's image generation request to the model. This will improve image quality and ensure better results by expanding brief descriptions into detailed, well-structured prompts.
+**Description**: Enable users to upload one or more images and use them as reference/basis for generating new images. This includes image editing, style transfer, variations, and modifications.
 
 **Current Behavior**:
-- User provides image description (e.g., "a cat playing piano")
-- System sends prompt directly to Gemini 2.5 Flash Image model
-- Results vary depending on prompt quality
+- Image generation only accepts text prompts
+- Users cannot upload reference images
+- No image editing or modification capabilities
+- File upload exists but not connected to image generation
 
-**Proposed Enhancement**:
+**Proposed Feature**:
 ```
-User Input → Prompt Enhancer (Gemini Flash Lite) → Enhanced Prompt → Image Model → Generated Image
+User uploads image(s) + Text prompt → Image Generation Tool → Modified/New Image
 ```
 
-**Benefits**:
-- Better image quality from concise user inputs
-- Consistent prompt structure (style, lighting, composition details)
-- Educational - users can see what makes a good image prompt
-- Minimal cost (~$0.000002 per enhancement with Flash Lite)
+**Use Cases**:
+1. **Style Transfer**: Upload a photo, ask to make it look like a painting
+2. **Image Editing**: Upload image, ask to change specific elements
+3. **Variations**: Upload image, generate similar variations
+4. **Background Removal/Replacement**: Upload image, modify background
+5. **Object Addition/Removal**: Upload image, add or remove objects
+6. **Image Enhancement**: Upscale, colorize, restore old photos
 
-**Example Enhancement**:
-- User input: "a cat playing piano"
-- Enhanced: "A fluffy orange tabby cat sitting at a grand piano, paws on the keys, warm studio lighting, photorealistic style, detailed fur texture, elegant composition, shallow depth of field, professional photography"
+**Example Interactions**:
+- "Make this photo look like a Van Gogh painting" + [user photo]
+- "Remove the background from this image" + [product photo]
+- "Change the sunset to a sunrise" + [landscape photo]
+- "Generate 3 variations of this design" + [logo image]
+
+**Technical Requirements**:
+1. Extend `image_generate` tool to accept image files as parameter
+2. Pass uploaded images to Gemini IMAGE model via multimodal API
+3. Update prompt enhancer to handle image-based prompts
+4. Ensure base64 images are NOT included in conversation history (already implemented)
+5. Add UI indicator for image-to-image vs text-to-image mode
 
 **Implementation Plan**:
-1. Create `src/lib/image/prompt-enhancer.ts`
-2. Use Gemini 2.5 Flash Lite for enhancement (fast, cheap)
-3. Add system prompt with image generation best practices
-4. Show original and enhanced prompts in UI (optional)
-5. Allow users to edit enhanced prompt before generating
+1. Add `referenceImages` parameter to image-generate tool
+2. Modify `ToolParameter` type to support file attachments
+3. Update agent to pass files to tools via ToolContext
+4. Enhance prompt builder to include image descriptions
+5. Test with various image formats (PNG, JPEG, WebP)
 
 **Files to Modify**:
-- `src/app/api/chat/route.ts` - Add enhancement step before image gen
-- `src/lib/prompt-analysis/analyzer.ts` - Detect image gen intent
-- New file: `src/lib/image/prompt-enhancer.ts`
-- `src/components/chat/ChatMessage.tsx` - Show enhancement details (optional)
+- `src/lib/agent/tools/image-generate.ts` - Add image file parameters
+- `src/types/agent.ts` - Extend ToolParameter for file support
+- `src/lib/agent/core/agent.ts` - Pass files to tools
+- `src/lib/image/prompt-enhancer.ts` - Handle image-based prompts
+- `src/components/chat/ChatInput.tsx` - UI for image upload workflow
 
-**Estimated Effort**: 2-3 hours
+**Estimated Effort**: 4-6 hours
 
-**Cost Impact**: ~$0.000002 per image generation (negligible)
+**Cost Impact**: Similar to text-to-image (~$0.000002 per generation)
+
+**Priority Rationale**: Medium priority - enhances creative capabilities significantly, but text-to-image covers most basic use cases.
 
 ---
 
@@ -316,5 +154,51 @@ When clicked:
 
 ---
 
-**Last Updated**: November 21, 2025
+## Low Priority
+
+### 1. Notion-like Whim Editing Experience - Phase 2 Enhancements
+
+**Description**: Add advanced Notion-like features to the TipTap editor. Phase 1 (LaTeX, code highlighting, tables, images) is already complete.
+
+**Current State**:
+- ✅ TipTap WYSIWYG editor implemented
+- ✅ LaTeX math support (inline and block)
+- ✅ Syntax-highlighted code blocks
+- ✅ Table creation and editing
+- ✅ Image support
+- ✅ Basic formatting (bold, italic, headings, lists)
+
+**Phase 2 Enhancements** (Nice-to-have):
+1. **Slash Commands**
+   - Type `/` to insert blocks (heading, list, code, table, etc.)
+   - Searchable command palette
+
+2. **Drag & Drop Blocks**
+   - Reorder paragraphs, headings, lists by dragging
+   - Visual drop indicators
+
+3. **Video Embedding**
+   - Support YouTube, Vimeo URLs
+   - Responsive embeds
+
+4. **Enhanced Code Blocks**
+   - Line numbers
+   - Copy button
+   - Language badge
+
+**Benefits**:
+- Enhanced user experience with Notion-like polish
+- Faster content organization with drag & drop
+- Quick formatting with slash commands
+
+**Estimated Effort**: 4-6 hours
+
+**Cost Impact**: None (all client-side)
+
+**Priority Rationale**:
+This is LOW PRIORITY because Phase 1 already provides core functionality. These are polish features that can be added later.
+
+---
+
+**Last Updated**: November 22, 2025
 **Maintained By**: Archer & Claude Code
