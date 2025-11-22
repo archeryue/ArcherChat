@@ -48,15 +48,7 @@ gh run view <run-id>
 
 ## Key Architecture
 
-### 1. Intelligent Analysis Pipeline (Production)
-```
-User Input → PromptAnalyzer → ContextOrchestrator → AI Response
-```
-- **Flag**: `NEXT_PUBLIC_USE_INTELLIGENT_ANALYSIS=true`
-- **Files**: `src/lib/prompt-analysis/analyzer.ts`, `src/lib/context-engineering/orchestrator.ts`
-- AI-powered intent detection, web search triggers, memory extraction
-
-### 2. Agentic Mode (ReAct Pattern) - DEFAULT PRODUCTION SYSTEM
+### 1. Agentic Mode (ReAct Pattern) - DEFAULT PRODUCTION SYSTEM
 ```
 User Input → Agent Loop → REASON → ACT → OBSERVE → Response
 ```
@@ -65,18 +57,20 @@ User Input → Agent Loop → REASON → ACT → OBSERVE → Response
 - **Files**: `src/lib/agent/core/agent.ts`, `src/lib/agent/tools/*`
 - Tools: web_search, web_fetch, memory_retrieve, memory_save, get_current_time
 
-### 3. Memory System
+**Note**: There's also a legacy *Intelligent Analysis Pipeline* (PromptAnalyzer → ContextOrchestrator) that serves as a fallback when Agentic Mode is disabled. However, Agentic Mode is the default and recommended system.
+
+### 2. Memory System
 - **Three-tier retention**: CORE (never expire), IMPORTANT (90 days), CONTEXT (30 days)
 - **Files**: `src/lib/memory/storage.ts`, `src/lib/memory/loader.ts`
-- AI-powered extraction via PromptAnalyzer
+- AI-powered extraction via Agent tools
 
-### 4. Web Search Integration
+### 3. Web Search Integration
 - **Provider**: Google Custom Search API
 - **Rate Limits**: 20/hour, 100/day per user
 - **Flag**: `NEXT_PUBLIC_USE_WEB_SEARCH=true`
 - Conservative mode: only for time-sensitive queries
 
-### 5. Model Configuration
+### 4. Model Configuration
 Centralized in `src/config/models.ts`:
 - `ModelTier.MAIN`: Gemini 2.5 Flash (chat)
 - `ModelTier.IMAGE`: Gemini 2.5 Flash Image
