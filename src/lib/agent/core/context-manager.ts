@@ -91,9 +91,14 @@ function extractSummary(
       };
 
     case 'image_generate':
+      // CRITICAL: Strip base64 image data to prevent token overflow
+      // Only include metadata, not the actual image content
       return {
         summary: `Image generated for: ${obj.originalPrompt || 'prompt'}`,
-        keyPoints: obj.style ? [`Style: ${obj.style}`] : [],
+        keyPoints: [
+          obj.style ? `Style: ${obj.style}` : '',
+          'Note: Image will be displayed to user, not included in context',
+        ].filter(Boolean),
       };
 
     default:

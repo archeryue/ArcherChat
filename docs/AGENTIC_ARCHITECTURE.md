@@ -1,16 +1,16 @@
-# Agentic Architecture - IMPLEMENTED
+# Agentic Architecture - DEFAULT PRODUCTION SYSTEM
 
 ## Overview
 
-**Status**: ✅ **IMPLEMENTED** (2025-11-17)
+**Status**: ✅ **ENABLED BY DEFAULT IN PRODUCTION** (since 2025-11-17)
 
 This document describes WhimCraft's agentic architecture using the ReAct (Reason-Act-Observe) pattern.
 
-**Feature Flag**: `NEXT_PUBLIC_USE_AGENTIC_MODE=true`
+**Feature Flag**: `NEXT_PUBLIC_USE_AGENTIC_MODE=true` (default: enabled)
 
 **Previous Architecture**: PromptAnalyzer → ContextOrchestrator → AI Response (linear pipeline)
 
-**Current Architecture**: Agent with Tools performing iterative Reason → Act → Observe cycles
+**Current Architecture**: Agent with Tools performing iterative Reason → Act → Observe cycles (DEFAULT)
 
 **Test Coverage**: 58 unit tests (100% pass rate)
 

@@ -24,6 +24,7 @@ import { MemoryFact } from "@/types/memory";
 import { convertConversationToWhimBlocks } from "@/lib/whim/converter";
 import { Timestamp } from 'firebase-admin/firestore';
 import { Whim } from "@/types/whim";
+import { promptEnhancer } from "@/lib/image/prompt-enhancer";
 
 export async function POST(req: NextRequest) {
   try {
@@ -128,10 +129,21 @@ export async function POST(req: NextRequest) {
       .orderBy("created_at", "asc")
       .get();
 
-    const messages: AIMessage[] = messagesSnapshot.docs.map((doc) => ({
-      role: doc.data().role as "user" | "assistant",
-      content: doc.data().content,
-    }));
+    const messages: AIMessage[] = messagesSnapshot.docs.map((doc) => {
+      let content = doc.data().content;
+
+      // Strip image markdown from content to prevent token overflow
+      // (for old messages that still have image data stored)
+      // Images should NEVER be included in conversation history for ReAct loop
+      if (typeof content === 'string') {
+        content = content.replace(/!\[Generated Image\]\(data:image\/[^;]+;base64,[A-Za-z0-9+/=\s]+?\)/g, '[Image was generated here]');
+      }
+
+      return {
+        role: doc.data().role as "user" | "assistant",
+        content,
+      };
+    });
 
     // Check for slash commands (/save or /whim)
     const trimmedMessage = message.trim().toLowerCase();
@@ -296,9 +308,14 @@ export async function POST(req: NextRequest) {
             });
 
             // Run the agent with message that includes whim context
+            // Limit history to last 5 messages to prevent token overflow
+            // (each message includes whim context which can be large)
+            const historyLimit = 5;
+            const limitedHistory = messages.slice(0, -1).slice(-historyLimit);
+
             const result = await agent.run({
               message: messageWithContext,
-              conversationHistory: messages.slice(0, -1), // Exclude the current message since we're replacing it with context version
+              conversationHistory: limitedHistory,
               files,
             });
 
@@ -438,9 +455,13 @@ export async function POST(req: NextRequest) {
             });
 
             // Run the agent
+            // Limit history to last 10 messages to prevent token overflow
+            const historyLimit = 10;
+            const limitedHistory = messages.slice(-historyLimit);
+
             const result = await agent.run({
               message,
-              conversationHistory: messages,
+              conversationHistory: limitedHistory,
               files,
             });
 
@@ -463,17 +484,22 @@ export async function POST(req: NextRequest) {
             // Unsubscribe and cleanup
             progressUnsubscribe();
 
-            // Save assistant message
-            const contentToSave = fullResponse.replace(
-              /data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g,
-              'data:image/png;base64,[image-data-removed-due-to-size]'
-            );
+            // Save assistant message WITHOUT image data (Firestore size limits)
+            // Strip image markdown before saving
+            const contentWithoutImage = fullResponse.replace(/!\[Generated Image\]\(data:image\/[^;]+;base64,[A-Za-z0-9+/=\s]+?\)/g, '[Image generated - not persisted to reduce storage]');
 
-            await conversationRef.collection(COLLECTIONS.MESSAGES).add({
+            const messageData: any = {
               role: "assistant",
-              content: contentToSave,
+              content: contentWithoutImage,
               created_at: new Date(),
-            });
+            };
+
+            // Log if we stripped an image
+            if (fullResponse !== contentWithoutImage) {
+              console.log('[Chat API] Image markdown stripped from message before Firestore save (size limit)');
+            }
+
+            await conversationRef.collection(COLLECTIONS.MESSAGES).add(messageData);
 
             await conversationRef.update({
               updated_at: new Date(),
@@ -542,6 +568,38 @@ export async function POST(req: NextRequest) {
                 (k) => (analysis!.actions as any)[k].needed
               ),
             });
+
+            // Step 1.5: Enhance image generation prompt if needed
+            if (analysis.actions.image_generation.needed && analysis.actions.image_generation.description) {
+              console.log('[Chat API] Image generation detected - enhancing prompt');
+
+              progressEmitter.emit({
+                step: ProgressStep.ANALYZING_PROMPT,
+                status: 'started',
+                message: 'Enhancing image prompt...',
+                timestamp: Date.now(),
+              });
+
+              const enhancementResult = await promptEnhancer.enhance(
+                analysis.actions.image_generation.description
+              );
+
+              // Update analysis with enhanced prompt
+              analysis.actions.image_generation.description = enhancementResult.enhancedPrompt;
+
+              console.log('[Chat API] Prompt enhancement:', {
+                original: enhancementResult.originalPrompt,
+                enhanced: enhancementResult.enhancedPrompt,
+                enhancements: enhancementResult.enhancements,
+              });
+
+              progressEmitter.emit({
+                step: ProgressStep.ANALYZING_PROMPT,
+                status: 'completed',
+                message: 'Image prompt enhanced',
+                timestamp: Date.now(),
+              });
+            }
 
             // Emit progress for context preparation steps
             const needsWebSearch = analysis.actions.web_search?.needed;
