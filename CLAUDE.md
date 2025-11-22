@@ -459,6 +459,51 @@ BashOutput → Look for:
 - Ensures professional development practices
 - Respects user's time and patience
 
+### 9. 🧪 TEST-DRIVEN DEVELOPMENT: Think Testing First, Verify After
+
+**Test-First Mindset:**
+- **ALWAYS** think about how to test a feature BEFORE writing implementation code
+- **ALWAYS** consider test scenarios during design phase
+- **ALWAYS** ask yourself: "How will I verify this works correctly?"
+- **PREFER** test-driven development (TDD) approach when feasible
+
+**Post-Implementation Verification:**
+- **ALWAYS** run ALL tests after implementing new features:
+  ```bash
+  npm run build           # Verify TypeScript compilation
+  npx jest               # Run all unit tests (145+ tests)
+  npm run test:e2e       # Run E2E tests (17 core feature tests)
+  ```
+- **NEVER** consider implementation complete until all tests pass
+- **NEVER** skip E2E tests for user-facing features
+- **ALWAYS** verify tests catch the bug when fixing issues
+
+**Test-Driven Development Workflow:**
+```bash
+# 1. Think: How will I test this feature?
+# 2. Design: What test cases are needed?
+# 3. Implement: Write the code
+# 4. Verify: Run comprehensive test suite
+npm run build           # TypeScript check
+npx jest               # Unit tests
+npm run test:e2e       # E2E tests
+# 5. Only if ALL pass → commit
+```
+
+**Why This Matters:**
+- Catches design flaws before implementation
+- Ensures features are testable and maintainable
+- Prevents regressions in production
+- Documents expected behavior through tests
+- Builds confidence in code changes
+- E2E tests verify complete user workflows work correctly
+
+**Test Coverage Requirements:**
+- ✅ **Unit Tests**: All business logic, utilities, and core functions
+- ✅ **E2E Tests**: All user-facing features and critical workflows
+- ✅ **100% Pass Rate**: Required before any commit
+- ✅ **Test Documentation**: See `docs/TESTING.md` for complete guide
+
 ---
 
 ## Development Principles
