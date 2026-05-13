@@ -44,10 +44,12 @@ Mechanical translations of well-known patterns. Faster with AI; still read every
 
 Anything that affects the loss surface but has no learning value, plus anything spec-defined whose rewrite would introduce scoring drift.
 
-- **`rustbpe/`** — tokenizer trainer. Rewriting changes the vocab and invalidates every Stage 1 comparison.
-- **`tasks/`** — ARC-E, ARC-C, MMLU, GSM8K, HumanEval, SpellingBee, CORE/DCLM scoring.
-- Eval bundle download + `~/.cache/nanochat/` paths. Keep identical so Stage 1 artifacts interop.
-- `serve.py` + chat web UI. Optional, off the learning critical path.
+- **`rustbpe/`** — tokenizer trainer. Vendored from `karpathy/rustbpe@ddf848f` (see `rustbpe/UPSTREAM`). Rewriting changes the vocab and invalidates every Stage 1 comparison.
+- **`tasks/`** — ARC-E, ARC-C, MMLU, GSM8K, HumanEval, SpellingBee. Vendored verbatim from nanochat.
+- **`archerchat/core_eval.py`** — CORE/DCLM scoring (ex `nanochat/core_eval.py`).
+- **`archerchat/execution.py`** — HumanEval sandbox (ex `nanochat/execution.py`).
+- **`archerchat/eval_bundle.py`** — bundle URL + download/unzip glue (extracted from `scripts/base_eval.py`). Keeps `~/.cache/nanochat/eval_bundle/` layout identical so Stage 1 artifacts interop.
+- **`scripts/chat_web.py` + `scripts/chat_cli.py` + `archerchat/ui.html`** — demo UI + CLI. Vendored but inert until the build-by-hand engine/checkpoint/common modules land. Off the learning critical path; here for end-of-Stage-2 demo.
 
 ## Order of attack
 
