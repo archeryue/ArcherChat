@@ -1,0 +1,16 @@
+Vendored from: https://github.com/karpathy/rustbpe
+Pinned commit: ddf848f6961a0655dc8693742fc338e5682c0d3b
+Date pulled:   2026-05-13
+
+To update:
+    git clone https://github.com/karpathy/rustbpe /tmp/rustbpe
+    git -C /tmp/rustbpe rev-parse HEAD            # capture new pin
+    cp -a /tmp/rustbpe/. rustbpe/                  # overwrite
+    rm -rf rustbpe/.git rustbpe/.github rustbpe/.python-version
+
+Stripped on import:
+    .git/         (don't carry upstream history)
+    .github/      (CI workflows are rustbpe-specific)
+    .python-version
+
+License: MIT (see rustbpe/LICENSE).
