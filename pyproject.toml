@@ -37,10 +37,9 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 
-# Endlex lives next door as a local editable install.
 # PyTorch targets cuda 12.8 or CPU depending on the extras flag.
 [tool.uv.sources]
-endlex = { path = "../Endlex", editable = true }
+endlex = { git = "https://github.com/archeryue/Endlex" }
 torch = [
     { index = "pytorch-cpu", extra = "cpu" },
     { index = "pytorch-cu128", extra = "gpu" },
