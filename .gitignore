@@ -13,3 +13,6 @@ report.md
 
 # Local caches (Stage 1 artifacts live under ~/.cache/nanochat anyway)
 .cache/
+
+# Local secrets — never commit
+.env
