@@ -1,0 +1,74 @@
+[project]
+name = "archerchat"
+version = "0.1.0"
+description = "From-scratch reimplementation of nanochat on a single RTX 5060 Ti → 8×H100"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "datasets>=4.0.0",
+    "endlex",
+    "fastapi>=0.117.1",
+    "filelock>=3.13",
+    "kernels>=0.11.7",
+    "psutil>=7.1.0",
+    "rustbpe>=0.1.0",
+    "tiktoken>=0.11.0",
+    "tokenizers>=0.22.0",
+    "torch==2.9.1",
+    "uvicorn>=0.36.0",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.1.0",
+    "matplotlib>=3.10.8",
+    "pyfiglet>=1.0.2",
+    "pytest>=8.0.0",
+    "python-dotenv>=1.2.1",
+    "transformers>=4.57.3",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+# Endlex lives next door as a local editable install.
+# PyTorch targets cuda 12.8 or CPU depending on the extras flag.
+[tool.uv.sources]
+endlex = { path = "../Endlex", editable = true }
+torch = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu128", extra = "gpu" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[project.optional-dependencies]
+cpu = [
+    "torch==2.9.1",
+]
+gpu = [
+    "torch==2.9.1",
+]
+
+[tool.uv]
+default-groups = []
+conflicts = [
+    [
+        { extra = "cpu" },
+        { extra = "gpu" },
+    ],
+]
