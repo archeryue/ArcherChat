@@ -6,9 +6,11 @@ import os
 import re
 import logging
 import urllib.request
+from typing import Any
 import torch
 import torch.distributed as dist
 from filelock import FileLock
+from endlex import Tracker, upload_checkpoint, upload_checkpoint_async
 
 # The dtype used for compute (matmuls, activations). Master weights stay fp32 for optimizer precision.
 # Linear layers cast their weights to this dtype in forward, replacing torch.amp.autocast.
@@ -206,14 +208,33 @@ def compute_cleanup():
     if is_ddp_initialized():
         dist.destroy_process_group()
 
-class DummyWandb:
-    """Useful if we wish to not use wandb but have all the same signatures"""
-    def __init__(self):
-        pass
-    def log(self, *args, **kwargs):
-        pass
-    def finish(self):
-        pass
+def init_tracker(
+    project: str,
+    name: str,
+    config: dict[str, Any] | None = None,
+    *,
+    url: str | None = None,
+    token: str | None = None,
+    **kwargs,
+) -> Tracker:
+    """
+    Create an Endlex Tracker for this run.
+
+    URL and token default to the ENDLEX_URL / ENDLEX_TOKEN env vars.
+    If neither is set the tracker runs in offline-only mode (local JSONL,
+    no network I/O) — safe to use unconditionally.
+
+    Set ENDLEX_URL / ENDLEX_TOKEN (or pass url=/token=) before Stage 3 to
+    enable live metric streaming and checkpoint sync to the Endlex server.
+    """
+    return Tracker(project=project, name=name, config=config, url=url, token=token, **kwargs)
+
+# Re-exported so callers only need to import from archerchat.common.
+__all__ = [
+    "init_tracker",
+    "upload_checkpoint",
+    "upload_checkpoint_async",
+]
 
 # hardcoded BF16 peak flops for various GPUs
 # inspired by torchtitan: https://github.com/pytorch/torchtitan/blob/main/torchtitan/tools/utils.py
