@@ -1,22 +1,28 @@
 """
 archerchat/attention.py — attention kernel wrapper.
 
-Implement sdpa_attention() and the SlideWindow mask helper.
-model.py calls these; this file owns the masking math.
+model.py calls flash_attn.flash_attn_func() and flash_attn.flash_attn_with_kvcache()
+from here.  This file owns the window_size → mask translation for the SDPA path.
 
-What to implement:
-  - sdpa_attention(): wraps torch.nn.functional.scaled_dot_product_attention with
-    the correct causal / sliding-window mask.  On Blackwell consumer (RTX 5060 Ti,
-    SM 12.0) FlashAttention-3 is unavailable, so we use SDPA with an explicit mask.
-  - make_sliding_window_mask(): builds the bool mask for one attention layer given
-    the window size and sequence length.
-  - Document-boundary mask support for SFT packing (used by sft.py).
+nanochat interface (what model.py calls):
+    flash_attn.flash_attn_func(q, k, v, causal=True, window_size=(left, right))
+    flash_attn.flash_attn_with_kvcache(q, k_cache, v_cache, k=k, v=v,
+                                        cache_seqlens=..., causal=True, window_size=...)
 
-Stage 3 note: when running on H100s, swap sdpa_attention() body to call
-flash_attn_func() from the flash-attn package.  The model.py call site should not
-change.
+window_size convention (same as FlashAttention-2/3):
+    (left, right) where left = tokens before current position to attend to (-1 = unlimited)
+                         right = 0 for causal.  Examples:
+        full causal:         (-1, 0)
+        sliding window of N: (N, 0)
 
-Acceptance gate (step 1): logit equivalence with nanochat.
+Tensor layout: nanochat uses (B, T, H, D) — NOT the PyTorch (B, H, T, D) default.
+SDPA wants (B, H, T, D), so transpose before/after.
+
+On RTX 5060 Ti (Blackwell SM 12.0) FA3 is unavailable.  Implement using SDPA with
+an explicit float mask from make_window_mask().  The call site in model.py must NOT
+change for Stage 3 — just swap the body of flash_attn_func to call the real FA package.
+
+Acceptance gate (step 1): logit equivalence with nanochat on fp32 forward pass.
 """
 
 from __future__ import annotations
@@ -25,97 +31,103 @@ import torch
 import torch.nn.functional as F
 
 
-def make_sliding_window_mask(
+def make_window_mask(
     seq_len: int,
-    window_size: int,
+    window_size: tuple[int, int],
     device: torch.device,
-) -> torch.Tensor:
+    dtype: torch.dtype = torch.float32,
+) -> torch.Tensor | None:
     """
-    Build a causal sliding-window attention mask.
+    Build an additive attention mask from a (left, right) window_size tuple.
 
-    A token at position i can attend to positions j iff:
-        j <= i  (causal)  AND  i - j < window_size  (within window)
+    Returns None when window_size[0] == -1 (full context) so the caller can
+    use the faster is_causal=True SDPA path instead.
 
-    Returns a (seq_len, seq_len) bool tensor where True means "block this pair"
-    (i.e., the additive mask convention used by SDPA: -inf for True positions).
+    For sliding windows returns (seq_len, seq_len) float tensor:
+        0.0  → attend this pair
+        -inf → mask this pair
+    Causal constraint (j > i) is always applied.
 
     Args:
-        seq_len:     sequence length
-        window_size: how many past positions each token can see (including itself)
-        device:      where to allocate the mask
+        seq_len:     sequence length T
+        window_size: (left, right); left = max lookback tokens (-1 = unlimited)
+        device:      allocate here
+        dtype:       float32 recommended (SDPA accumulates in fp32 internally)
     """
     raise NotImplementedError
 
 
-def make_full_causal_mask(seq_len: int, device: torch.device) -> torch.Tensor:
+class FlashAttnCompat:
     """
-    Standard lower-triangular causal mask.
-
-    Returns (seq_len, seq_len) bool tensor — True means blocked.
-    Equivalent to make_sliding_window_mask(seq_len, seq_len, device).
-    Kept separate so model.py can branch on layer type without recomputing.
+    Drop-in shim that exposes the flash_attn interface via SDPA (no FA3 needed).
+    model.py imports this and calls it identically to the real flash-attn package.
     """
-    raise NotImplementedError
+
+    def flash_attn_func(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        causal: bool = True,
+        window_size: tuple[int, int] = (-1, 0),
+    ) -> torch.Tensor:
+        """
+        Training-time scaled dot-product attention (no KV cache).
+
+        Args:
+            q:           (B, T, n_head,    head_dim)
+            k:           (B, T, n_kv_head, head_dim)
+            v:           (B, T, n_kv_head, head_dim)
+            causal:      always True during training
+            window_size: (left, right) — see module docstring
+
+        Returns:
+            (B, T, n_head, head_dim)
+
+        Implementation steps:
+            1. Transpose to (B, H, T, D) for SDPA.
+            2. GQA expand: repeat_interleave k, v from n_kv_head to n_head.
+            3. Build additive mask via make_window_mask().
+               If left == -1 (full context) skip the mask and pass is_causal=True.
+            4. F.scaled_dot_product_attention(q, k, v, attn_mask=mask, is_causal=...).
+            5. Transpose output back to (B, T, H, D).
+        """
+        raise NotImplementedError
+
+    def flash_attn_with_kvcache(
+        self,
+        q: torch.Tensor,
+        k_cache: torch.Tensor,
+        v_cache: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        cache_seqlens: torch.Tensor,
+        causal: bool = True,
+        window_size: tuple[int, int] = (-1, 0),
+    ) -> torch.Tensor:
+        """
+        Decode-time attention with a mutable KV cache (called by engine.py).
+
+        Args:
+            q:             (B, 1, n_head,    head_dim) — single new query
+            k_cache:       (B, T_max, n_kv_head, head_dim) — mutated in-place
+            v_cache:       (B, T_max, n_kv_head, head_dim) — mutated in-place
+            k:             (B, 1, n_kv_head, head_dim) — new key to append
+            v:             (B, 1, n_kv_head, head_dim) — new value to append
+            cache_seqlens: (B,) int32 — valid entries per row before this step
+            causal:        always True
+            window_size:   (left, right) — sliding-window constraint on past tokens
+
+        Returns:
+            (B, 1, n_head, head_dim)
+
+        Implementation:
+            1. Write k / v into k_cache / v_cache at index cache_seqlens[b] for each b.
+            2. Attend q against the valid cache prefix (length = cache_seqlens[b] + 1).
+            3. Honour the sliding-window left bound if left != -1.
+        """
+        raise NotImplementedError
 
 
-def sdpa_attention(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    v: torch.Tensor,
-    mask: torch.Tensor | None,
-    dropout_p: float = 0.0,
-) -> torch.Tensor:
-    """
-    Scaled dot-product attention via torch.nn.functional.scaled_dot_product_attention.
-
-    This is the Blackwell-safe path (no FA3 dependency).
-
-    Args:
-        q:       (B, n_head,    T, head_dim)
-        k:       (B, n_kv_head, T, head_dim)  — repeat_interleave for GQA happens here
-                 OR already expanded to (B, n_head, T, head_dim)
-        v:       (B, n_kv_head, T, head_dim)  — same as k
-        mask:    (seq_len, seq_len) bool additive mask, or None for full causal via SDPA's
-                 is_causal=True fast path.  True = blocked position (-inf in attention).
-        dropout_p: only used during training
-
-    Returns:
-        (B, n_head, T, head_dim) — attended values
-
-    Implementation note: if mask is None use is_causal=True (fastest path).
-    If mask is provided, negate it (SDPA expects True = attend, False = mask) or pass
-    an additive float mask of 0 / -inf.
-    """
-    raise NotImplementedError
-
-
-def sdpa_attention_with_kvcache(
-    q: torch.Tensor,
-    k_cache: torch.Tensor,
-    v_cache: torch.Tensor,
-    k_new: torch.Tensor,
-    v_new: torch.Tensor,
-    cache_seqlens: torch.Tensor,
-) -> torch.Tensor:
-    """
-    Single-token decode step using a KV cache.
-
-    Called by engine.py during auto-regressive generation.
-
-    Args:
-        q:             (B, n_head,    1, head_dim)   — current query (one new token)
-        k_cache:       (B, n_kv_head, T_max, head_dim) — mutable cache, updated in-place
-        v_cache:       (B, n_kv_head, T_max, head_dim) — mutable cache, updated in-place
-        k_new:         (B, n_kv_head, 1, head_dim)   — new key to append
-        v_new:         (B, n_kv_head, 1, head_dim)   — new value to append
-        cache_seqlens: (B,) int32 — number of valid tokens already in the cache per row
-
-    Returns:
-        (B, n_head, 1, head_dim)
-
-    Implementation:
-        1. Write k_new / v_new into k_cache / v_cache at position cache_seqlens[b] for each b.
-        2. Compute attention of q against k_cache[:, :, :max_len, :] / v_cache, using a
-           causal mask that allows each query to attend only to cache_seqlens[b] + 1 positions.
-    """
-    raise NotImplementedError
+# Singleton — model.py does: from archerchat.attention import flash_attn
+flash_attn = FlashAttnCompat()

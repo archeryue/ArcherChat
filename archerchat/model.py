@@ -4,17 +4,24 @@ archerchat/model.py — GPT language model.
 Implement every method marked NotImplementedError.
 train.py calls these interfaces exactly as written — don't change signatures.
 
-Architecture to implement:
-  - RMSNorm (no bias, learnable weight)
-  - RoPE positional encoding (applied inside each attention block)
-  - QK-norm (applied to Q and K before computing attention scores)
+Architecture to implement (verified against nanochat/gpt.py):
+  - NO learnable RMSNorm — use F.rms_norm(x, (x.size(-1),)) directly, no weight/bias
+  - RoPE positional encoding, base theta=100000, applied per attention block
+  - QK-norm: norm(q) * 1.2, norm(k) * 1.2 after RoPE
   - Grouped-query attention (n_head query heads, n_kv_head key/value heads)
-  - Sliding-window attention via archerchat.attention (pattern driven by window_pattern)
-  - SwiGLU feed-forward network (2/3 × 4 × n_embd hidden dim, no bias)
-  - Untied token embeddings and unembedding (lm_head does NOT share weights with wte)
-  - Muon-friendly weight init (std ≈ 1/sqrt(fan_in), zero biases, special output projections)
+  - Sliding-window attention: per-layer (left, right) window derived from window_pattern
+    via _compute_window_sizes(); last layer always full context
+  - FFN: ReLU² activation (F.relu(x).square()), width = 4 × n_embd, NO bias
+  - Untied wte / lm_head (no weight tying)
+  - Value embeddings (ResFormer): alternating layers share a separate Embedding table;
+    gated and added to V before attention
+  - Smear gate: mixes prev token's embedding into current position (cheap bigram info)
+  - Backout: subtract cached mid-layer residual before final norm
+  - Per-layer scalars: resid_lambdas (init ≈ 1.05–1.15) and x0_lambdas (init ≈ 0.05–0.20)
+  - Logit soft-cap: 15 * tanh(logits / 15), computed in fp32
+  - Vocab padding to nearest multiple of 64 for tensor-core alignment
 
-Reference: nanochat/gpt.py (same architecture).
+Reference: nanochat/gpt.py — copy the architecture exactly for oracle comparison.
 Acceptance gate: max(abs(logits_archer − logits_nano)) < 1e-4 on fp32 with Stage 1 weights.
 """
 
@@ -69,18 +76,27 @@ class GPT(nn.Module):
 
     def init_weights(self) -> None:
         """
-        Initialize all parameters in-place.
+        Initialize all parameters in-place (nanochat convention exactly).
 
         Called once after `model.to_empty(device=device)`.
-        Muon works best with:
-          - embedding table: N(0, 1) then normalize rows to unit norm
-          - attention Q/K/V projections: N(0, 1/sqrt(n_embd))
-          - attention output projection: N(0, 1/sqrt(n_embd * n_layer))
-          - FFN gate/up projections: same as attention Q/K/V
-          - FFN down projection: same depth scaling as attn output
-          - lm_head: zero-init (or small)
-          - all RMSNorm weights: 1.0
-        Adjust if nanochat's exact init differs — acceptance test will catch it.
+
+        wte:        N(0, 0.8)
+        lm_head:    N(0, 0.001)
+        per block:
+          c_q, c_k, c_v:  Uniform(-s, s)  where s = sqrt(3) / sqrt(n_embd)
+          c_proj:          zeros
+          c_fc:            Uniform(-s*0.4, s*0.4)
+          c_proj (MLP):    zeros
+        resid_lambdas[i]:  1.15 - 0.10 * i / (n_layer - 1)
+        x0_lambdas[i]:     0.20 - 0.15 * i / (n_layer - 1)
+        smear_lambda:      zeros
+        backout_lambda:    0.2
+        smear_gate:        Uniform(0, 0.02)
+        ve weights:        Uniform(-s, s)  (same s as c_v)
+        ve_gate weights:   Uniform(0, 0.02)
+
+        Embeddings (wte, value_embeds) are then cast to COMPUTE_DTYPE to save memory.
+        (Exception: fp16 keeps them fp32 because GradScaler can't unscale fp16 grads.)
         """
         raise NotImplementedError
 
@@ -121,21 +137,34 @@ class GPT(nn.Module):
 
     # ── Optimizer ─────────────────────────────────────────────────────
 
-    def setup_optimizer(self, lr: float, weight_decay: float) -> torch.optim.Optimizer:
+    def setup_optimizer(
+        self,
+        lr: float,
+        weight_decay: float = 0.0,
+        unembedding_lr: float = 0.004,
+        embedding_lr: float = 0.2,
+        scalar_lr: float = 0.5,
+    ) -> torch.optim.Optimizer:
         """
-        Build and return the optimizer for this model.
+        Build and return the optimizer for this model (nanochat convention exactly).
 
-        Should create two param groups:
-          1. Matrix params (Q/K/V/O projections, FFN gate/up/down, lm_head) → Muon,
-             lr=lr, weight_decay=weight_decay
-          2. Non-matrix params (embedding table, RMSNorm weights, biases if any) → AdamW,
-             lr = lr * 0.1 (or the ratio nanochat uses), weight_decay=0.0
+        Param groups (all are AdamW except matrix params which use Muon):
+          lm_head:          AdamW, lr = unembedding_lr * dmodel_scale, betas=(0.8, 0.96),  eps=1e-10, wd=0.01
+          wte:              AdamW, lr = embedding_lr   * dmodel_scale, betas=(0.8, 0.995), eps=1e-10, wd=0.001
+          value_embeds:     AdamW, lr = embedding_lr   * dmodel_scale * 0.5, betas=(0.8, 0.995), eps=1e-10, wd=0.01
+          resid_lambdas:    AdamW, lr = scalar_lr * 0.01, betas=(0.8, 0.95),  eps=1e-10, wd=0.05
+          x0_lambdas:       AdamW, lr = scalar_lr,        betas=(0.96, 0.95), eps=1e-10, wd=0.0
+          smear / backout:  AdamW, lr = 0.2,              betas=(0.8, 0.95),  eps=1e-10, wd=0.0
+          matrix params:    Muon,  lr = lr (= matrix_lr), momentum=0.95, ns_steps=5, beta2=0.9, wd=weight_decay
+                            (grouped by shape for efficient stacking in newton_schulz)
 
-        lr is the "matrix LR" anchor derived from compute_scale(depth).
-        train.py will scale each group's lr uniformly via:
-            group["lr"] = group["initial_lr"] * lr_scale
+        dmodel_scale = (n_embd / 768) ** -0.5  — scales AdamW LRs so 768-dim is the reference.
 
-        Import MuonAdamW from archerchat.optimizer.
+        lr here is the "matrix LR" anchor from compute_scale(depth).
+        train.py stashes initial_lr and scales all groups uniformly via lr_scale = current_lr / max_lr.
+
+        Use MuonAdamW (single-GPU) or DistMuonAdamW (DDP) from archerchat.optimizer.
+        Check torch.distributed.is_initialized() to decide which to use.
         """
         raise NotImplementedError
 
