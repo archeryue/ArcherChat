@@ -236,37 +236,6 @@ __all__ = [
     "upload_checkpoint_async",
 ]
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Compute-optimal scaling
-# ─────────────────────────────────────────────────────────────────────────────
-
-def compute_scale(depth: int) -> dict:
-    """
-    Derive compute-optimal architecture + training hyperparams from model depth.
-
-    Must reproduce nanochat's exact numbers for depth ∈ {4, 8, 12, 16, 20, 24}.
-
-    Returns a dict with keys:
-        n_layers        int   — same as depth
-        n_heads         int   — query heads
-        n_kv_heads      int   — key/value heads (GQA)
-        n_embd          int   — model width
-        n_params        int   — total parameter count
-        n_tokens        int   — compute-optimal token budget
-        batch_size      int   — total tokens per gradient step
-        device_batch_size int — sequences per GPU per micro-step
-        lr              float — peak matrix learning rate
-        wd              float — weight decay
-
-    Acceptance gate (TECH_PLAN step 3): exact equality with nanochat's table.
-    """
-    raise NotImplementedError
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Peak FLOPS table
-# ─────────────────────────────────────────────────────────────────────────────
-
 # hardcoded BF16 peak flops for various GPUs
 # inspired by torchtitan: https://github.com/pytorch/torchtitan/blob/main/torchtitan/tools/utils.py
 # and PR: https://github.com/karpathy/nanochat/pull/147

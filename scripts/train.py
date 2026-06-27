@@ -26,10 +26,10 @@ from archerchat.common import (
     get_base_dir, get_peak_flops,
     print0, print_banner, COMPUTE_DTYPE,
     init_tracker, upload_checkpoint_async,
-    compute_scale,
 )
 from archerchat.model      import GPT, GPTConfig
-from archerchat.optimizer  import get_lr
+from archerchat.scaling    import compute_scale
+from archerchat.optimizer  import get_lr_multiplier, get_muon_momentum, get_weight_decay
 from archerchat.loss       import evaluate_bpb
 from archerchat.dataloader import get_tokenizer, get_token_bytes, make_pretrain_dataloader
 from archerchat.checkpoint import save_checkpoint, load_checkpoint, build_model
@@ -49,18 +49,15 @@ def parse_args():
     p.add_argument("--depth", type=int, required=True,
                    help="Model depth. All hyperparams are derived via compute_scale().")
 
-    # Hyper-param overrides (default: from compute_scale)
-    p.add_argument("--total-batch-size",  type=int,   default=None,
-                   help="Total tokens per gradient step")
-    p.add_argument("--device-batch-size", type=int,   default=None,
-                   help="Per-GPU micro-batch size in sequences")
-    p.add_argument("--sequence-len",      type=int,   default=2048)
-    p.add_argument("--lr",                type=float, default=None,
-                   help="Peak learning rate (matrix / main LR group)")
-    p.add_argument("--weight-decay",      type=float, default=None)
-    p.add_argument("--warmup-steps",      type=int,   default=None,
-                   help="Linear-warmup steps (default: 1%% of total)")
-    p.add_argument("--window-pattern",    type=str,   default="SSSL",
+    # Hyper-param overrides (LRs and WD come from scaling.py; override sparingly)
+    p.add_argument("--total-batch-size",  type=int, default=None,
+                   help="Override total tokens per gradient step")
+    p.add_argument("--device-batch-size", type=int, default=None,
+                   help="Override per-GPU micro-batch size in sequences")
+    p.add_argument("--sequence-len",      type=int, default=2048)
+    p.add_argument("--warmup-steps",      type=int, default=None,
+                   help="Override linear-warmup steps (default: 40)")
+    p.add_argument("--window-pattern",    type=str, default="SSSL",
                    help="Attention window pattern, e.g. 'SSSL'")
 
     # Run metadata
@@ -129,20 +126,16 @@ def main():
     print0(f"phase={args.phase}  depth={args.depth}  "
            f"world_size={world_size}  dtype={COMPUTE_DTYPE}")
 
-    # ── Hyperparams from depth ─────────────────────────────────────────
-    # compute_scale() returns the compute-optimal config for this depth.
-    # Every field can be overridden on the CLI.
-    scale = compute_scale(args.depth)
+    # ── Compute-optimal hyperparams from depth ─────────────────────────
+    scale = compute_scale(args.depth)   # see archerchat/scaling.py for the math
 
-    total_batch_tokens = args.total_batch_size  or scale["batch_size"]         # tokens/grad-step
-    device_batch_size  = args.device_batch_size or scale["device_batch_size"]  # seqs/rank/micro-step
+    total_batch_tokens = args.total_batch_size  or scale["batch_size"]
+    device_batch_size  = args.device_batch_size or scale["device_batch_size"]
     T                  = args.sequence_len
-    max_lr             = args.lr           or scale["lr"]
-    weight_decay       = args.weight_decay or scale["wd"]
-    n_tokens_target    = scale["n_tokens"]                                      # compute-optimal budget
+    n_tokens_target    = scale["n_tokens"]
 
     total_steps  = math.ceil(n_tokens_target / total_batch_tokens)
-    warmup_steps = args.warmup_steps or max(1, total_steps // 100)
+    warmup_steps = args.warmup_steps or 40   # nanochat default
 
     tokens_per_rank_micro = device_batch_size * T
     assert total_batch_tokens % (tokens_per_rank_micro * world_size) == 0, (
@@ -154,8 +147,8 @@ def main():
     B = device_batch_size
 
     print0(
-        f"scale  n_params={scale['n_params']:.2e}  n_tokens={n_tokens_target:.2e}  "
-        f"batch={total_batch_tokens}  lr={max_lr:.4f}  wd={weight_decay:.4f}\n"
+        f"scale  n_tokens={n_tokens_target:.2e}  batch={total_batch_tokens}  "
+        f"matrix_lr={scale['lr']:.4f}  wd={scale['wd']:.4f}\n"
         f"steps  total={total_steps}  warmup={warmup_steps}  "
         f"accum={grad_accum_steps}  eval_every={args.eval_every}"
     )
@@ -212,11 +205,18 @@ def main():
     raw_model = getattr(model, "_orig_mod", model)
 
     # ── Optimizer ──────────────────────────────────────────────────────
-    # setup_optimizer() defines all param groups (Muon for matrices, AdamW for embeddings/head).
-    # lr is the "matrix LR" anchor; other groups scale relative to it internally.
-    optimizer = raw_model.setup_optimizer(lr=max_lr, weight_decay=weight_decay)
+    # Pass all 4 LR values (already batch-size-scaled by compute_scale).
+    # setup_optimizer() applies its own dmodel_scale on top of these.
+    optimizer = raw_model.setup_optimizer(
+        lr             = scale["lr"],
+        weight_decay   = scale["wd"],
+        embedding_lr   = scale["embedding_lr"],
+        unembedding_lr = scale["unembedding_lr"],
+        scalar_lr      = scale["scalar_lr"],
+    )
+    weight_decay_scaled = scale["wd"]
     for g in optimizer.param_groups:
-        g["initial_lr"] = g["lr"]  # stash so the LR schedule can scale each group uniformly
+        g["initial_lr"] = g["lr"]  # stash for proportional LR scaling
 
     if args.phase == "pretrain" and args.resume:
         _, opt_data, _ = load_checkpoint(ckpt_dir, step=start_step, device=device,
@@ -245,7 +245,8 @@ def main():
     tracker  = init_tracker("archerchat", run_name, config={
         "phase": args.phase, "depth": args.depth,
         "n_params": n_params["total"], "n_tokens_target": n_tokens_target,
-        "total_batch_tokens": total_batch_tokens, "lr": max_lr, "wd": weight_decay,
+        "total_batch_tokens": total_batch_tokens,
+        "lr": scale["lr"], "wd": scale["wd"],
         "T": T, "world_size": world_size, "compute_dtype": str(COMPUTE_DTYPE),
         **{k: scale[k] for k in ("n_layers", "n_heads", "n_kv_heads", "n_embd")},
     })
@@ -298,12 +299,15 @@ def main():
         if step == total_steps:
             break
 
-        # ── LR schedule: linear warmup + cosine decay ─────────────────
-        min_lr     = max_lr / 10
-        current_lr = get_lr(step, warmup_steps, total_steps, max_lr, min_lr)
-        lr_scale   = current_lr / max_lr
+        # ── LR / momentum / weight-decay schedules (nanochat convention) ─
+        lrm            = get_lr_multiplier(step, total_steps, warmup_steps)
+        muon_momentum  = get_muon_momentum(step, total_steps)
+        muon_wd        = get_weight_decay(step, total_steps, weight_decay_scaled)
         for g in optimizer.param_groups:
-            g["lr"] = g["initial_lr"] * lr_scale
+            g["lr"] = g["initial_lr"] * lrm
+            if g.get("kind") == "muon":
+                g["momentum"]     = muon_momentum
+                g["weight_decay"] = muon_wd
 
         # ── Forward + backward with gradient accumulation ──────────────
         optimizer.zero_grad(set_to_none=True)
@@ -333,14 +337,14 @@ def main():
             tracker.log({
                 "step": step,
                 "train/loss":       loss_accum,
-                "train/lr":         current_lr,
+                "train/lrm":        lrm,
                 "train/grad_norm":  grad_norm.item(),
                 "perf/tok_per_sec": tok_per_sec,
                 "perf/mfu":         mfu,
             })
         if step % 10 == 0:
             print0(
-                f"step {step:6d} | loss {loss_accum:.4f} | lr {current_lr:.2e} | "
+                f"step {step:6d} | loss {loss_accum:.4f} | lrm {lrm:.3f} | "
                 f"tok/s {tok_per_sec:,.0f} | mfu {mfu:.1%}"
             )
 

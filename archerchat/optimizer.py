@@ -30,29 +30,53 @@ import torch.distributed as dist
 # LR schedule
 # ─────────────────────────────────────────────────────────────────────────────
 
-def get_lr(
+def get_lr_multiplier(
     step: int,
-    warmup_steps: int,
     total_steps: int,
-    max_lr: float,
-    min_lr: float,
+    warmup_steps: int = 40,
+    warmdown_ratio: float = 0.65,
+    final_lr_frac: float = 0.05,
 ) -> float:
     """
-    Linear warmup (steps 0 → warmup_steps) then cosine decay (→ total_steps).
+    Trapezoidal LR schedule (nanochat convention exactly):
+        [0, warmup_steps)           : linear ramp  0 → 1.0
+        [warmup_steps, warmdown_start): constant    1.0
+        [warmdown_start, total_steps] : linear ramp 1.0 → final_lr_frac
 
-    Returns the absolute LR value for the "matrix" param group at this step.
-    train.py scales all other groups proportionally via:
-        group["lr"] = group["initial_lr"] * (current_lr / max_lr)
+    Returns a multiplier in [final_lr_frac, 1.0].
+    train.py applies it as:
+        group["lr"] = group["initial_lr"] * get_lr_multiplier(step, ...)
 
     Args:
-        step:         current gradient step (0-indexed)
-        warmup_steps: number of warmup steps (LR linearly increases 0 → max_lr)
-        total_steps:  total number of training steps
-        max_lr:       peak learning rate
-        min_lr:       minimum LR at end of cosine decay (typically max_lr / 10)
+        step:           current gradient step (0-indexed)
+        total_steps:    total training steps
+        warmup_steps:   linear warmup length (nanochat default: 40)
+        warmdown_ratio: fraction of total_steps used for linear warmdown (default: 0.65)
+        final_lr_frac:  LR at the end of warmdown as a fraction of peak (default: 0.05)
+    """
+    raise NotImplementedError
 
-    Returns:
-        float in [min_lr, max_lr]
+
+def get_muon_momentum(step: int, total_steps: int, warmdown_ratio: float = 0.65) -> float:
+    """
+    Muon momentum schedule (nanochat convention):
+        [0, 400)                  : linear warmup 0.85 → 0.97
+        [400, warmdown_start)     : constant 0.97
+        [warmdown_start, total]   : linear warmdown 0.97 → 0.90
+
+    Returns momentum value for the Muon param groups at this step.
+    Applied by train.py as: group["momentum"] = get_muon_momentum(step, total_steps)
+    """
+    raise NotImplementedError
+
+
+def get_weight_decay(step: int, total_steps: int, weight_decay_scaled: float) -> float:
+    """
+    Cosine weight decay schedule (nanochat convention):
+        wd(step) = weight_decay_scaled * 0.5 * (1 + cos(π * step / total_steps))
+
+    Decays from weight_decay_scaled to 0 over the course of training.
+    Applied by train.py as: group["weight_decay"] = get_weight_decay(step, total_steps, wd)
     """
     raise NotImplementedError
 
