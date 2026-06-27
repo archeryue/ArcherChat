@@ -1,28 +1,20 @@
 """
-archerchat/optimizer.py — Muon optimizer + compute-optimal scaling derivation.
+archerchat/optimizer.py — Muon optimizer (MuonAdamW, DistMuonAdamW) and LR schedule.
 
 Implement everything marked NotImplementedError.
-model.py calls setup_optimizer() which imports MuonAdamW from here.
-train.py calls compute_scale() and get_lr().
+model.py's setup_optimizer() imports MuonAdamW / DistMuonAdamW from here.
+train.py imports get_lr() from here.
+
+Compute-optimal scaling (compute_scale) lives in archerchat.common — it is
+configuration logic, not optimizer logic.
 
 What to implement:
-  - compute_scale(depth): derive compute-optimal hyperparams from model depth.
-    Must match nanochat exactly for depth ∈ {4, 8, 12, 16, 20, 24}.
-    Acceptance gate (step 3): exact equality with nanochat's table.
+  - get_lr(): warmup + cosine decay LR schedule
+  - newton_schulz(): NS5 orthogonalization (core of Muon)
+  - MuonAdamW: single-GPU combined Muon + AdamW optimizer
+  - DistMuonAdamW: multi-GPU variant with gradient all-reduce before NS step
 
-  - get_lr(step, warmup_steps, total_steps, max_lr, min_lr): LR schedule.
-    Linear warmup from 0 → max_lr, then cosine decay to min_lr.
-
-  - MuonAdamW: single-GPU combined Muon + AdamW optimizer.
-    Muon applies Newton–Schulz orthogonalization to the gradient before the AdamW
-    step (for 2-D weight matrices).  AdamW runs on all other params.
-    Acceptance gate (step 2): 5-step param trajectory matches nanochat < 1e-5.
-
-  - DistMuonAdamW: multi-GPU version (torchrun / DDP).
-    Each rank owns a shard of the Muon param group; Nesterov momentum is
-    all-reduced across ranks before the Newton–Schulz step.
-
-Reference implementations: nanochat/optim.py, https://github.com/KellerJordan/Muon
+Reference: nanochat/optim.py
 """
 
 from __future__ import annotations
@@ -32,40 +24,6 @@ from typing import Callable, Iterable
 
 import torch
 import torch.distributed as dist
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Scaling derivation
-# ─────────────────────────────────────────────────────────────────────────────
-
-def compute_scale(depth: int) -> dict:
-    """
-    Derive compute-optimal architecture + training hyperparams from model depth.
-
-    This is the single function that encodes the scaling-law math for ArcherChat.
-    It must reproduce nanochat's exact numbers for every supported depth.
-
-    Args:
-        depth: number of transformer layers (= n_layer in GPTConfig)
-
-    Returns a dict with these exact keys (train.py reads all of them):
-        n_layers        int   — same as depth
-        n_heads         int   — query heads
-        n_kv_heads      int   — key/value heads (GQA)
-        n_embd          int   — model width (embedding dimension)
-        n_params        int   — total parameter count (embedding table included)
-        n_tokens        int   — compute-optimal training token budget
-        batch_size      int   — total tokens per gradient step (across all GPUs)
-        device_batch_size int — sequences per GPU per micro-step
-        lr              float — peak matrix learning rate
-        wd              float — weight decay
-
-    Acceptance gate (TECH_PLAN step 3):
-        For depth ∈ {4, 8, 12, 16, 20, 24}, every value must match nanochat exactly.
-        Run: python -c "from archerchat.optimizer import compute_scale; ..."
-        and compare against nanochat's table.  Any mismatch = re-derive.
-    """
-    raise NotImplementedError
 
 
 # ─────────────────────────────────────────────────────────────────────────────

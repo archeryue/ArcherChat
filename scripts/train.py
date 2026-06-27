@@ -26,9 +26,10 @@ from archerchat.common import (
     get_base_dir, get_peak_flops,
     print0, print_banner, COMPUTE_DTYPE,
     init_tracker, upload_checkpoint_async,
+    compute_scale,
 )
 from archerchat.model      import GPT, GPTConfig
-from archerchat.optimizer  import compute_scale, get_lr
+from archerchat.optimizer  import get_lr
 from archerchat.loss       import evaluate_bpb
 from archerchat.dataloader import get_tokenizer, get_token_bytes, make_pretrain_dataloader
 from archerchat.checkpoint import save_checkpoint, load_checkpoint, build_model
