@@ -1,20 +1,21 @@
 """
-archerchat/optimizer.py — Muon optimizer (MuonAdamW, DistMuonAdamW) and LR schedule.
+archerchat/optimizer.py — Muon optimizer (MuonAdamW, DistMuonAdamW) and LR/momentum/WD schedules.
 
 Implement everything marked NotImplementedError.
 model.py's setup_optimizer() imports MuonAdamW / DistMuonAdamW from here.
-train.py imports get_lr() from here.
+train.py imports get_lr_multiplier, get_muon_momentum, get_weight_decay from here.
 
-Compute-optimal scaling (compute_scale) lives in archerchat.common — it is
-configuration logic, not optimizer logic.
+Compute-optimal scaling (compute_scale) lives in archerchat.scaling.
 
 What to implement:
-  - get_lr(): warmup + cosine decay LR schedule
-  - newton_schulz(): NS5 orthogonalization (core of Muon)
-  - MuonAdamW: single-GPU combined Muon + AdamW optimizer
-  - DistMuonAdamW: multi-GPU variant with gradient all-reduce before NS step
+  - get_lr_multiplier(): trapezoidal LR schedule (warmup → constant → linear warmdown)
+  - get_muon_momentum(): Muon momentum schedule (0.85→0.97 warmup, warmdown to 0.90)
+  - get_weight_decay():  cosine WD decay to zero
+  - newton_schulz():     NS5 orthogonalization (core of Muon)
+  - MuonAdamW:          single-GPU combined Muon + AdamW optimizer
+  - DistMuonAdamW:      multi-GPU variant with gradient all-reduce before NS step
 
-Reference: nanochat/optim.py
+Reference: nanochat/optim.py, nanochat/base_train.py
 """
 
 from __future__ import annotations
@@ -39,11 +40,15 @@ def get_lr_multiplier(
 ) -> float:
     """
     Trapezoidal LR schedule (nanochat convention exactly):
-        [0, warmup_steps)           : linear ramp  0 → 1.0
-        [warmup_steps, warmdown_start): constant    1.0
+        [0, warmup_steps)             : linear ramp  (step+1)/warmup_steps
+        [warmup_steps, warmdown_start): constant 1.0
         [warmdown_start, total_steps] : linear ramp 1.0 → final_lr_frac
 
-    Returns a multiplier in [final_lr_frac, 1.0].
+    NOTE: warmup uses (step+1)/warmup_steps so step=0 returns 1/warmup_steps,
+    not 0. This matches nanochat exactly. Do not clamp the warmup phase — the
+    multiplier can be below final_lr_frac during the first few steps.
+
+    Returns a multiplier in (0, 1.0].
     train.py applies it as:
         group["lr"] = group["initial_lr"] * get_lr_multiplier(step, ...)
 

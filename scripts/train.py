@@ -134,7 +134,7 @@ def main():
     T                  = args.sequence_len
     n_tokens_target    = scale["n_tokens"]
 
-    total_steps  = math.ceil(n_tokens_target / total_batch_tokens)
+    total_steps  = n_tokens_target // total_batch_tokens   # floor like nanochat
     warmup_steps = args.warmup_steps or 40   # nanochat default
 
     tokens_per_rank_micro = device_batch_size * T

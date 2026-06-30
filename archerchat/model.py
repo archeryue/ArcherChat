@@ -123,15 +123,19 @@ class GPT(nn.Module):
 
     def num_scaling_params(self) -> dict:
         """
-        Return a dict of parameter counts:
+        Return a dict of parameter counts (nanochat breakdown exactly):
 
         {
-          "total":                 int,  # all parameters
-          "transformer_matrices":  int,  # only weight matrices counted by scaling laws
-                                         # (excludes embedding table, lm_head, norms, biases)
+          "total":                int,  # all parameters
+          "transformer_matrices": int,  # Q/K/V/O + FFN weight matrices (scaling-law params)
+          "lm_head":              int,  # unembedding weight (also counted in scaling math)
+          "wte":                  int,  # token embedding table
+          "value_embeds":         int,  # per-layer value embedding matrices
+          "scalars":              int,  # resid_lambdas, x0_lambdas, smear/backout
         }
 
-        train.py logs "total" and uses "transformer_matrices" for MFU / scaling math.
+        scaling.py uses:  scaling_params = transformer_matrices + lm_head
+        train.py logs:    total, uses transformer_matrices for MFU estimate.
         """
         raise NotImplementedError
 
