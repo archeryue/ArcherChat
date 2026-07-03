@@ -93,36 +93,48 @@ def make_sft_dataloader(
     tokenizer,
     B: int,
     T: int,
+    split: str,
     device: torch.device | str,
-    resume_state_dict: dict | None = None,
     rank: int = 0,
     world_size: int = 1,
 ) -> Generator[tuple[torch.Tensor, torch.Tensor, dict], None, None]:
     """
-    Infinite generator of (inputs, targets, state_dict) for SFT.
+    Generator of (inputs, targets, info) micro-batches for SFT.
 
-    Same interface as make_pretrain_dataloader() but with an assistant-only loss mask:
-        x:     (B, T) int64 on device — input token ids
-        y:     (B, T) int64 on device — targets; non-assistant positions are set to -1
-                                          so F.cross_entropy(ignore_index=-1) skips them
-        state: dict for deterministic resume (same format as pretrain loader)
+    Unlike pretraining, SFT is DATASET-DRIVEN (nanochat chat_sft.py convention):
+    the run stops after one epoch of the mixture, and the loader — not train.py —
+    knows where the epoch boundary is.  Each yield therefore carries progress info
+    instead of a resume state (nanochat doesn't support SFT resume; neither do we):
+
+        x:    (B, T) int64 on device — input token ids
+        y:    (B, T) int64 on device — targets; non-assistant positions and padding
+                                       are set to -1 so cross_entropy(ignore_index=-1)
+                                       skips them
+        info: {"progress":  float,  # fraction of the epoch consumed, 0.0 → 1.0
+               "epoch":     int,    # current epoch (1-based; stays 1 in normal runs)
+               "last_step": bool}   # True once the epoch's data is exhausted
+
+    train.py uses info["progress"] to drive the progress-based LR schedule and
+    info["last_step"] to terminate (all-reduced across ranks — each rank's shard
+    can exhaust at a slightly different step, see _sync_last_step in train.py).
 
     Args:
-        tokenizer:          result of get_tokenizer()
-        B:                  micro-batch size in sequences
-        T:                  sequence length in tokens
-        device:             where to put the returned tensors
-        resume_state_dict:  if provided, skip to this position before yielding
-        rank:               DDP rank
-        world_size:         total DDP ranks
+        tokenizer:   result of get_tokenizer()
+        B:           micro-batch size in sequences
+        T:           sequence length in tokens
+        split:       "train" or "val"
+        device:      where to put the returned tensors
+        rank:        DDP rank
+        world_size:  total DDP ranks
 
     Data source:
-        SFT conversations from ~/.cache/nanochat/chatsft_data/ (or download if missing).
-        Use the same download URL / format as nanochat's chat_sft.py.
+        Same mixture as nanochat chat_sft.py (SmolTalk + identity conversations +
+        MMLU aux-train + GSM8K + spelling tasks) via the vendored tasks/ package.
 
-    Packing vs padding:
-        Pack multiple short conversations into one length-T window separated by EOS.
-        Pad the last window in a batch to T with token_id=0 (target=-1 for padding).
+    Packing (nanochat's BOS-aligned bestfit-PAD, NOT the pretrain bestfit-crop):
+        Each row starts with BOS. Conversations are packed best-fit; when nothing
+        fits, the row is PADDED to T (never cropped — no tokens are ever discarded).
+        Padding positions get target -1.
 
     Acceptance gate (step 9):
         First 100 SFT steps with ArcherChat loader must produce val_bpb within 2% of

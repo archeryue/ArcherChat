@@ -45,7 +45,7 @@ from pydantic import BaseModel
 from typing import List, Optional, AsyncGenerator
 from dataclasses import dataclass
 from archerchat.common import compute_init, autodetect_device_type
-from archerchat.checkpoint_manager import load_model
+from archerchat.checkpoint import load_model
 from archerchat.engine import Engine
 
 # Abuse prevention limits

@@ -21,7 +21,8 @@ archerchat/
   model.py         — GPT block
   attention.py     — sliding-window attention + SDPA path
   loss.py          — chunked cross-entropy + SFT mask hook
-  optimizer.py     — Muon (Newton–Schulz) + AdamW group + scaling derivation
+  optimizer.py     — Muon (Newton–Schulz) + AdamW group + LR/momentum/WD schedules
+  scaling.py       — depth → {params, tokens, batch, lr, wd} compute-optimal derivation
   dataloader.py    — tokenizing distributed loader with restart state
   engine.py        — KV-cache prefill/decode
   sft.py           — chat templating, packing→padding, assistant-only mask
@@ -47,10 +48,11 @@ rustbpe/           ✓ vendored — tokenizer trainer (karpathy/rustbpe@ddf848f)
 
 | File | What it is | Why by hand |
 |---|---|---|
-| `model.py` | GPT block: RMSNorm, RoPE, QK-norm, SwiGLU FFN, untied embeddings, weight init | Heart of the stack; smallest file with highest payoff per line |
+| `model.py` | GPT block: RMSNorm (non-learnable), RoPE, QK-norm, ReLU² FFN, untied embeddings, weight init | Heart of the stack; smallest file with highest payoff per line |
 | `attention.py` | SDPA path + sliding-window mask + document-boundary mask for SFT packing; FA3 thin wrapper stub for Stage 3 | Masking is where silent training bugs live |
 | `loss.py` | Chunked / windowed cross-entropy with assistant-only mask hook | Memory trick worth doing once; SFT mask plumbing lives here |
-| `optimizer.py` | Muon (Newton–Schulz orthogonalization) + AdamW group for embeddings/head + `depth → {params, tokens, batch, lr, wd}` scaling derivation | The actual novelty in the stack; scaling math is tiny but conceptually load-bearing — re-derive, don't copy constants |
+| `optimizer.py` | Muon (Newton–Schulz orthogonalization) + AdamW group for embeddings/head + pretrain/SFT LR/momentum/WD schedules | The actual novelty in the stack |
+| `scaling.py` | `depth → {params, tokens, batch, lr, wd}` compute-optimal derivation | Scaling math is tiny but conceptually load-bearing — re-derive, don't copy constants |
 | `dataloader.py` | Distributed tokenizing loader, shard rotation, deterministic restart from `(shard_idx, byte_offset, epoch)` | Restart bugs are silent and ruin multi-day runs |
 | `engine.py` | KV-cache inference: prefill/decode split, batched decode with per-row stop tokens | Where "I thought I understood transformers" dies |
 | `sft.py` | Chat templating, packing→padding transition, assistant-only loss mask, EOS handling | Explicit Stage 2 deliverable; only place chat semantics live |

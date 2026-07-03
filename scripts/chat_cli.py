@@ -8,7 +8,7 @@ import argparse
 import torch
 from archerchat.common import compute_init, autodetect_device_type
 from archerchat.engine import Engine
-from archerchat.checkpoint_manager import load_model
+from archerchat.checkpoint import load_model
 
 parser = argparse.ArgumentParser(description='Chat with the model')
 parser.add_argument('-i', '--source', type=str, default="sft", help="Source of the model: sft|rl")

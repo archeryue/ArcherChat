@@ -270,12 +270,17 @@ def compute_scale(depth: int, target_ratio: float = TARGET_RATIO) -> dict:
         n_embd            int
         n_tokens          int   — training token budget
         batch_size        int   — total tokens per gradient step
-        device_batch_size int   — sequences per GPU (= batch_size / world_size / T, at T=2048)
         lr                float — matrix LR (after batch scaling)
         embedding_lr      float
         unembedding_lr    float
         scalar_lr         float
         wd                float — initial weight decay (before cosine schedule)
+
+    NOTE: device_batch_size (sequences per micro-batch per GPU) is deliberately
+    NOT derived here.  It is a VRAM knob, not a scaling quantity — gradient
+    accumulation makes up the difference to batch_size.  nanochat exposes it as
+    a CLI flag (default 32); Stage 1 on the 16 GiB 5060 Ti used 16 (d8) / 8 (d12).
+    Deriving it as batch_size // T would force grad_accum=1 and OOM at d12.
 
     Implementation order:
         1. get_model_config(depth)       → arch
@@ -285,7 +290,5 @@ def compute_scale(depth: int, target_ratio: float = TARGET_RATIO) -> dict:
         5. get_optimal_batch_size(...)   → batch_size
         6. get_batch_lr_scale(...)       → lr_scale
         7. get_scaled_weight_decay(...)  → wd
-        8. Derive device_batch_size = batch_size // (default_world_size * T)
-           (single-GPU default: world_size=1, T=2048)
     """
     raise NotImplementedError

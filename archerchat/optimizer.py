@@ -8,14 +8,16 @@ train.py imports get_lr_multiplier, get_muon_momentum, get_weight_decay from her
 Compute-optimal scaling (compute_scale) lives in archerchat.scaling.
 
 What to implement:
-  - get_lr_multiplier(): trapezoidal LR schedule (warmup → constant → linear warmdown)
-  - get_muon_momentum(): Muon momentum schedule (0.85→0.97 warmup, warmdown to 0.90)
-  - get_weight_decay():  cosine WD decay to zero
-  - newton_schulz():     NS5 orthogonalization (core of Muon)
-  - MuonAdamW:          single-GPU combined Muon + AdamW optimizer
-  - DistMuonAdamW:      multi-GPU variant with gradient all-reduce before NS step
+  - get_lr_multiplier():     trapezoidal LR schedule (warmup → constant → linear warmdown)
+  - get_muon_momentum():     Muon momentum schedule (0.85→0.97 warmup, warmdown to 0.90)
+  - get_weight_decay():      cosine WD decay to zero
+  - get_sft_lr_multiplier(): SFT progress-based LR schedule (nanochat chat_sft.py)
+  - get_sft_muon_momentum(): SFT Muon momentum schedule (0.85→0.95 over 300 steps)
+  - newton_schulz():         NS5 orthogonalization (core of Muon)
+  - MuonAdamW:              single-GPU combined Muon + AdamW optimizer
+  - DistMuonAdamW:          multi-GPU variant with gradient all-reduce before NS step
 
-Reference: nanochat/optim.py, nanochat/base_train.py
+Reference: nanochat/optim.py, nanochat/base_train.py, nanochat/scripts/chat_sft.py
 """
 
 from __future__ import annotations
@@ -87,6 +89,47 @@ def get_weight_decay(step: int, total_steps: int, weight_decay_scaled: float) ->
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# SFT schedules (nanochat chat_sft.py conventions)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def get_sft_lr_multiplier(
+    progress: float,
+    warmup_ratio: float = 0.0,
+    warmdown_ratio: float = 0.5,
+    final_lr_frac: float = 0.0,
+) -> float:
+    """
+    SFT LR schedule (nanochat chat_sft.py exactly).
+
+    Same trapezoidal shape as get_lr_multiplier(), but parameterized by
+    progress ∈ [0, 1] instead of absolute step counts, because SFT is
+    dataset-driven and doesn't always know total steps in advance:
+
+        progress < warmup_ratio:          (progress + 1e-8) / warmup_ratio
+        progress <= 1.0 - warmdown_ratio: 1.0
+        else: decay = (progress - (1.0 - warmdown_ratio)) / warmdown_ratio
+              return (1 - decay) * 1.0 + decay * final_lr_frac
+
+    nanochat defaults: warmup_ratio=0.0 (no warmup), warmdown_ratio=0.5,
+    final_lr_frac=0.0 (decay to zero).
+    """
+    raise NotImplementedError
+
+
+def get_sft_muon_momentum(step: int) -> float:
+    """
+    SFT Muon momentum schedule (nanochat chat_sft.py exactly):
+
+        frac = min(step / 300, 1)
+        return (1 - frac) * 0.85 + frac * 0.95
+
+    Warms up 0.85 → 0.95 over the first 300 steps, then constant.
+    (Note: differs from pretrain — peaks at 0.95 not 0.97, and no warmdown.)
+    """
+    raise NotImplementedError
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Newton–Schulz orthogonalization (the core of Muon)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -122,17 +165,22 @@ class MuonAdamW(torch.optim.Optimizer):
     """
     Combined Muon + AdamW optimizer for single-GPU training.
 
-    Param groups:
-      - "muon" group:  2-D weight matrices (Q/K/V/O projections, FFN weights, lm_head).
-                       Gradient is orthogonalized via newton_schulz() then used as
-                       the effective gradient for an SGD-with-momentum step.
-      - "adamw" group: all other params (embeddings, RMSNorm weights).
-                       Standard AdamW update.
+    Param groups (matching nanochat gpt.py setup_optimizer — lm_head is NOT Muon):
+      - "muon" groups:  2-D transformer block matrices ONLY (Q/K/V/O projections,
+                        FFN weights — i.e. model.transformer.h parameters).
+                        Gradient is orthogonalized via newton_schulz() then used as
+                        the effective gradient for an SGD-with-momentum step.
+      - "adamw" groups: everything else — lm_head, wte, value_embeds, and the
+                        per-layer scalars (resid/x0/smear/backout). Standard AdamW,
+                        one group per LR/betas combination (see model.setup_optimizer).
+                        Note: this architecture has NO learnable norm parameters.
 
-    The two groups are passed as a list to the constructor:
+    Groups are passed as a list of dicts, each tagged with "kind" ("muon"/"adamw")
+    so train.py's schedule loop can target Muon groups:
         optimizer = MuonAdamW([
-            {"params": matrix_params, "lr": lr, ...},
-            {"params": other_params,  "lr": lr * 0.1, ...},
+            {"params": matrix_params,  "kind": "muon",  "lr": matrix_lr, ...},
+            {"params": lm_head_params, "kind": "adamw", "lr": unembedding_lr * dmodel_scale, ...},
+            ...
         ])
 
     model.py's setup_optimizer() creates both groups and passes them here.

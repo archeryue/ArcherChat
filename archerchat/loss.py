@@ -68,8 +68,11 @@ def evaluate_bpb(
 
     Args:
         model:        GPT model in eval mode (train.py calls model.eval() before this)
-        loader:       generator yielding (x, y, state) — same format as make_pretrain_dataloader
-        steps:        number of batches to evaluate (more = more accurate, slower)
+        loader:       generator yielding (x, y, ...) tuples — the pretrain loader
+                      yields (x, y, state), the SFT loader (x, y, info); elements
+                      past the first two are ignored here
+        steps:        number of batches to evaluate; train.py derives it as
+                      eval_tokens // (B * T * world_size) — nanochat convention
         token_bytes:  (vocab_size,) int32 tensor from get_token_bytes()
                       maps token id → number of UTF-8 bytes it represents
 
@@ -83,6 +86,13 @@ def evaluate_bpb(
             nats           = per_token_loss[valid_mask].sum()
             bytes_         = token_bytes[y.view(-1)[valid_mask]].sum().float()
         bpb = total_nats / total_bytes * log2(e)
+
+    DDP (nanochat loss_eval.py convention): each rank sees a disjoint slice of the
+    val data, so before the final division, all-reduce BOTH accumulators:
+        if dist.is_initialized():
+            dist.all_reduce(total_nats,  op=dist.ReduceOp.SUM)
+            dist.all_reduce(total_bytes, op=dist.ReduceOp.SUM)
+    (keep them as on-device tensors until after the reduce).
 
     Edge case: if total_bytes == 0 (all targets masked), return float("inf").
     """

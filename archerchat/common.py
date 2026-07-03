@@ -267,6 +267,7 @@ def get_peak_flops(device_name: str) -> float:
         (["l40s"], 362e12),
         (["l40-s"], 362e12),
         (["l40 s"], 362e12),
+        (["l40"], 181.05e12),  # must precede "l4", which would substring-match "l40"
         (["l4"], 121e12),
         # AMD CDNA accelerators
         (["mi355"], 2.5e15),

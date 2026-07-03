@@ -120,3 +120,34 @@ def build_model(
         5. Load tokenizer via dataloader.get_tokenizer()
     """
     raise NotImplementedError
+
+
+def load_model(
+    source: str,
+    device: torch.device | str,
+    phase: str = "eval",
+    model_tag: str | None = None,
+    step: int | None = None,
+) -> tuple:
+    """
+    Convenience wrapper over build_model() with nanochat checkpoint_manager's
+    load_model() interface — scripts/chat_cli.py and scripts/chat_web.py
+    (vendored from nanochat) call this exact signature.
+
+    Args:
+        source:    "base" → base_checkpoints/, "sft" → chatsft_checkpoints/
+        device:    device to place the model on
+        phase:     "train" | "eval"
+        model_tag: subdirectory name, e.g. "d8"; None = pick the largest depth
+                   present (scan for d* subdirectories, take max depth)
+        step:      which step to load; None = latest (build_model handles this)
+
+    Returns:
+        (model, tokenizer, meta_data) — same as build_model()
+
+    Implementation:
+        1. subdir = {"base": "base_checkpoints", "sft": "chatsft_checkpoints"}[source]
+        2. checkpoints_dir = os.path.join(get_base_dir(), subdir)
+        3. Resolve model_tag (largest d* if None), join, delegate to build_model()
+    """
+    raise NotImplementedError

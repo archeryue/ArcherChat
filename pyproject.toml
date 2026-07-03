@@ -1,3 +1,12 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Both packages must be importable: archerchat/ is the library, tasks/ is the
+# vendored eval-task package (humaneval.py etc. import `tasks.common`).
+[tool.hatch.build.targets.wheel]
+packages = ["archerchat", "tasks"]
+
 [project]
 name = "archerchat"
 version = "0.1.0"
@@ -9,8 +18,10 @@ dependencies = [
     "endlex",
     "fastapi>=0.117.1",
     "filelock>=3.13",
+    "jinja2>=3.1",           # core_eval.py imports it directly (don't rely on torch's transitive dep)
     "kernels>=0.11.7",
     "psutil>=7.1.0",
+    "python-dotenv>=1.2.1",  # scripts/train.py loads ENDLEX_URL/ENDLEX_TOKEN from .env
     "rustbpe>=0.1.0",
     "tiktoken>=0.11.0",
     "tokenizers>=0.22.0",
@@ -24,7 +35,6 @@ dev = [
     "matplotlib>=3.10.8",
     "pyfiglet>=1.0.2",
     "pytest>=8.0.0",
-    "python-dotenv>=1.2.1",
     "transformers>=4.57.3",
 ]
 
