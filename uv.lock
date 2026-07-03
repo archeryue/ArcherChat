@@ -922,8 +922,8 @@ wheels = [
 
 [[package]]
 name = "endlex"
-version = "0.1.0"
-source = { git = "https://github.com/archeryue/Endlex#fbedb70000ac650d5ad3e0978b0e2ac0f4eee15e" }
+version = "0.2.0"
+source = { git = "https://github.com/archeryue/Endlex#4540641a7cfd27379117d7f51e4a3db8a08b8ab1" }
 dependencies = [
     { name = "httpx" },
 ]
