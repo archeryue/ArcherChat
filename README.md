@@ -30,6 +30,18 @@ Train **ArcherChat-d8** locally; compare against nanochat-d8 baseline. If within
 
 Rent 8×H100, run the ArcherChat speedrun script, target the [nanochat leaderboard's GPT-2 threshold](https://github.com/karpathy/nanochat#time-to-gpt-2-leaderboard) (0.2565 CORE). Final weights + metrics sync from cloud to home box via [Endlex](https://github.com/archeryue/Endlex). The cloud instance can be torn down the moment training finishes — nothing of value lives on it.
 
+## Development
+
+```bash
+uv sync                          # runtime deps only (what the cloud box needs)
+uv sync --extra gpu              # + CUDA torch (cloud/GPU box)
+uv run --group dev pytest -q     # run tests (dev group holds pytest — not synced by default)
+```
+
+Note: `[tool.uv] default-groups = []` keeps cloud installs lean, so a bare
+`uv run pytest` would fall back to any globally-installed pytest and fail to
+import `archerchat`; the root `conftest.py` catches this with a clear message.
+
 ## Companion repos
 
 - **[Endlex](https://github.com/archeryue/Endlex)** — self-hosted wandb replacement (metrics dashboard + checkpoint sync). ArcherChat will use Endlex as its only telemetry layer from day one. Must exist before Stage 2 starts.
