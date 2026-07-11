@@ -52,4 +52,4 @@ Stage 1 complete. Stage 2 starts after Endlex MVP lands.
 
 ## License
 
-TBD.
+MIT
