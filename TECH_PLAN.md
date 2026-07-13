@@ -33,8 +33,10 @@ archerchat/
   ui.html          ✓ copied — chat web UI template
 
 scripts/
-  train.py         — training entry point (pretrain + SFT, flag-switched)
-  eval.py          — evaluation entry point (base_eval + chat_eval)
+  base_train.py    — pretraining entry point
+  chat_sft.py      — supervised fine-tuning entry point
+  base_eval.py     — base-model evaluation entry point (CORE)
+  chat_eval.py     — chat-model evaluation entry point (ChatCORE)
   chat_web.py      ✓ copied — FastAPI chat server
   chat_cli.py      ✓ copied — terminal chat client
 
@@ -57,8 +59,10 @@ rustbpe/           ✓ vendored — tokenizer trainer (karpathy/rustbpe@ddf848f)
 | `engine.py` | KV-cache inference: prefill/decode split, batched decode with per-row stop tokens | Where "I thought I understood transformers" dies |
 | `sft.py` | Chat templating, packing→padding transition, assistant-only loss mask, EOS handling | Explicit Stage 2 deliverable; only place chat semantics live |
 | `checkpoint.py` | save/load + meta JSON + optimizer state shards | Binary-compatible with Stage 1 layout under `~/.cache/nanochat/` |
-| `scripts/train.py` | Grad accumulation, MFU accounting, eval cadence, checkpoint trigger | Top-down entry point; drives all module interfaces |
-| `scripts/eval.py` | base_eval (CORE) + chat_eval (ChatCORE) harness | Separate from train to allow standalone re-eval of checkpoints |
+| `scripts/base_train.py` | Grad accumulation, MFU accounting, eval cadence, checkpoint trigger | Top-down entry point; drives all module interfaces |
+| `scripts/chat_sft.py` | SFT loop: dataset-driven stopping, warm-started optimizer, progress-based schedules | Chat-phase entry point; flat script like base_train, sharing infra via `archerchat/common.py` |
+| `scripts/base_eval.py` | base_eval (CORE) harness | Separate from train to allow standalone re-eval of checkpoints |
+| `scripts/chat_eval.py` | chat_eval (ChatCORE) harness | Standalone re-eval of SFT checkpoints |
 
 ### Copy directly from nanochat
 
@@ -77,12 +81,12 @@ Each step has a numeric acceptance gate. Don't move on until the gate is green.
 
 | # | Step | Gate |
 |---|---|---|
-| 0 | Endlex live (`ENDLEX_URL` + `ENDLEX_TOKEN` set) | `scripts/train.py` smoke run shows up on Endlex dashboard |
+| 0 | Endlex live (`ENDLEX_URL` + `ENDLEX_TOKEN` set) | `scripts/base_train.py` smoke run shows up on Endlex dashboard |
 | 1 | `model.py` + `attention.py` + `loss.py` | Forward-equivalence with nanochat (see below) |
 | 2 | `optimizer.py` — Muon + AdamW | Optimizer-step equivalence (see below) |
 | 3 | `optimizer.py` — scaling derivation | Hyperparam table matches nanochat exactly for depth ∈ {4, 8, 12, 16, 20, 24} |
 | 4 | `dataloader.py` | Tokenization bit-equal to nanochat on shard 0; restart determinism (see below) |
-| 5 | `scripts/train.py` + d4 smoke (200 steps, 1 shard) | val_bpb drops monotonically; throughput within 10% of nanochat-d4 oracle |
+| 5 | `scripts/base_train.py` + d4 smoke (200 steps, 1 shard) | val_bpb drops monotonically; throughput within 10% of nanochat-d4 oracle |
 | 6 | `checkpoint.py` | Round-trip save/load: weights + optimizer state match before/after |
 | 7 | **Full ArcherChat-d8 pretrain** | val_bpb 0.94 ± 0.01; Base CORE 0.0976 ± 0.005 (full, uncapped) |
 | 8 | `engine.py` (KV cache) | Greedy-decode equivalence with nanochat on d8 weights (see below) |

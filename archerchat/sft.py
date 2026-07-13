@@ -2,7 +2,7 @@
 archerchat/sft.py — supervised fine-tuning data pipeline.
 
 Implement everything marked NotImplementedError.
-train.py calls make_sft_dataloader() when --phase sft.
+scripts/chat_sft.py calls make_sft_dataloader().
 engine.py calls render_conversation() for chat inference.
 
 What to implement:

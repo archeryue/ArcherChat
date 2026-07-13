@@ -229,11 +229,24 @@ def init_tracker(
     """
     return Tracker(project=project, name=name, config=config, url=url, token=token, **kwargs)
 
+def maybe_upload_checkpoint(run_name: str, step: int, ckpt_dir: str, rank: int) -> None:
+    """Async-upload a freshly saved checkpoint to Endlex (rank 0, only if ENDLEX_URL is set)."""
+    if rank != 0 or not os.environ.get("ENDLEX_URL"):
+        return
+    candidates = {
+        f"model_{step:06d}.pt":  os.path.join(ckpt_dir, f"model_{step:06d}.pt"),
+        f"meta_{step:06d}.json": os.path.join(ckpt_dir, f"meta_{step:06d}.json"),
+    }
+    files = {k: v for k, v in candidates.items() if os.path.exists(v)}
+    if files:
+        upload_checkpoint_async(run_name, step, files)
+
 # Re-exported so callers only need to import from archerchat.common.
 __all__ = [
     "init_tracker",
     "upload_checkpoint",
     "upload_checkpoint_async",
+    "maybe_upload_checkpoint",
 ]
 
 # hardcoded BF16 peak flops for various GPUs
