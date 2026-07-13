@@ -56,13 +56,14 @@ THREE HARD BLOCKERS you will hit in the first hour if you don't read this:
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Iterator
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from archerchat.common import COMPUTE_DTYPE
 from archerchat.attention import flash_attn
 from archerchat.kv_cache import KVCache
 
@@ -245,7 +246,7 @@ class GPT(nn.Module):
             char = config.window_pattern[layer_idx % len(config.window_pattern)]
             self.window_sizes.append(chart[char])
         self.window_sizes[-1] = (long_window, 0)  # last layer always full
-        # init sub-modules
+        # init the network sub-modules
         padded_vocab = (config.vocab_size + 63) // 64 * 64
         if padded_vocab != config.vocab_size:
             print(f"Padding vocab {config.vocab_size} → {padded_vocab}")
@@ -253,7 +254,36 @@ class GPT(nn.Module):
             "wte": nn.Embedding(padded_vocab, config.n_embd),
             "h": nn.ModuleList([Block(config, layer_idx) for layer_idx in range(config.n_layer)]),
         })
-        #TODO: others
+        self.lm_head = nn.Linear(config.n_embd, padded_vocab, bias=False)
+        # init all learnable parameters for side paths
+        self.resid_lambdas = nn.Parameter(torch.ones(config.n_layer)) # fake init
+        self.x0_lambdas = nn.Parameter(torch.zeros(config.n_layer)) # fake init
+        self.smear_gate = nn.Linear(24, 1, bias=False)
+        self.smear_lambda = nn.Parameter(torch.zeros(1))
+        self.backout_lambda = nn.Parameter(0.2 * torch.ones(1))
+        # value embeddings
+        head_dim = config.n_embd // config.n_head
+        kv_dim = config.n_kv_head * head_dim
+        self.value_embeds = nn.ModuleDict({str(i): nn.Linear(padded_vocab, kv_dim, bias=False) for i in range(config.n_layer) if has_ve(i, config.n_layer)})
+        # RoPE
+        self.rotary_seq_len = config.sequence_len * 10 # don't quite understand. Do we need this much?
+        cos, sin = self._precompute_rotary_embeddings(self.rotary_seq_len, head_dim)
+        self.register_buffer("cos", cos, persistent=False)
+        self.register_buffer("sin", sin, persistent=False)
+
+    def _precompute_rotary_embeddings(self, seq_len, head_dim, base=100000, device=None):
+        # Why set base to 100,000? wouldn't it be too long?
+        # autodetect the device from model embeddings
+        if device is None:
+            device = self.transformer.wte.weight.device
+        channel_range = torch.arange(0, head_dim, 2, dtype=torch.float32, device=device)
+        inv_freq = 1.0 / (base ** (channel_range / head_dim))
+        t = torch.arange(seq_len, dtype=torch.float32, device=device)
+        freqs = torch.outer(t, inv_freq)
+        cos, sin = freqs.cos(), freqs.sin()
+        cos, sin = cos.to(COMPUTE_DTYPE), sin.to(COMPUTE_DTYPE)
+        cos, sin = cos[None, :, None, :], sin[None, :, None, :]
+        return cos, sin
 
     # ── Weight init ───────────────────────────────────────────────────
 

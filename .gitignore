@@ -6,6 +6,7 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .ipynb_checkpoints/
+.vscode/
 
 # Local run logs and reports
 *.log
