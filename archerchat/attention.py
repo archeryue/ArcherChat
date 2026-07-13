@@ -168,10 +168,10 @@ class FlashAttnCompat:
             q:             (B, T_new, n_head,    head_dim)
                            ⚠️ T_new == len(prompt) on the prefill call, 1 during decode.
                            Do NOT assume 1.
-            k_cache:       (B, T_max, n_kv_head, head_dim) — mutated IN-PLACE
-            v_cache:       (B, T_max, n_kv_head, head_dim) — mutated IN-PLACE
             k:             (B, T_new, n_kv_head, head_dim) — new keys to write
             v:             (B, T_new, n_kv_head, head_dim) — new values to write
+            k_cache:       (B, T_max, n_kv_head, head_dim) — mutated IN-PLACE
+            v_cache:       (B, T_max, n_kv_head, head_dim) — mutated IN-PLACE
             cache_seqlens: (B,) int32 — valid entries per row BEFORE this step
             causal:        always True
             window_size:   (left, right)

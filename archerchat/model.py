@@ -192,8 +192,8 @@ class Block(nn.Module):
         self.ffn = MLP(config)
     
     def forward(self, x: torch.Tensor, ve: torch.Tensor | None, cos_sin: tuple[torch.Tensor, torch.Tensor], window_size: int, kv_cache: KVCache | None) -> torch.Tensor:
-        x = x + self.attn(x, ve, cos_sin, window_size, kv_cache)
-        x = x + self.ffn(x)
+        x = x + self.attn(F.rms_norm(x, (x.size(-1),)), ve, cos_sin, window_size, kv_cache)
+        x = x + self.ffn(F.rms_norm(x, (x.size(-1),)))
         return x
 
 class GPT(nn.Module):
@@ -239,12 +239,12 @@ class GPT(nn.Module):
         # init window sizes for each layer, cycling through the window pattern
         long_window = config.sequence_len
         short_window = -(-long_window // 4 // 128) * 128
-        chart = {"S": short_window, "L": long_window}
+        chart = {"S": (short_window, 0), "L": (long_window, 0)}
         self.window_sizes = []
         for layer_idx in range(config.n_layer):
-            char = self.window_pattern[layer_idx % len(self.window_pattern)]
+            char = config.window_pattern[layer_idx % len(config.window_pattern)]
             self.window_sizes.append(chart[char])
-        self.window_sizes[-1] = long_window  # last layer always full
+        self.window_sizes[-1] = (long_window, 0)  # last layer always full
         # init sub-modules
         padded_vocab = (config.vocab_size + 63) // 64 * 64
         if padded_vocab != config.vocab_size:
