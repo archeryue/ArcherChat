@@ -272,7 +272,7 @@ class GPT(nn.Module):
         self.register_buffer("sin", sin, persistent=False)
 
     def _precompute_rotary_embeddings(self, seq_len, head_dim, base=100000, device=None):
-        # Why set base to 100,000? wouldn't it be too long?
+        # Why set base to 100,000? wouldn't it be too long for such a small model?
         # autodetect the device from model embeddings
         if device is None:
             device = self.transformer.wte.weight.device

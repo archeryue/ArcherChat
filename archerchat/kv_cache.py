@@ -97,19 +97,43 @@ class KVCache:
         device: torch.device,
         dtype: torch.dtype,
     ) -> None:
-        raise NotImplementedError
+        self.batch_size = batch_size
+        self.max_seq_len = seq_len
+        self.n_layers = num_layers
+        self.n_heads = num_heads
+        self.head_dim = head_dim
+        self.k_cache = torch.zeros(num_layers, batch_size, seq_len, num_heads, head_dim, dtype=dtype, device=device)
+        self.v_cache = torch.zeros(num_layers, batch_size, seq_len, num_heads, head_dim, dtype=dtype, device=device)
+        # for flash-attention-3
+        self.cache_seqlens = torch.zeros(batch_size, dtype=torch.int32, device=device)
+        # previous token embedding for smear
+        self.prev_embedding = None
 
     def reset(self) -> None:
-        raise NotImplementedError
+        self.cache_seqlens.zero_()
+        self.prev_embedding = None
 
     def get_pos(self) -> int:
-        raise NotImplementedError
+        # assume all batch elements are at the same position
+        return self.cache_seqlens[0].item()
 
     def get_layer_cache(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        raise NotImplementedError
+        return self.k_cache[layer_idx], self.v_cache[layer_idx]
 
     def advance(self, num_tokens: int) -> None:
-        raise NotImplementedError
+        self.cache_seqlens += num_tokens
 
     def prefill(self, other: KVCache) -> None:
-        raise NotImplementedError
+        assert self.cache_seqlens[0].item() == 0, "Target position must be 0"
+        assert other.batch_size == 1, "Source cache must have batch_size 1 to fan out"
+        assert self.n_layers == other.n_layers, "Incompatible number of layers"
+        assert self.n_heads == other.n_heads, "Incompatible number of heads"
+        assert self.head_dim == other.head_dim, "Incompatible head dimension"
+        assert self.max_seq_len >= other.max_seq_len, "Target sequence length must be >= other"
+        other_pos = other.get_pos()
+        self.k_cache[:, :, :other_pos, :, :] = other.k_cache[:, :, :other_pos, :, :]
+        self.v_cache[:, :, :other_pos, :, :] = other.v_cache[:, :, :other_pos, :, :]
+        self.cache_seqlens.fill_(other_pos)
+        # Fan out the previous embedding
+        if other.prev_embedding is not None:
+            self.prev_embedding = other.prev_embedding.expand(self.batch_size, -1, -1).clone()
