@@ -2,12 +2,13 @@
 archerchat/engine.py — KV-cache inference engine.
 
 Implement everything marked NotImplementedError.
-Called by scripts/chat_cli.py, scripts/chat_web.py, and eval.py (ChatCORE).
+Called by scripts/chat_cli.py, scripts/chat_web.py, scripts/chat_eval.py (ChatCORE),
+and scripts/base_eval.py (--eval sample).
 
-The interface mirrors nanochat/engine.py so the vendored chat scripts work
-unchanged.  The two-phase structure is the whole point of this module:
-  prefill — run the full prompt through the model once, batch=1, filling the
-            KV cache; then replicate the cache across num_samples rows
+The interface mirrors nanochat/engine.py so the vendored chat scripts work unchanged.
+The two-phase structure is the whole point of this module:
+  prefill — run the full prompt through the model once, batch=1, filling the KV cache;
+            then replicate the cache across num_samples rows
   decode  — one token per row per step via attention.flash_attn_with_kvcache
 
 Acceptance gate (TECH_PLAN step 8):
@@ -15,6 +16,27 @@ Acceptance gate (TECH_PLAN step 8):
     token sequence must match nanochat's engine exactly, at batch_size 1 AND 4.
 
 Reference: nanochat/engine.py
+
+═════════════════════════════════════════════════════════════════════════════
+⚠️  KVCache MUST HAVE `prev_embedding`.  It is the SMEAR STATE.
+
+The old spec listed reset/get_pos/get_layer_cache/advance/prefill and omitted this.
+model.forward()'s decode path reads AND writes kv_cache.prev_embedding every single
+step (gpt.py:440-441 — see model.py's forward docstring, step 3).
+
+    self.prev_embedding = None    # in __init__ AND in reset()
+
+    def prefill(self, other):     # fan-out — nanochat engine.py:135-137
+        ...
+        if other.prev_embedding is not None:
+            self.prev_embedding = other.prev_embedding.expand(self.batch_size, -1, -1).clone()
+
+Note the .expand(...).clone(): the batch-1 embedding must be MATERIALIZED across
+num_samples rows, not left as a broadcast view — the model writes into it next step.
+
+Without prev_embedding: AttributeError at best. If you stub it to None, decode-time
+smear silently vanishes and generation diverges from the oracle partway through.
+═════════════════════════════════════════════════════════════════════════════
 """
 
 from __future__ import annotations
@@ -22,24 +44,38 @@ from __future__ import annotations
 from typing import Generator
 
 import torch
+import torch.nn.functional as F
 
 
 class KVCache:
     """
     Pre-allocated per-layer KV cache in flash-attn layout: (B, T, H, D).
 
-    Storage: k_cache / v_cache tensors of shape (n_layers, B, T_max, n_kv_head, head_dim),
-    plus cache_seqlens (B,) int32 — the number of valid positions per row, which
-    attention.flash_attn_with_kvcache reads and the engine advances.
+    Storage (nanochat engine.py:99-104):
+        k_cache = torch.zeros(num_layers, batch_size, seq_len, num_heads, head_dim, ...)
+        v_cache = torch.zeros(num_layers, batch_size, seq_len, num_heads, head_dim, ...)
+        cache_seqlens = torch.zeros(batch_size, dtype=torch.int32, ...)   # int32 — FA3 requires it
+        prev_embedding = None                                             # ← the smear state
 
-    Methods to implement (nanochat semantics):
-        reset()                  — zero cache_seqlens (tensors can stay dirty)
-        get_pos() -> int         — current position (all rows assumed in sync)
-        get_layer_cache(i)       — (k_cache[i], v_cache[i]) views for layer i
-        advance(n)               — cache_seqlens += n after appending n tokens
-        prefill(other)           — copy a batch-1 cache's valid prefix into this
-                                   (larger-batch) cache; used to fan out one
-                                   prompt prefill across num_samples decode rows
+    ⚠️ num_heads here is the model's n_kv_head, NOT n_head (engine.py:200-202):
+        {"num_heads": model.config.n_kv_head,
+         "head_dim":  model.config.n_embd // model.config.n_head,
+         "num_layers": model.config.n_layer}
+
+    dtype = torch.bfloat16 if device.type == "cuda" else torch.float32 (engine.py:186).
+
+    Methods to implement:
+        reset()             — zero cache_seqlens AND set prev_embedding = None
+                              (tensors themselves can stay dirty)
+        get_pos() -> int    — current position (all rows assumed in lockstep)
+        get_layer_cache(i)  — (k_cache[i], v_cache[i]) views for layer i
+        advance(n)          — cache_seqlens += n. Called ONCE per forward, by the model,
+                              after the LAST layer (gpt.py:120-121). The attention shim
+                              must NOT advance — see attention.py.
+        prefill(other)      — copy a batch-1 cache's valid prefix into this larger-batch
+                              cache, and fan out prev_embedding (see module header).
+                              Asserts (engine.py:128-130): target pos == 0; matching
+                              n_layers / n_heads / head_dim; self.max_seq_len >= other's.
     """
 
     def __init__(
@@ -63,12 +99,28 @@ def sample_next_token(
 ) -> torch.Tensor:
     """
     Sample one token id per row from (B, vocab_size) logits.
-
-    temperature == 0.0 → greedy argmax (this is what the step-8 equivalence
-    test exercises).  Otherwise divide logits by temperature, optionally
-    restrict to top_k, softmax, and torch.multinomial with the passed rng.
-
     Returns: (B, 1) int64 token ids.
+
+    assert temperature >= 0.0.
+    temperature == 0.0 → greedy argmax. (This is what the step-8 equivalence gate uses,
+    and it is the ONLY mode in which this function and model.generate() agree — see below.)
+
+    Otherwise (nanochat engine.py:146-156) — the ORDER MATTERS:
+
+        if top_k is not None and top_k > 0:
+            k = min(top_k, logits.size(-1))
+            vals, idx = torch.topk(logits, k, dim=-1)
+            vals = vals / temperature                  # temperature AFTER topk
+            probs = F.softmax(vals, dim=-1)            # softmax over k, NOT over V
+            choice = torch.multinomial(probs, num_samples=1, generator=rng)
+            return idx.gather(1, choice)               # gather back to vocab ids
+
+    ⚠️ This is mathematically the same DISTRIBUTION as "-inf mask → softmax over V", but
+    torch.multinomial consumes a DIFFERENT NUMBER OF RNG DRAWS over k categories than
+    over V. With a fixed seed you therefore get different tokens. Any seeded-sampling
+    equivalence test against a mask-based implementation WILL fail even though both are
+    correct. (This is also why model.generate() — which masks-then-divides, the opposite
+    order — only matches this at temperature=0.)
     """
     raise NotImplementedError
 
@@ -77,18 +129,17 @@ class Engine:
     """
     Batched KV-cache generation with per-row stop handling.
 
-    Used by chat_cli.py / chat_web.py as:
+    Used by chat_cli.py / chat_web.py / chat_eval.py as:
         engine = Engine(model, tokenizer)
         for token_column, token_masks in engine.generate(tokens, **kwargs):
             ...
 
     Notes:
-      - model is the UNCOMPILED GPT (decode shapes change every step;
-        torch.compile would retrace constantly).
-      - tokenizer is needed for the special tokens that terminate a row
-        (<|assistant_end|>, BOS) and for the python-interpreter tool-use
-        state machine (nanochat runs tool calls mid-generation; replicate
-        only if/when tool use is in scope — not needed for step 8).
+      - model is the UNCOMPILED GPT (decode shapes change every step; torch.compile
+        would retrace constantly).
+      - tokenizer supplies the terminal tokens (<|assistant_end|>, BOS) and, if you ever
+        do tool use, the python-interpreter state machine. Tool use is NOT needed for the
+        step-8 gate.
     """
 
     def __init__(self, model, tokenizer) -> None:
@@ -110,20 +161,45 @@ class Engine:
 
         Yields (token_column, token_masks) per step:
             token_column: list of num_samples token ids (one per row)
-            token_masks:  list of num_samples ints — 1 if the row is still
-                          actively sampling, 0 if it has finished (or the
-                          token was forced, e.g. tool output injection)
+            token_masks:  list of num_samples ints
 
-        Implementation outline (nanochat engine.py):
-            1. Prefill: batch-1 KVCache sized to len(tokens); one forward over
-               the whole prompt; take last-position logits.
-            2. Fan out: allocate a num_samples-row KVCache sized to
-               len(tokens) + max_tokens (or model.config.sequence_len),
-               prefill(...) from the batch-1 cache.
-            3. Decode loop: sample_next_token per row (rows that already
-               finished keep decoding but are masked out), append to the
-               cache via model.forward(ids, kv_cache=...), stop when every
-               row has emitted <|assistant_end|>/BOS or max_tokens reached.
+        ⚠️ token_masks does NOT mean "row still active". The old spec said that; it is
+        wrong. nanochat engine.py:247-248:
+                is_forced = len(state.forced_tokens) > 0
+                token_masks.append(0 if is_forced else 1)
+        It means exactly one thing: SAMPLED (1) vs FORCE-INJECTED by the tool loop (0).
+        A finished row keeps decoding and keeps emitting mask=1. Completion has no
+        effect on the mask whatsoever.
+
+        SETUP (engine.py:200-221):
+            kv_cache_prefill = KVCache(batch_size=1, seq_len=len(tokens), ...)   # exactly
+                                                                                 # the prompt
+            logits = model.forward(ids, kv_cache=kv_cache_prefill)
+            logits = logits[:, -1, :].expand(num_samples, -1)   # (1,V) → (num_samples,V)
+            ⚠️ Miss the .expand and you get a shape error on the first sample_next_token.
+               All rows start from the SAME prefill logits; divergence is purely from RNG.
+
+            kv_length_hint = (len(tokens) + max_tokens) if max_tokens is not None \
+                             else model.config.sequence_len
+            kv_cache_decode = KVCache(batch_size=num_samples, seq_len=kv_length_hint, ...)
+            kv_cache_decode.prefill(kv_cache_prefill)
+            del kv_cache_prefill
+
+        DECODE LOOP (engine.py:230-280) — loop forever until num_generated >= max_tokens
+        OR all rows completed. Order within one iteration:
+            check stops → sample_next_token(logits, ...) → per-row forced/sampled
+            selection + state update → YIELD → num_generated += 1
+            → ids = torch.tensor(token_column).unsqueeze(1)          # (B, 1)
+            → logits = model.forward(ids, kv_cache=kv_cache_decode)[:, -1, :]
+
+        Two behaviors to replicate rather than "fix":
+          - The LAST forward of the loop is WASTED — its logits are discarded when the
+            loop breaks. Harmless, and it keeps the RNG stream aligned with the oracle.
+          - COMPLETED ROWS KEEP DECODING and keep being fed back into the cache. They are
+            NOT removed from the batch. This matters for reproducing the oracle at
+            num_samples > 1 — which is exactly the step-8 gate (batch_size 4).
+
+        Row completion (engine.py:254): next_token == assistant_end or next_token == bos.
         """
         raise NotImplementedError
 
@@ -134,8 +210,20 @@ class Engine:
         **kwargs,
     ) -> tuple[list[list[int]], list[list[int]]]:
         """
-        Non-streaming wrapper around generate(): collect the per-step columns
-        and return (results, masks) as num_samples row-major token lists,
-        prompt tokens excluded.
+        Non-streaming wrapper around generate(): collect the per-step columns into
+        row-major token lists.
+
+        ⚠️ THE PROMPT IS INCLUDED IN THE RESULT. The old spec said "prompt tokens
+        excluded" — that is wrong, and scripts/chat_eval.py depends on the correct
+        behavior (it slices `result[len(prompt):]` to recover the completion). If you
+        exclude the prompt, every ChatCORE completion loses its first len(prompt) tokens
+        and the scores are garbage.
+
+        nanochat engine.py:290-291 seeds the accumulators WITH the prompt:
+            results = [tokens.copy() for _ in range(num_samples)]
+            masks   = [[0] * len(tokens) for _ in range(num_samples)]
+
+        Terminal tokens (assistant_end, bos) are the only things NOT appended
+        (engine.py:296-299).
         """
         raise NotImplementedError

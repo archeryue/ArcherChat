@@ -129,6 +129,7 @@ Any mismatch = re-derive from the formulas above, don't adjust to fit.
 from __future__ import annotations
 
 import math
+from functools import lru_cache
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -150,7 +151,16 @@ def get_model_config(depth: int) -> dict:
         n_heads:    int — query heads = n_embd // 128
         n_kv_heads: int — key/value heads = n_heads (full MHA, no GQA reduction)
     """
-    raise NotImplementedError
+    base_dim = depth * ASPECT_RATIO
+    # Integer ceil to the next HEAD_DIM multiple, so head_dim is exactly HEAD_DIM.
+    n_embd = ((base_dim + HEAD_DIM - 1) // HEAD_DIM) * HEAD_DIM
+    n_heads = n_embd // HEAD_DIM
+    return {
+        "n_layers":   depth,
+        "n_embd":     n_embd,
+        "n_heads":    n_heads,
+        "n_kv_heads": n_heads,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -166,6 +176,36 @@ BASE_UNEMBEDDING_LR = 0.008    # lm_head LR at B_REF
 BASE_SCALAR_LR     = 0.5       # resid/x0/smear/backout LR at B_REF
 
 
+@lru_cache(maxsize=None)
+def _scaling_params(depth: int) -> int:
+    """transformer_matrices + lm_head for a model of this depth.
+
+    Built on the meta device: shapes and dtypes only, no storage, no init.
+    Cached — compute_scale() and get_d12_reference_tokens() both hit d12.
+
+    GPTConfig's default vocab_size (32768) is the tokenizer's real vocab size and
+    it sizes lm_head, so it must not drift from dataloader.get_tokenizer().
+    sequence_len / window_pattern do not affect either counted group.
+    """
+    # Imported lazily: keeps the pure-arithmetic functions above importable (and
+    # testable) without pulling in torch or the model.
+    import torch
+    from archerchat.model import GPT, GPTConfig
+
+    arch = get_model_config(depth)
+    config = GPTConfig(
+        n_layer   = arch["n_layers"],
+        n_head    = arch["n_heads"],
+        n_kv_head = arch["n_kv_heads"],
+        n_embd    = arch["n_embd"],
+    )
+    with torch.device("meta"):
+        model = GPT(config)
+    counts = model.num_scaling_params()
+    return counts["transformer_matrices"] + counts["lm_head"]
+
+
+@lru_cache(maxsize=None)
 def get_d12_reference_tokens() -> int:
     """
     Compute D_REF: the compute-optimal token horizon for d12.
@@ -176,7 +216,7 @@ def get_d12_reference_tokens() -> int:
     Returns:
         int — D_REF = TARGET_RATIO * scaling_params(d12)
     """
-    raise NotImplementedError
+    return get_token_budget(_scaling_params(12), TARGET_RATIO)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -195,7 +235,7 @@ def get_token_budget(scaling_params: int, target_ratio: float = TARGET_RATIO) ->
     Returns:
         int — total tokens to train on
     """
-    raise NotImplementedError
+    return int(target_ratio * scaling_params)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -215,7 +255,8 @@ def get_optimal_batch_size(n_tokens: int, d_ref: int) -> int:
 
     Note: round to nearest power of 2 for hardware efficiency.
     """
-    raise NotImplementedError
+    predicted = B_REF * (n_tokens / d_ref) ** 0.383
+    return 2 ** round(math.log2(predicted))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -232,7 +273,7 @@ def get_batch_lr_scale(batch_size: int) -> float:
     Returns:
         float — multiply all base LRs by this factor
     """
-    raise NotImplementedError
+    return (batch_size / B_REF) ** 0.5
 
 
 def get_scaled_weight_decay(batch_size: int, n_tokens: int, d_ref: int) -> float:
@@ -249,7 +290,7 @@ def get_scaled_weight_decay(batch_size: int, n_tokens: int, d_ref: int) -> float
     Returns:
         float — weight decay to pass to setup_optimizer()
     """
-    raise NotImplementedError
+    return BASE_WEIGHT_DECAY * math.sqrt(batch_size / B_REF) * (d_ref / n_tokens)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -291,4 +332,26 @@ def compute_scale(depth: int, target_ratio: float = TARGET_RATIO) -> dict:
         6. get_batch_lr_scale(...)       → lr_scale
         7. get_scaled_weight_decay(...)  → wd
     """
-    raise NotImplementedError
+    arch = get_model_config(depth)
+    n_tokens = get_token_budget(_scaling_params(depth), target_ratio)
+
+    # nanochat builds D_REF with the *same* ratio the run uses (base_train.py:273),
+    # so a non-default target_ratio has to move the d12 reference horizon with it.
+    # Otherwise n_tokens/D_REF — which drives batch size and wd — would pick up a
+    # spurious ratio/12 factor that nanochat does not have.
+    d_ref = get_d12_reference_tokens() * (target_ratio / TARGET_RATIO)
+
+    batch_size = get_optimal_batch_size(n_tokens, d_ref)
+    lr_scale = get_batch_lr_scale(batch_size)
+    wd = get_scaled_weight_decay(batch_size, n_tokens, d_ref)
+
+    return {
+        **arch,
+        "n_tokens":       n_tokens,
+        "batch_size":     batch_size,
+        "lr":             BASE_MATRIX_LR * lr_scale,
+        "embedding_lr":   BASE_EMBEDDING_LR * lr_scale,
+        "unembedding_lr": BASE_UNEMBEDDING_LR * lr_scale,
+        "scalar_lr":      BASE_SCALAR_LR * lr_scale,
+        "wd":             wd,
+    }

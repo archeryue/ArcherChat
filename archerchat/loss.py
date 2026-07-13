@@ -22,6 +22,7 @@ import math
 from typing import Iterator
 
 import torch
+import torch.distributed as dist
 import torch.nn.functional as F
 
 
@@ -51,7 +52,24 @@ def chunked_cross_entropy(
     model.py can call this inside forward() instead of F.cross_entropy to stay under
     the 16 GiB VRAM budget at larger sequence lengths.
     """
-    raise NotImplementedError
+    logits = logits.view(-1, logits.size(-1))
+    targets = targets.view(-1)
+    assert logits.size(0) == targets.size(0)
+
+    total_loss = logits.new_zeros(())
+    total_count = logits.new_zeros(())
+    for i in range(0, targets.size(0), chunk_size):
+        logits_chunk = logits[i:i + chunk_size]
+        targets_chunk = targets[i:i + chunk_size]
+        # 'sum' (not 'mean') so chunks of unequal valid-token counts can be added up
+        # and normalised once at the end — makes chunking exact, not approximate.
+        total_loss = total_loss + F.cross_entropy(
+            logits_chunk, targets_chunk, ignore_index=ignore_index, reduction="sum",
+        )
+        total_count = total_count + (targets_chunk != ignore_index).sum()
+
+    # count == 0 (everything masked) yields nan, exactly like F.cross_entropy(reduction="mean")
+    return total_loss / total_count
 
 
 @torch.no_grad()
@@ -96,4 +114,35 @@ def evaluate_bpb(
 
     Edge case: if total_bytes == 0 (all targets masked), return float("inf").
     """
-    raise NotImplementedError
+    device = token_bytes.device
+    total_nats = torch.zeros((), dtype=torch.float32, device=device)
+    total_bytes = torch.zeros((), dtype=torch.int64, device=device)
+
+    batch_iter = iter(loader)
+    for _ in range(steps):
+        x, y, *_ = next(batch_iter)
+        loss = model(x, y, loss_reduction="none").view(-1)   # (B*T,) nats
+        y = y.view(-1)
+        # ignore_index (-1) targets must not index token_bytes; clamp them to 0 and
+        # zero out their byte count instead (nanochat loss_eval.py convention).
+        valid = y >= 0
+        num_bytes = torch.where(
+            valid, token_bytes[torch.where(valid, y, torch.zeros_like(y))],
+            torch.zeros_like(y, dtype=token_bytes.dtype),
+        )
+        # Tokens worth 0 bytes (special tokens, and masked ones) contribute no nats
+        # either, so bpb stays a pure per-byte quantity.
+        total_nats += (loss * (num_bytes > 0)).sum()
+        total_bytes += num_bytes.sum()
+
+    # Each rank evaluates a disjoint slice of val, so reduce both accumulators
+    # on-device before dividing.
+    if dist.is_initialized() and dist.get_world_size() > 1:
+        dist.all_reduce(total_nats, op=dist.ReduceOp.SUM)
+        dist.all_reduce(total_bytes, op=dist.ReduceOp.SUM)
+
+    total_nats = total_nats.item()
+    total_bytes = total_bytes.item()
+    if total_bytes == 0:
+        return float("inf")
+    return total_nats / total_bytes * math.log2(math.e)
