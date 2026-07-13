@@ -63,6 +63,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from archerchat.attention import flash_attn
+from archerchat.kv_cache import KVCache
 
 @dataclass
 class GPTConfig:
@@ -92,38 +94,21 @@ class Linear(nn.Linear):
     Why: master weights must stay fp32 so the optimizer has precision, but matmuls
     should run in the activation dtype (bf16, which is what the embeddings were cast to
     in init_weights). This class is the only thing bridging the two.
-
-        def forward(self, x):
-            return F.linear(x, self.weight.to(dtype=x.dtype))
-
-    bias=False everywhere in this model.
     """
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError
+        return F.linear(x, self.weight.to(dtype=x.dtype))
 
 
 def has_ve(layer_idx: int, n_layer: int) -> bool:
     """
     Which layers get a value-embedding table (nanochat gpt.py:53-55):
-
-        return layer_idx % 2 == (n_layer - 1) % 2
-
-    Alternating, anchored so the LAST layer always has one.
-        n_layer=4 → layers 1, 3        n_layer=5 → layers 0, 2, 4
     """
-    raise NotImplementedError
+    return layer_idx % 2 == (n_layer - 1) % 2
 
 
 def apply_rotary_emb(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
     """
-    RoPE, HALF-SPLIT convention (nanochat gpt.py:57-63):
-
-        d = x.shape[3] // 2
-        x1, x2 = x[..., :d], x[..., d:]     # SPLIT IN HALVES — not 0::2 / 1::2
-        y1 = x1 * cos + x2 * sin
-        y2 = x1 * (-sin) + x2 * cos
-        return torch.cat([y1, y2], 3)
+    RoPE, half-split instead of traditional interleaved-pair.
 
     x is (B, T, H, head_dim); cos/sin are (1, T, 1, head_dim/2).
 
@@ -136,12 +121,80 @@ def apply_rotary_emb(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> t
 
     The buffer is over-computed 10×: self.rotary_seq_len = config.sequence_len * 10
     (gpt.py:195), with an assert in forward.
-
-    ⚠️ The interleaved-pair convention is self-consistent and trains fine. It will
-    simply fail the 1e-4 logit gate, with no other symptom. Use half-split.
     """
-    raise NotImplementedError
+    d = x.shape[3] // 2
+    x1, x2 = x[:, :, :, :d], x[:, :, :, d:]
+    y1 = x1 * cos + x2 * sin
+    y2 = x1 * (-sin) + x2 * cos
+    return torch.cat([y1, y2], 3)
 
+class CausalSelfAttention(nn.Module):
+    def __init__(self, config: GPTConfig, layer_idx: int):
+        super().__init__()
+        self.layer_idx = layer_idx
+        assert config.n_embd % config.n_head == 0
+        assert config.n_kv_head <= config.n_head and config.n_head % config.n_kv_head == 0
+        self.n_head = config.n_head
+        self.n_kv_head = config.n_kv_head
+        self.head_dim = config.n_embd // config.n_head
+        self.c_q = Linear(config.n_embd, config.n_head * self.head_dim, bias=False)
+        self.c_k = Linear(config.n_embd, config.n_kv_head * self.head_dim, bias=False)
+        self.c_v = Linear(config.n_embd, config.n_kv_head * self.head_dim, bias=False)
+        self.c_o = Linear(config.n_embd, config.n_embd, bias=False)
+        self.ve_gate_channels = 12
+        self.ve_gate = Linear(self.ve_gate_channels, self.n_kv_head, bias=False) if has_ve(layer_idx, config.n_layer) else None
+
+    def forward(self, x: torch.Tensor, ve: torch.Tensor | None, cos_sin: tuple[torch.Tensor, torch.Tensor], window_size: int, kv_cache: KVCache | None) -> torch.Tensor:
+        B, T, C = x.size()
+        q = self.c_q(x).view(B, T, self.n_head, self.head_dim)
+        k = self.c_k(x).view(B, T, self.n_kv_head, self.head_dim)
+        v = self.c_v(x).view(B, T, self.n_kv_head, self.head_dim)
+        # value embedding gate, black magic.
+        if ve is not None:
+            gate = 3 * torch.sigmoid(self.ve_gate(x[:, :, :self.ve_gate_channels]))
+            v = v + gate.unsqueeze(-1) * ve.view(B, T, self.n_kv_head, self.head_dim)
+        # apply RoPE
+        cos, sin = cos_sin
+        q, k = apply_rotary_emb(q, cos, sin), apply_rotary_emb(k, cos, sin)
+        q, k = F.rms_norm(q, (q.size(-1),)) * 1.2, F.rms_norm(k, (k.size(-1),)) * 1.2
+        # attention FA + SWA + GQA
+        if kv_cache is None:
+            y = flash_attn.flash_attn_func(q, k, v, causal=True, window_size=window_size)
+        else:
+            # KV-cache path — see kv_cache.py for the cache contract.
+            k_cache, v_cache = kv_cache.get_layer_cache(self.layer_idx)
+            y = flash_attn.flash_attn_with_kvcache(
+                q, k, v, k_cache, v_cache, cache_seqlens = kv_cache.cache_seqlens, causal=True, window_size=window_size
+            )
+            if self.layer_idx == kv_cache.n_layers - 1:
+                kv_cache.advance(T)
+        # output projection
+        y = y.contiguous().view(B, T, C)
+        y = self.c_o(y)
+        return y
+
+class MLP(nn.Module):
+    def __init__(self, config: GPTConfig):
+        super().__init__()
+        self.c_fc = Linear(config.n_embd, 4 * config.n_embd, bias=False)
+        self.c_proj = Linear(4 * config.n_embd, config.n_embd, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.c_fc(x)
+        x = F.relu(x).square()
+        x = self.c_proj(x)
+        return x
+
+class Block(nn.Module):
+    def __init__(self, config: GPTConfig, layer_idx: int):
+        super().__init__()
+        self.attn = CausalSelfAttention(config, layer_idx)
+        self.ffn = MLP(config)
+    
+    def forward(self, x: torch.Tensor, ve: torch.Tensor | None, cos_sin: tuple[torch.Tensor, torch.Tensor], window_size: int, kv_cache: KVCache | None) -> torch.Tensor:
+        x = x + self.attn(x, ve, cos_sin, window_size, kv_cache)
+        x = x + self.ffn(x)
+        return x
 
 class GPT(nn.Module):
     """
@@ -180,14 +233,27 @@ class GPT(nn.Module):
             resid_lambdas        : nn.Parameter (n_layer,)
             x0_lambdas           : nn.Parameter (n_layer,)
             cos, sin             : non-persistent buffers (recomputed in init_weights!)
-
-        Window sizes (gpt.py:296-311) — see attention.py for the full story:
-            long_window  = config.sequence_len              # "L" → (2048, 0)
-            short_window = -(-long_window // 4 // 128) * 128  # "S" → (512, 0), NOT 768
-            window_sizes[-1] = (long_window, 0)            # last layer always full
         """
         super().__init__()
-        raise NotImplementedError
+        self.config = config
+        # init window sizes for each layer, cycling through the window pattern
+        long_window = config.sequence_len
+        short_window = -(-long_window // 4 // 128) * 128
+        chart = {"S": short_window, "L": long_window}
+        self.window_sizes = []
+        for layer_idx in range(config.n_layer):
+            char = self.window_pattern[layer_idx % len(self.window_pattern)]
+            self.window_sizes.append(chart[char])
+        self.window_sizes[-1] = long_window  # last layer always full
+        # init sub-modules
+        padded_vocab = (config.vocab_size + 63) // 64 * 64
+        if padded_vocab != config.vocab_size:
+            print(f"Padding vocab {config.vocab_size} → {padded_vocab}")
+        self.transformer = nn.ModuleDict({
+            "wte": nn.Embedding(padded_vocab, config.n_embd),
+            "h": nn.ModuleList([Block(config, layer_idx) for layer_idx in range(config.n_layer)]),
+        })
+        #TODO: others
 
     # ── Weight init ───────────────────────────────────────────────────
 
@@ -338,7 +404,7 @@ class GPT(nn.Module):
         self,
         idx: torch.Tensor,
         targets: torch.Tensor | None = None,
-        kv_cache: list | None = None,
+        kv_cache: KVCache | None = None,
         loss_reduction: str = "mean",
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """
@@ -346,7 +412,7 @@ class GPT(nn.Module):
             idx:            (B, T) int64 — input token ids
             targets:        (B, T) int64 — target ids, or None for inference.
                             targets == -1 are excluded from the loss (SFT's mask).
-            kv_cache:       KVCache or None. See engine.py.
+            kv_cache:       KVCache or None. See kv_cache.py.
             loss_reduction: "mean" | "none". Training uses "mean"; evaluate_bpb() uses
                             "none" to get per-token losses, shape (B*T,).
 

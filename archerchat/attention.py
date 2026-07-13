@@ -152,10 +152,10 @@ class FlashAttnCompat:
     def flash_attn_with_kvcache(
         self,
         q: torch.Tensor,
-        k_cache: torch.Tensor,
-        v_cache: torch.Tensor,
         k: torch.Tensor,
         v: torch.Tensor,
+        k_cache: torch.Tensor,
+        v_cache: torch.Tensor,
         cache_seqlens: torch.Tensor,
         causal: bool = True,
         window_size: tuple[int, int] = (-1, 0),
