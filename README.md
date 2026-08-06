@@ -15,7 +15,7 @@ Outputs:
 - A small patch to nanochat's `get_peak_flops` table so MFU logs a real number on the 5060 Ti.
 - Reference numbers locked in for both depths — see [STAGE1.md](STAGE1.md).
 
-### Stage 2 — ArcherChat rewrite + local validation
+### Stage 2 — ArcherChat rewrite + local validation 🔨 in progress
 
 Rewrite the core modules from scratch:
 - **Muon optimizer** + compute-optimal scaling (the auto-derivation of token horizon, batch size, LR, weight decay from one `--depth` dial).
@@ -25,6 +25,8 @@ Rewrite the core modules from scratch:
 - **SFT pipeline** including the packing-to-padding transition for variable-length chat data.
 
 Train **ArcherChat-d8** locally; compare against nanochat-d8 baseline. If within noise, train **ArcherChat-d12** as the second data point — proves the rewrite scales correctly across depth, not just that one configuration happened to work.
+
+See [TECH_PLAN.md](TECH_PLAN.md) for the full module-by-module plan and acceptance gates.
 
 ### Stage 3 — Cloud d24 speedrun
 
@@ -42,13 +44,20 @@ Note: `[tool.uv] default-groups = []` keeps cloud installs lean, so a bare
 `uv run pytest` would fall back to any globally-installed pytest and fail to
 import `archerchat`; the root `conftest.py` catches this with a clear message.
 
+Training (single GPU):
+```bash
+source .env
+python scripts/base_train.py --depth 8
+python scripts/chat_sft.py   --depth 8
+```
+
 ## Companion repos
 
-- **[Endlex](https://github.com/archeryue/Endlex)** — self-hosted wandb replacement (metrics dashboard + checkpoint sync). ArcherChat will use Endlex as its only telemetry layer from day one. Must exist before Stage 2 starts.
+- **[Endlex](https://github.com/archeryue/Endlex)** — self-hosted wandb replacement (metrics dashboard + checkpoint sync). ArcherChat uses Endlex as its only telemetry layer. Set `ENDLEX_URL` / `ENDLEX_TOKEN` in `.env` to enable live streaming; falls back to offline JSONL when unset.
 
 ## Status
 
-Stage 1 complete. Stage 2 starts after Endlex MVP lands.
+**Stage 1** complete. **Stage 2** in progress — data pipeline and plumbing are done; model core, optimizer, and attention kernel are next. See [TECH_PLAN.md](TECH_PLAN.md) for detail.
 
 ## License
 

@@ -18,25 +18,27 @@ The plan is biased two ways:
 ```
 archerchat/
   common.py        ✓ done — distributed init, logging, peak-flops table, init_tracker()
-  model.py         — GPT block
-  attention.py     — sliding-window attention + SDPA path
-  loss.py          — chunked cross-entropy + SFT mask hook
-  optimizer.py     — Muon (Newton–Schulz) + AdamW group + LR/momentum/WD schedules
-  scaling.py       — depth → {params, tokens, batch, lr, wd} compute-optimal derivation
-  dataloader.py    — tokenizing distributed loader with restart state
-  engine.py        — KV-cache prefill/decode
-  sft.py           — chat templating, packing→padding, assistant-only mask
-  checkpoint.py    — save/load + meta JSON + optimizer state shards
+  scaling.py       ✓ done — depth → {params, tokens, batch, lr, wd} compute-optimal derivation
+  loss.py          ✓ done — chunked cross-entropy + bpb eval
+  checkpoint.py    ✓ done — save/load + meta JSON + optimizer state shards
+  dataloader.py    ✓ done — tokenizing distributed loader with restart state
+  model.py         🔨 partial — Linear/has_ve/RoPE/CausalSelfAttention/MLP/Block done;
+                               GPT.__init__ partial; init_weights/forward/setup_optimizer/generate stub
+  optimizer.py     🔨 stub  — schedule functions + polar_express (NS5) + MuonAdamW + DistMuonAdamW
+  attention.py     🔨 stub  — make_window_mask + flash_attn_func + flash_attn_with_kvcache
+  kv_cache.py      🔨 stub  — KVCache (pre-allocated per-layer cache + smear state)
+  sft.py           🔨 stub  — chat templating, packing→padding, assistant-only mask (1 stub left)
+  engine.py        🔨 stub  — KV-cache prefill/decode + Engine.generate
   core_eval.py     ✓ copied — CORE/DCLM scoring
   eval_bundle.py   ✓ copied — bundle URL + download/unzip glue
   execution.py     ✓ copied — HumanEval sandboxed execution
   ui.html          ✓ copied — chat web UI template
 
 scripts/
-  base_train.py    — pretraining entry point
-  chat_sft.py      — supervised fine-tuning entry point
-  base_eval.py     — base-model evaluation entry point (CORE)
-  chat_eval.py     — chat-model evaluation entry point (ChatCORE)
+  base_train.py    🔨 wired — pretraining entry point (all imports/orchestration done; blocked on stubs)
+  chat_sft.py      🔨 wired — supervised fine-tuning entry point (same)
+  base_eval.py     ✓ done  — base-model evaluation entry point (CORE)
+  chat_eval.py     ✓ done  — chat-model evaluation entry point (ChatCORE)
   chat_web.py      ✓ copied — FastAPI chat server
   chat_cli.py      ✓ copied — terminal chat client
 
@@ -54,8 +56,9 @@ rustbpe/           ✓ vendored — tokenizer trainer (karpathy/rustbpe@ddf848f)
 | `attention.py` | SDPA path + sliding-window mask + document-boundary mask for SFT packing; FA3 thin wrapper stub for Stage 3 | Masking is where silent training bugs live |
 | `loss.py` | Chunked / windowed cross-entropy with assistant-only mask hook | Memory trick worth doing once; SFT mask plumbing lives here |
 | `optimizer.py` | Muon (Newton–Schulz orthogonalization) + AdamW group for embeddings/head + pretrain/SFT LR/momentum/WD schedules | The actual novelty in the stack |
-| `scaling.py` | `depth → {params, tokens, batch, lr, wd}` compute-optimal derivation | Scaling math is tiny but conceptually load-bearing — re-derive, don't copy constants |
+| `scaling.py` | `depth → {params, tokens, batch, lr, wd}` compute-optimal derivation (Power Lines + T_epoch papers) | Scaling math is tiny but conceptually load-bearing — re-derive, don't copy constants |
 | `dataloader.py` | Distributed tokenizing loader, shard rotation, deterministic restart from `(shard_idx, byte_offset, epoch)` | Restart bugs are silent and ruin multi-day runs |
+| `kv_cache.py` | Pre-allocated per-layer KV cache in `(B, T, H, D)` layout; owns `prev_embedding` (smear state) | Leaf module — no imports from model/attention/engine; split from engine.py to break circular deps |
 | `engine.py` | KV-cache inference: prefill/decode split, batched decode with per-row stop tokens | Where "I thought I understood transformers" dies |
 | `sft.py` | Chat templating, packing→padding transition, assistant-only loss mask, EOS handling | Explicit Stage 2 deliverable; only place chat semantics live |
 | `checkpoint.py` | save/load + meta JSON + optimizer state shards | Binary-compatible with Stage 1 layout under `~/.cache/nanochat/` |
@@ -79,21 +82,21 @@ Anything that affects the loss surface but has no learning value, plus anything 
 
 Each step has a numeric acceptance gate. Don't move on until the gate is green.
 
-| # | Step | Gate |
-|---|---|---|
-| 0 | Endlex live (`ENDLEX_URL` + `ENDLEX_TOKEN` set) | `scripts/base_train.py` smoke run shows up on Endlex dashboard |
-| 1 | `model.py` + `attention.py` + `loss.py` | Forward-equivalence with nanochat (see below) |
-| 2 | `optimizer.py` — Muon + AdamW | Optimizer-step equivalence (see below) |
-| 3 | `optimizer.py` — scaling derivation | Hyperparam table matches nanochat exactly for depth ∈ {4, 8, 12, 16, 20, 24} |
-| 4 | `dataloader.py` | Tokenization bit-equal to nanochat on shard 0; restart determinism (see below) |
-| 5 | `scripts/base_train.py` + d4 smoke (200 steps, 1 shard) | val_bpb drops monotonically; throughput within 10% of nanochat-d4 oracle |
-| 6 | `checkpoint.py` | Round-trip save/load: weights + optimizer state match before/after |
-| 7 | **Full ArcherChat-d8 pretrain** | val_bpb 0.94 ± 0.01; Base CORE 0.0976 ± 0.005 (full, uncapped) |
-| 8 | `engine.py` (KV cache) | Greedy-decode equivalence with nanochat on d8 weights (see below) |
-| 9 | `sft.py` | Loss-mask unit test passes; first 100 SFT steps' val_bpb within 2% of nanochat-d8 SFT oracle at same step |
-| 10 | **Full ArcherChat-d8 SFT + chat_eval** | SFT val_bpb 0.42 ± 0.01; ChatCORE_sample 0.2173 ± 0.01 |
-| 11 | **Full ArcherChat-d12 pretrain + SFT** | All four d12 oracles (see below) inside band |
-| 12 | Freeze repo, tag `v0.2`, hand to Stage 3 | All gates 1–11 green; Endlex run links archived |
+| # | Step | Status | Gate |
+|---|---|---|---|
+| 0 | Endlex live (`ENDLEX_URL` + `ENDLEX_TOKEN` set) | ✓ done | `scripts/base_train.py` smoke run shows up on Endlex dashboard |
+| 1 | `model.py` + `attention.py` + `loss.py` | 🔨 in progress | Forward-equivalence with nanochat (see below) |
+| 2 | `optimizer.py` — Muon + AdamW | 🔨 stub | Optimizer-step equivalence (see below) |
+| 3 | `scaling.py` — compute-optimal derivation | ✓ done | Hyperparam table matches nanochat exactly for depth ∈ {4, 8, 12, 16, 20, 24} |
+| 4 | `dataloader.py` | ✓ done | Tokenization bit-equal to nanochat on shard 0; restart determinism (see below) |
+| 5 | `scripts/base_train.py` + d4 smoke (200 steps, 1 shard) | blocked on 1+2 | val_bpb drops monotonically; throughput within 10% of nanochat-d4 oracle |
+| 6 | `checkpoint.py` | ✓ done | Round-trip save/load: weights + optimizer state match before/after |
+| 7 | **Full ArcherChat-d8 pretrain** | blocked on 1+2+5 | val_bpb 0.94 ± 0.01; Base CORE 0.0976 ± 0.005 (full, uncapped) |
+| 8 | `kv_cache.py` + `engine.py` | 🔨 stub | Greedy-decode equivalence with nanochat on d8 weights (see below) |
+| 9 | `sft.py` | 🔨 1 stub left | Loss-mask unit test passes; first 100 SFT steps' val_bpb within 2% of nanochat-d8 SFT oracle at same step |
+| 10 | **Full ArcherChat-d8 SFT + chat_eval** | blocked on 7+8+9 | SFT val_bpb 0.42 ± 0.01; ChatCORE_sample 0.2173 ± 0.01 |
+| 11 | **Full ArcherChat-d12 pretrain + SFT** | blocked on 10 | All four d12 oracles (see below) inside band |
+| 12 | Freeze repo, tag `v0.2`, hand to Stage 3 | blocked on 11 | All gates 1–11 green; Endlex run links archived |
 
 ## Per-module acceptance tests
 
