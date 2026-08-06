@@ -310,22 +310,50 @@ class GPT(nn.Module):
         smear_gate:       U(0, 0.02)
         ve weights:       U(-s, s)
         ve_gate weights:  U(0, 0.02)
-
-        THEN, two things the old spec omitted:
-
-        (1) RECOMPUTE THE ROPE BUFFERS (gpt.py:255-258). Non-negotiable — see the
-            module header. They are meta-device garbage until you do:
-                head_dim = n_embd // n_head
-                cos, sin = self._precompute_rotary_embeddings(self.rotary_seq_len, head_dim)
-                self.cos, self.sin = cos, sin
-
-        (2) CAST EMBEDDINGS to COMPUTE_DTYPE (gpt.py:263-266) — this is what makes the
-            activations bf16 and thus what the custom Linear exists to accommodate:
-                if COMPUTE_DTYPE != torch.float16:      # fp16 carve-out: GradScaler
-                    wte and each value_embeds table → COMPUTE_DTYPE
-            ⚠️ lm_head is NOT cast. It stays fp32.
         """
-        raise NotImplementedError
+        # Embedding & unembedding
+        torch.nn.init.normal_(self.transformer.wte.weight, mean=0.0, std=0.8)
+        torch.nn.init.normal_(self.lm_head.weight, mean=0.0, std=0.001)
+        # Transformer blocks: uniform init with bound = sqrt(3) * std
+        n_embd = self.config.n_embd
+        s = 3**0.5 * n_embd**-0.5 # sqrt(3) multiplier makes sure Uniform achieves the same std as Normal
+        for block in self.transformer.h:
+            torch.nn.init.uniform_(block.attn.c_q.weight, -s, s) # weights use Uniform to avoid outliers
+            torch.nn.init.uniform_(block.attn.c_k.weight, -s, s)
+            torch.nn.init.uniform_(block.attn.c_v.weight, -s, s)
+            torch.nn.init.zeros_(block.attn.c_proj.weight) # projections are zero
+            torch.nn.init.uniform_(block.mlp.c_fc.weight, -s * 0.4, s * 0.4)  # 0.4x init scale for c_fc
+            torch.nn.init.zeros_(block.mlp.c_proj.weight)
+        # Per-layer scalars
+        # Per-layer resid init: stronger residual at early layers, weaker at deep layers
+        n_layer = self.config.n_layer
+        for i in range(n_layer):
+            self.resid_lambdas.data[i] = 1.15 - (0.10 * i / max(n_layer - 1, 1))
+        # Decaying x0 init: earlier layers get more input embedding blending
+        for i in range(n_layer):
+            self.x0_lambdas.data[i] = 0.20 - (0.15 * i / max(n_layer - 1, 1))
+        # Smear/backout scalars and smear gate must be explicitly initialized 
+        torch.nn.init.zeros_(self.smear_lambda)
+        torch.nn.init.constant_(self.backout_lambda, 0.2)
+        torch.nn.init.uniform_(self.smear_gate.weight, 0.0, 0.02)
+        # Value embeddings (init like c_v: uniform with same std)
+        for ve in self.value_embeds.values():
+            torch.nn.init.uniform_(ve.weight, -s, s)
+        # Gate weights init with small positive values so gates start slightly above neutral
+        for block in self.transformer.h:
+            if block.attn.ve_gate is not None:
+                torch.nn.init.uniform_(block.attn.ve_gate.weight, 0.0, 0.02)
+        # Rotary embeddings
+        head_dim = self.config.n_embd // self.config.n_head
+        cos, sin = self._precompute_rotary_embeddings(self.rotary_seq_len, head_dim)
+        self.cos, self.sin = cos, sin
+        # Cast embeddings to COMPUTE_DTYPE: optimizer can tolerate reduced-precision
+        # embeddings and it saves memory. Exception: fp16 requires fp32 embeddings
+        # because GradScaler cannot unscale fp16 gradients.
+        if COMPUTE_DTYPE != torch.float16:
+            self.transformer.wte.to(dtype=COMPUTE_DTYPE)
+            for ve in self.value_embeds.values():
+                ve.to(dtype=COMPUTE_DTYPE)
 
     # ── Introspection ─────────────────────────────────────────────────
 
