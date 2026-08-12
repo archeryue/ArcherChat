@@ -24,12 +24,74 @@ Reference: nanochat/engine.py
 
 from __future__ import annotations
 
+import signal
+import warnings
+from collections import deque
+from contextlib import contextmanager
 from typing import Generator
 
 import torch
 import torch.nn.functional as F
 
 from archerchat.kv_cache import KVCache
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Calculator tool helpers (nanochat engine.py:25-79) — used by the tool state
+# machine when the model emits a <|python_start|>…<|python_end|> block.
+# ─────────────────────────────────────────────────────────────────────────────
+@contextmanager
+def timeout(duration, formula):
+    def timeout_handler(signum, frame):
+        raise Exception(f"'{formula}': timed out after {duration} seconds")
+
+    signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(duration)
+    yield
+    signal.alarm(0)
+
+
+def eval_with_timeout(formula, max_time=3):
+    try:
+        with timeout(max_time, formula):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", SyntaxWarning)
+                return eval(formula, {"__builtins__": {}}, {})
+    except Exception:
+        signal.alarm(0)
+        return None
+
+
+def use_calculator(expr):
+    """Safely evaluate a simple math expression or a `.count()` string op."""
+    expr = expr.replace(",", "")
+    if all(x in "0123456789*+-/.() " for x in expr):
+        if "**" in expr:  # disallow power operator
+            return None
+        return eval_with_timeout(expr)
+    allowed_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'\"()._ "
+    if not all(x in allowed_chars for x in expr):
+        return None
+    dangerous_patterns = ["__", "import", "exec", "eval", "compile", "open", "file",
+                          "input", "raw_input", "globals", "locals", "vars", "dir",
+                          "getattr", "setattr", "delattr", "hasattr"]
+    expr_lower = expr.lower()
+    if any(pattern in expr_lower for pattern in dangerous_patterns):
+        return None
+    if ".count(" not in expr:
+        return None
+    return eval_with_timeout(expr)
+
+
+class RowState:
+    """Per-row state during batched generation (nanochat engine.py:160-167)."""
+
+    def __init__(self, current_tokens=None):
+        self.current_tokens = current_tokens or []  # token sequence for this row
+        self.forced_tokens = deque()                # queue of tokens to force-inject
+        self.in_python_block = False                # inside a <|python_*|> block?
+        self.python_expr_tokens = []                # tokens of the current python expr
+        self.completed = False                      # has this row hit a terminal token?
 
 
 def sample_next_token(
@@ -63,7 +125,19 @@ def sample_next_token(
     correct. (This is also why model.generate() — which masks-then-divides, the opposite
     order — only matches this at temperature=0.)
     """
-    raise NotImplementedError
+    assert temperature >= 0.0, "temperature must be non-negative"
+    if temperature == 0.0:
+        return torch.argmax(logits, dim=-1, keepdim=True)
+    if top_k is not None and top_k > 0:
+        k = min(top_k, logits.size(-1))
+        vals, idx = torch.topk(logits, k, dim=-1)
+        vals = vals / temperature                       # temperature AFTER topk
+        probs = F.softmax(vals, dim=-1)                 # softmax over k, NOT over V
+        choice = torch.multinomial(probs, num_samples=1, generator=rng)
+        return idx.gather(1, choice)                     # gather back to vocab ids
+    logits = logits / temperature
+    probs = F.softmax(logits, dim=-1)
+    return torch.multinomial(probs, num_samples=1, generator=rng)
 
 
 class Engine:
@@ -142,7 +216,85 @@ class Engine:
 
         Row completion (engine.py:254): next_token == assistant_end or next_token == bos.
         """
-        raise NotImplementedError
+        assert isinstance(tokens, list) and isinstance(tokens[0], int), "expecting list of ints"
+        device = self.model.get_device()
+        # Repo-wide convention: cuda → bf16, everything else → fp32 (KVCache pre-allocates).
+        dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
+        rng = torch.Generator(device=device)
+        rng.manual_seed(seed)
+
+        # Special tokens for the tool-use state machine and row termination.
+        get_special = lambda s: self.tokenizer.encode_special(s)
+        python_start = get_special("<|python_start|>")
+        python_end = get_special("<|python_end|>")
+        output_start = get_special("<|output_start|>")
+        output_end = get_special("<|output_end|>")
+        assistant_end = get_special("<|assistant_end|>")
+        bos = self.tokenizer.get_bos_token_id()
+
+        # 1) Batch-1 prefill of the prompt.
+        m = self.model.config
+        kv_model_kwargs = {"num_heads": m.n_kv_head, "head_dim": m.n_embd // m.n_head, "num_layers": m.n_layer}
+        kv_cache_prefill = KVCache(batch_size=1, seq_len=len(tokens), device=device, dtype=dtype, **kv_model_kwargs)
+        ids = torch.tensor([tokens], dtype=torch.long, device=device)
+        logits = self.model.forward(ids, kv_cache=kv_cache_prefill)
+        logits = logits[:, -1, :].expand(num_samples, -1)  # (1,V) → (num_samples,V)
+
+        # 2) Fan the prefill cache out across num_samples rows.
+        kv_length_hint = (len(tokens) + max_tokens) if max_tokens is not None else self.model.config.sequence_len
+        kv_cache_decode = KVCache(batch_size=num_samples, seq_len=kv_length_hint, device=device, dtype=dtype, **kv_model_kwargs)
+        kv_cache_decode.prefill(kv_cache_prefill)
+        del kv_cache_prefill
+
+        # 3) Per-row state.
+        row_states = [RowState(tokens.copy()) for _ in range(num_samples)]
+
+        # 4) Decode loop.
+        num_generated = 0
+        while True:
+            if max_tokens is not None and num_generated >= max_tokens:
+                break
+            if all(state.completed for state in row_states):
+                break
+
+            next_ids = sample_next_token(logits, rng, temperature, top_k)  # (B, 1)
+            sampled_tokens = next_ids[:, 0].tolist()
+
+            token_column = []  # next token id along each row
+            token_masks = []   # 1 if sampled, 0 if force-injected
+            for i, state in enumerate(row_states):
+                is_forced = len(state.forced_tokens) > 0
+                token_masks.append(0 if is_forced else 1)
+                next_token = state.forced_tokens.popleft() if is_forced else sampled_tokens[i]
+                token_column.append(next_token)
+                state.current_tokens.append(next_token)
+                if next_token == assistant_end or next_token == bos:
+                    state.completed = True
+                # Tool state machine.
+                if next_token == python_start:
+                    state.in_python_block = True
+                    state.python_expr_tokens = []
+                elif next_token == python_end and state.in_python_block:
+                    state.in_python_block = False
+                    if state.python_expr_tokens:
+                        expr = self.tokenizer.decode(state.python_expr_tokens)
+                        result = use_calculator(expr)
+                        if result is not None:
+                            result_tokens = self.tokenizer.encode(str(result))
+                            state.forced_tokens.append(output_start)
+                            state.forced_tokens.extend(result_tokens)
+                            state.forced_tokens.append(output_end)
+                    state.python_expr_tokens = []
+                elif state.in_python_block:
+                    state.python_expr_tokens.append(next_token)
+
+            yield token_column, token_masks
+            num_generated += 1
+
+            # Feed the chosen column back in for the next step (last forward is wasted
+            # when the loop breaks — harmless, and keeps the RNG stream aligned).
+            ids = torch.tensor(token_column, dtype=torch.long, device=device).unsqueeze(1)
+            logits = self.model.forward(ids, kv_cache=kv_cache_decode)[:, -1, :]
 
     def generate_batch(
         self,
@@ -167,5 +319,20 @@ class Engine:
         Terminal tokens (assistant_end, bos) are the only things NOT appended
         (engine.py:296-299).
         """
-        raise NotImplementedError
+        assistant_end = self.tokenizer.encode_special("<|assistant_end|>")
+        bos = self.tokenizer.get_bos_token_id()
+        results = [tokens.copy() for _ in range(num_samples)]      # prompt IS included
+        masks = [[0] * len(tokens) for _ in range(num_samples)]
+        completed = [False] * num_samples
+        for token_column, token_masks in self.generate(tokens, num_samples, **kwargs):
+            for i, (token, mask) in enumerate(zip(token_column, token_masks)):
+                if not completed[i]:
+                    if token == assistant_end or token == bos:
+                        completed[i] = True
+                    else:
+                        results[i].append(token)
+                        masks[i].append(mask)
+            if all(completed):
+                break
+        return results, masks
 

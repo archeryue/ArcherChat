@@ -105,7 +105,21 @@ def make_window_mask(
         window_size: (left, right); left = max lookback
         device:      allocate here
     """
-    raise NotImplementedError
+    Tq, Tk = seq_len_q, seq_len_k
+    window = window_size[0]
+    # Effectively full context AND same length → let the caller use is_causal=True.
+    if (window < 0 or window >= Tq) and Tq == Tk:
+        return None
+    # Offset causal mask (nanochat flash_attention.py:93-102). The queries live at the
+    # LAST Tq positions of a length-Tk sequence, so row i corresponds to absolute pos
+    # (Tk - Tq) + i.
+    row_idx = (Tk - Tq) + torch.arange(Tq, device=device).unsqueeze(1)
+    col_idx = torch.arange(Tk, device=device).unsqueeze(0)
+    mask = col_idx <= row_idx
+    # Sliding window: keep only the `window` most-recent keys (inclusive of self).
+    if window >= 0 and window < Tk:
+        mask = mask & ((row_idx - col_idx) <= window)
+    return mask
 
 
 class FlashAttnCompat:
@@ -147,7 +161,18 @@ class FlashAttnCompat:
                — pass exactly one of attn_mask / is_causal, never both.
             5. Transpose back to (B, T, H, D).
         """
-        raise NotImplementedError
+        # (B, T, H, D) -> (B, H, T, D) for SDPA
+        q = q.transpose(1, 2)
+        k = k.transpose(1, 2)
+        v = v.transpose(1, 2)
+        enable_gqa = q.size(1) != k.size(1)  # free GQA — no repeat_interleave
+        Tq = q.size(2)
+        mask = make_window_mask(Tq, k.size(2), window_size, q.device)
+        if mask is None:
+            y = F.scaled_dot_product_attention(q, k, v, is_causal=True, enable_gqa=enable_gqa)
+        else:
+            y = F.scaled_dot_product_attention(q, k, v, attn_mask=mask, enable_gqa=enable_gqa)
+        return y.transpose(1, 2)  # back to (B, T, H, D)
 
     def flash_attn_with_kvcache(
         self,
@@ -197,7 +222,25 @@ class FlashAttnCompat:
                 kv_cache.advance(T)
         If this shim also advances, the cache double-counts and every position is wrong.
         """
-        raise NotImplementedError
+        B, T_new, H, D = q.shape
+        pos = cache_seqlens[0].item()  # uniform position across the batch (lockstep rows)
+        # Write the new k/v into the pre-allocated cache in-place (matches FA3 semantics).
+        k_cache[:, pos:pos + T_new] = k
+        v_cache[:, pos:pos + T_new] = v
+        end_pos = pos + T_new
+        k_full = k_cache[:, :end_pos]
+        v_full = v_cache[:, :end_pos]
+        # (B, T, H, D) -> (B, H, T, D) for SDPA
+        q_sdpa = q.transpose(1, 2)
+        k_sdpa = k_full.transpose(1, 2)
+        v_sdpa = v_full.transpose(1, 2)
+        enable_gqa = q_sdpa.size(1) != k_sdpa.size(1)
+        mask = make_window_mask(T_new, end_pos, window_size, q.device)
+        if mask is None:
+            y = F.scaled_dot_product_attention(q_sdpa, k_sdpa, v_sdpa, is_causal=True, enable_gqa=enable_gqa)
+        else:
+            y = F.scaled_dot_product_attention(q_sdpa, k_sdpa, v_sdpa, attn_mask=mask, enable_gqa=enable_gqa)
+        return y.transpose(1, 2)  # back to (B, T_new, H, D)
 
 
 # Singleton — model.py does: from archerchat.attention import flash_attn

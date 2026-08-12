@@ -180,7 +180,65 @@ def build_example(
     make_sft_dataloader() below already calls this and will start working the moment
     it returns real tensors.
     """
-    raise NotImplementedError
+    messages = _normalize_messages(conversation)
+
+    ids: list[int] = []
+    mask: list[int] = []
+
+    def add(token_ids, mask_val):
+        if isinstance(token_ids, int):
+            token_ids = [token_ids]
+        ids.extend(token_ids)
+        mask.extend([mask_val] * len(token_ids))
+
+    # Special tokens looked up directly — they must NEVER go through BPE.
+    bos = tokenizer.get_bos_token_id()
+    user_start = tokenizer.encode_special("<|user_start|>")
+    user_end = tokenizer.encode_special("<|user_end|>")
+    assistant_start = tokenizer.encode_special("<|assistant_start|>")
+    assistant_end = tokenizer.encode_special("<|assistant_end|>")
+    python_start = tokenizer.encode_special("<|python_start|>")
+    python_end = tokenizer.encode_special("<|python_end|>")
+    output_start = tokenizer.encode_special("<|output_start|>")
+    output_end = tokenizer.encode_special("<|output_end|>")
+
+    add(bos, 0)
+    for i, message in enumerate(messages):
+        must_be_from = "user" if i % 2 == 0 else "assistant"
+        assert message["role"] == must_be_from, \
+            f"Message {i} is from {message['role']} but should be from {must_be_from}"
+        content = message["content"]
+        if message["role"] == "user":
+            assert isinstance(content, str), "User messages are simply expected to be strings"
+            add(user_start, 0)
+            add(tokenizer.encode(content), 0)
+            add(user_end, 0)
+        else:  # assistant — the ONLY supervised role
+            add(assistant_start, 0)                        # turn OPENER: not supervised
+            if isinstance(content, str):
+                add(tokenizer.encode(content), 1)
+            elif isinstance(content, list):
+                for part in content:
+                    value_ids = tokenizer.encode(part["text"])
+                    if part["type"] == "text":
+                        add(value_ids, 1)
+                    elif part["type"] == "python":                 # tool CALL: supervised
+                        add(python_start, 1)
+                        add(value_ids, 1)
+                        add(python_end, 1)
+                    elif part["type"] == "python_output":          # tool OUTPUT: not supervised
+                        add(output_start, 0)
+                        add(value_ids, 0)
+                        add(output_end, 0)
+                    else:
+                        raise ValueError(f"Unknown part type: {part['type']}")
+            else:
+                raise ValueError(f"Unknown content type: {type(content)}")
+            add(assistant_end, 1)                          # turn TERMINATOR: supervised
+
+    ids = ids[:max_tokens]
+    mask = mask[:max_tokens]
+    return torch.tensor(ids, dtype=torch.long), torch.tensor(mask, dtype=torch.bool)
 
 
 _DATASET_CACHE: dict[str, object] = {}

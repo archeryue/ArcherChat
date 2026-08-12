@@ -62,10 +62,12 @@ from typing import Iterator
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.distributed as dist
 
-from archerchat.common import COMPUTE_DTYPE
+from archerchat.common import COMPUTE_DTYPE, print0
 from archerchat.attention import flash_attn
 from archerchat.kv_cache import KVCache
+from archerchat.optimizer import MuonAdamW, DistMuonAdamW
 
 @dataclass
 class GPTConfig:
@@ -254,17 +256,18 @@ class GPT(nn.Module):
             "wte": nn.Embedding(padded_vocab, config.n_embd),
             "h": nn.ModuleList([Block(config, layer_idx) for layer_idx in range(config.n_layer)]),
         })
-        self.lm_head = nn.Linear(config.n_embd, padded_vocab, bias=False)
+        self.lm_head = Linear(config.n_embd, padded_vocab, bias=False)  # dtype-casting Linear
         # init all learnable parameters for side paths
         self.resid_lambdas = nn.Parameter(torch.ones(config.n_layer)) # fake init
         self.x0_lambdas = nn.Parameter(torch.zeros(config.n_layer)) # fake init
-        self.smear_gate = nn.Linear(24, 1, bias=False)
+        self.smear_gate = Linear(24, 1, bias=False)  # dtype-casting Linear
         self.smear_lambda = nn.Parameter(torch.zeros(1))
         self.backout_lambda = nn.Parameter(0.2 * torch.ones(1))
-        # value embeddings
+        # value embeddings: one INDEPENDENT lookup table per VE layer (NOT a Linear —
+        # forward does an embedding lookup value_embeds[str(i)](idx) on token ids)
         head_dim = config.n_embd // config.n_head
         kv_dim = config.n_kv_head * head_dim
-        self.value_embeds = nn.ModuleDict({str(i): nn.Linear(padded_vocab, kv_dim, bias=False) for i in range(config.n_layer) if has_ve(i, config.n_layer)})
+        self.value_embeds = nn.ModuleDict({str(i): nn.Embedding(padded_vocab, kv_dim) for i in range(config.n_layer) if has_ve(i, config.n_layer)})
         # RoPE
         self.rotary_seq_len = config.sequence_len * 10 # don't quite understand. Do we need this much?
         cos, sin = self._precompute_rotary_embeddings(self.rotary_seq_len, head_dim)
@@ -321,9 +324,9 @@ class GPT(nn.Module):
             torch.nn.init.uniform_(block.attn.c_q.weight, -s, s) # weights use Uniform to avoid outliers
             torch.nn.init.uniform_(block.attn.c_k.weight, -s, s)
             torch.nn.init.uniform_(block.attn.c_v.weight, -s, s)
-            torch.nn.init.zeros_(block.attn.c_proj.weight) # projections are zero
-            torch.nn.init.uniform_(block.mlp.c_fc.weight, -s * 0.4, s * 0.4)  # 0.4x init scale for c_fc
-            torch.nn.init.zeros_(block.mlp.c_proj.weight)
+            torch.nn.init.zeros_(block.attn.c_o.weight) # attn output projection is zero
+            torch.nn.init.uniform_(block.ffn.c_fc.weight, -s * 0.4, s * 0.4)  # 0.4x init scale for c_fc
+            torch.nn.init.zeros_(block.ffn.c_proj.weight)  # mlp output projection is zero
         # Per-layer scalars
         # Per-layer resid init: stronger residual at early layers, weaker at deep layers
         n_layer = self.config.n_layer
@@ -359,7 +362,7 @@ class GPT(nn.Module):
 
     def get_device(self) -> torch.device:
         """Return the device this model lives on (single-GPU assumed)."""
-        raise NotImplementedError
+        return self.transformer.wte.weight.device
 
     def estimate_flops(self) -> float:
         """
@@ -385,7 +388,23 @@ class GPT(nn.Module):
 
         There is an ADDITIVE ATTENTION TERM. Omit it and MFU is off by ~10-20%.
         """
-        raise NotImplementedError
+        nparams = sum(p.numel() for p in self.parameters())
+        # Exclude non-matmul params: embeddings, value embeddings, per-layer scalars.
+        value_embeds_numel = sum(ve.weight.numel() for ve in self.value_embeds.values())
+        nparams_exclude = (self.transformer.wte.weight.numel() + value_embeds_numel +
+                           self.resid_lambdas.numel() + self.x0_lambdas.numel() +
+                           self.smear_gate.weight.numel() + self.smear_lambda.numel() +
+                           self.backout_lambda.numel())
+        h = self.config.n_head
+        q = self.config.n_embd // self.config.n_head
+        t = self.config.sequence_len
+        # Attention FLOPs per layer, capped by the (sliding) window.
+        attn_flops = 0
+        for window_size in self.window_sizes:
+            window = window_size[0]
+            effective_seq = t if window < 0 else min(window, t)
+            attn_flops += 12 * h * q * effective_seq
+        return 6 * (nparams - nparams_exclude) + attn_flops
 
     def num_scaling_params(self) -> dict:
         """
@@ -409,7 +428,23 @@ class GPT(nn.Module):
         tests/test_scaling.py already asserts the downstream math against these, so if
         your counts are right the whole scaling table falls out correct.
         """
-        raise NotImplementedError
+        wte = sum(p.numel() for p in self.transformer.wte.parameters())
+        value_embeds = sum(p.numel() for p in self.value_embeds.parameters())
+        lm_head = sum(p.numel() for p in self.lm_head.parameters())
+        transformer_matrices = sum(p.numel() for p in self.transformer.h.parameters())
+        scalars = (self.resid_lambdas.numel() + self.x0_lambdas.numel() +
+                   self.smear_gate.weight.numel() + self.smear_lambda.numel() +
+                   self.backout_lambda.numel())
+        total = wte + value_embeds + lm_head + transformer_matrices + scalars
+        assert total == sum(p.numel() for p in self.parameters()), "Parameter count mismatch"
+        return {
+            "total": total,
+            "transformer_matrices": transformer_matrices,
+            "lm_head": lm_head,
+            "wte": wte,
+            "value_embeds": value_embeds,
+            "scalars": scalars,
+        }
 
     # ── Optimizer ─────────────────────────────────────────────────────
 
@@ -454,7 +489,50 @@ class GPT(nn.Module):
         Use MuonAdamW (single-GPU) or DistMuonAdamW (DDP) from archerchat.optimizer.
         Check torch.distributed.is_initialized() to decide which.
         """
-        raise NotImplementedError
+        matrix_lr = lr
+        model_dim = self.config.n_embd
+
+        # Separate all parameters into groups.
+        matrix_params = list(self.transformer.h.parameters())
+        value_embeds_params = list(self.value_embeds.parameters())
+        embedding_params = list(self.transformer.wte.parameters())
+        lm_head_params = list(self.lm_head.parameters())
+        resid_params = [self.resid_lambdas]
+        x0_params = [self.x0_lambdas]
+        smear_params = [self.smear_gate.weight, self.smear_lambda, self.backout_lambda]
+        assert len(list(self.parameters())) == (
+            len(matrix_params) + len(embedding_params) + len(lm_head_params) +
+            len(value_embeds_params) + len(resid_params) + len(x0_params) + len(smear_params)
+        )
+
+        # Scale the AdamW LRs by ∝1/√dmodel (tuned for the 768-dim model). This factor is
+        # applied HERE, not in scaling.py — compute_scale() returns pre-width-scaling LRs.
+        dmodel_lr_scale = (model_dim / 768) ** -0.5
+        print0(f"Scaling the LR for the AdamW parameters ∝1/√({model_dim}/768) = {dmodel_lr_scale:.6f}")
+
+        param_groups = [
+            dict(kind="adamw", params=lm_head_params, lr=unembedding_lr * dmodel_lr_scale, betas=(0.8, 0.96), eps=1e-10, weight_decay=0.01),
+            dict(kind="adamw", params=embedding_params, lr=embedding_lr * dmodel_lr_scale, betas=(0.8, 0.995), eps=1e-10, weight_decay=0.001),
+            dict(kind="adamw", params=value_embeds_params, lr=embedding_lr * dmodel_lr_scale * 0.5, betas=(0.8, 0.995), eps=1e-10, weight_decay=0.01),
+            dict(kind="adamw", params=resid_params, lr=scalar_lr * 0.01, betas=(0.8, 0.95), eps=1e-10, weight_decay=0.05),
+            dict(kind="adamw", params=x0_params, lr=scalar_lr, betas=(0.96, 0.95), eps=1e-10, weight_decay=0.0),  # higher beta1 for x0
+            dict(kind="adamw", params=smear_params, lr=0.2, betas=(0.8, 0.95), eps=1e-10, weight_decay=0.0),
+        ]
+        # Muon groups: one group per distinct shape so each stacks into a single (K, m, n)
+        # tensor for the batched orthogonalization.
+        for shape in sorted({p.shape for p in matrix_params}):
+            group_params = [p for p in matrix_params if p.shape == shape]
+            param_groups.append(dict(
+                kind="muon", params=group_params, lr=matrix_lr,
+                momentum=0.95, ns_steps=5, beta2=0.9, weight_decay=weight_decay,
+            ))
+
+        ddp = dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1
+        Factory = DistMuonAdamW if ddp else MuonAdamW
+        optimizer = Factory(param_groups)
+        for group in optimizer.param_groups:
+            group["initial_lr"] = group["lr"]
+        return optimizer
 
     # ── Forward ───────────────────────────────────────────────────────
 
@@ -521,7 +599,68 @@ class GPT(nn.Module):
         First 12 channels of the block-normed x; 3×sigmoid; ONE GATE PER KV HEAD.
         ═══════════════════════════════════════════════════════════════════════
         """
-        raise NotImplementedError
+        B, T = idx.size()
+        # RoPE cache: assert we haven't outgrown it; it must live on idx's device in COMPUTE_DTYPE.
+        assert T <= self.cos.size(1), f"Sequence length {T} exceeds rotary cache {self.cos.size(1)}"
+        assert idx.device == self.cos.device, f"idx {idx.device} != rotary {self.cos.device}"
+        assert self.cos.dtype == COMPUTE_DTYPE, f"rotary dtype {self.cos.dtype} != {COMPUTE_DTYPE}"
+
+        # 1. RoPE is offset by the current cache position during KV-cache inference.
+        T0 = 0 if kv_cache is None else kv_cache.get_pos()
+        cos_sin = self.cos[:, T0:T0 + T], self.sin[:, T0:T0 + T]
+
+        # 2. Embed → cast to compute dtype → norm (norm AFTER embed).
+        x = self.transformer.wte(idx)
+        x = x.to(COMPUTE_DTYPE)
+        x = F.rms_norm(x, (x.size(-1),))
+
+        # 3. Smear: mix previous token's embedding into the current position.
+        if kv_cache is None:
+            assert T > 1, "Training forward pass should have T > 1"
+            gate = self.smear_lambda.to(x.dtype) * torch.sigmoid(self.smear_gate(x[:, 1:, :24]))
+            x = torch.cat([x[:, :1], x[:, 1:] + gate * x[:, :-1]], dim=1)
+        else:
+            x_pre_smear = kv_cache.prev_embedding
+            kv_cache.prev_embedding = x[:, -1:, :]
+            if T > 1:
+                # Prefill: same as training.
+                gate = self.smear_lambda.to(x.dtype) * torch.sigmoid(self.smear_gate(x[:, 1:, :24]))
+                x = torch.cat([x[:, :1], x[:, 1:] + gate * x[:, :-1]], dim=1)
+            elif x_pre_smear is not None:
+                # Decode: single token, use the cached previous embedding.
+                gate = self.smear_lambda.to(x.dtype) * torch.sigmoid(self.smear_gate(x[:, :, :24]))
+                x = x + gate * x_pre_smear
+
+        # 4-7. Transformer trunk with per-layer residual/x0 blending and mid-layer backout.
+        x0 = x  # captured AFTER smear
+        n_layer = self.config.n_layer
+        backout_layer = n_layer // 2
+        x_backout = None
+        for i, block in enumerate(self.transformer.h):
+            x = self.resid_lambdas[i] * x + self.x0_lambdas[i] * x0
+            ve = self.value_embeds[str(i)](idx).to(x.dtype) if str(i) in self.value_embeds else None
+            x = block(x, ve, cos_sin, self.window_sizes[i], kv_cache)
+            if i == backout_layer:
+                x_backout = x
+        if x_backout is not None:
+            x = x - self.backout_lambda.to(x.dtype) * x_backout
+
+        # 8-9. Final norm → logits → crop padded vocab → fp32 → soft-cap.
+        x = F.rms_norm(x, (x.size(-1),))
+        softcap = 15
+        logits = self.lm_head(x)
+        logits = logits[..., :self.config.vocab_size]
+        logits = logits.float()
+        logits = softcap * torch.tanh(logits / softcap)
+
+        # 10. Loss (training) or logits (inference).
+        if targets is not None:
+            loss = F.cross_entropy(
+                logits.view(-1, logits.size(-1)), targets.view(-1),
+                ignore_index=-1, reduction=loss_reduction,
+            )
+            return loss
+        return logits
 
     # ── Inference ─────────────────────────────────────────────────────
 
@@ -554,4 +693,25 @@ class GPT(nn.Module):
         draws, so they only agree token-for-token at temperature=0 (greedy) — which is
         exactly what nanochat's own self-test uses. Don't expect seeded equivalence.
         """
-        raise NotImplementedError
+        assert isinstance(tokens, list)
+        device = self.get_device()
+        rng = None
+        if temperature > 0:
+            rng = torch.Generator(device=device)
+            rng.manual_seed(seed)
+        ids = torch.tensor([tokens], dtype=torch.long, device=device)  # add batch dim
+        for _ in range(max_tokens):
+            logits = self.forward(ids)  # (B, T, vocab_size), no KV cache
+            logits = logits[:, -1, :]   # (B, vocab_size)
+            # nanochat applies top-k BEFORE dividing by temperature (gpt.py:501-506).
+            if top_k is not None and top_k > 0:
+                v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+                logits[logits < v[:, [-1]]] = -float("Inf")
+            if temperature > 0:
+                logits = logits / temperature
+                probs = F.softmax(logits, dim=-1)
+                next_ids = torch.multinomial(probs, num_samples=1, generator=rng)
+            else:
+                next_ids = torch.argmax(logits, dim=-1, keepdim=True)
+            ids = torch.cat((ids, next_ids), dim=1)
+            yield next_ids.item()
