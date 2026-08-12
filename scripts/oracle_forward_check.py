@@ -9,6 +9,7 @@ the same ops, logits should be (near-)identical and argmax must agree 100%.
 """
 import os
 import sys
+import glob
 import json
 
 import torch
@@ -19,15 +20,16 @@ from nanochat.gpt import GPT as NanoGPT, GPTConfig as NanoConfig
 from archerchat.model import GPT as ArcherGPT, GPTConfig as ArcherConfig
 from archerchat.common import COMPUTE_DTYPE
 
-CKPT = os.path.expanduser("~/.cache/nanochat/base_checkpoints/d8")
+# checkpoint dir from argv (default d8); works for any depth via file globbing
+CKPT = os.path.expanduser(sys.argv[1] if len(sys.argv) > 1 else "~/.cache/nanochat/base_checkpoints/d8")
 device = torch.device("cuda")
-print(f"device={device}  COMPUTE_DTYPE={COMPUTE_DTYPE}")
+print(f"device={device}  COMPUTE_DTYPE={COMPUTE_DTYPE}  ckpt={CKPT}")
 
 # ---- load config + weights ---------------------------------------------------
-with open(os.path.join(CKPT, "meta_001920.json")) as f:
+with open(glob.glob(os.path.join(CKPT, "meta_*.json"))[0]) as f:
     cfg_kwargs = json.load(f)["model_config"]
 print("config:", cfg_kwargs)
-state = torch.load(os.path.join(CKPT, "model_001920.pt"), map_location=device, weights_only=False)
+state = torch.load(glob.glob(os.path.join(CKPT, "model_*.pt"))[0], map_location=device, weights_only=False)
 
 
 def build(gpt_cls, cfg_cls, sd):

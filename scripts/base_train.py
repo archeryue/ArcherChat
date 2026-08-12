@@ -75,6 +75,9 @@ def parse_args():
                         "eval_tokens // (device_batch_size * T * world_size) (nanochat: 80*2^19)")
     p.add_argument("--checkpoint-every", type=int, default=1000,
                    help="Save checkpoint every N gradient steps")
+    p.add_argument("--max-steps", type=int, default=None,
+                   help="Debug: stop after this many optimizer steps. Schedules still use "
+                        "the full total_steps, and checkpoints are NOT written (pipeline smoke test).")
     p.add_argument("--device", type=str, default=None,
                    help="Force device type: cuda | cpu | mps (default: auto-detect)")
 
@@ -94,6 +97,8 @@ def run_pretrain(args, rank, local_rank, world_size, device, device_type):
     n_tokens_target    = scale["n_tokens"]
 
     total_steps = n_tokens_target // total_batch_tokens   # floor like nanochat
+    # Debug cap: run fewer steps but keep the schedule denominator at the true total_steps.
+    run_steps = total_steps if args.max_steps is None else min(total_steps, args.max_steps)
     tokens_per_rank_micro = B * T
     assert total_batch_tokens % (tokens_per_rank_micro * world_size) == 0, (
         f"total_batch_tokens ({total_batch_tokens}) must be divisible by "
@@ -195,7 +200,8 @@ def run_pretrain(args, rank, local_rank, world_size, device, device_type):
     peak_flops = (get_peak_flops(torch.cuda.get_device_name(local_rank))
                   if device_type == "cuda" else float("inf"))
     print0(f"flops/token={flops_per_token:.2e}  peak_flops={peak_flops:.2e}")
-    print0(f"training step {start_step} → {total_steps}\n")
+    print0(f"training step {start_step} → {run_steps}"
+           + (f" (capped from {total_steps} by --max-steps)" if args.max_steps is not None else "") + "\n")
 
     # ─────────────────────────────────────────────────────────────────────
     # Training loop
@@ -205,8 +211,8 @@ def run_pretrain(args, rank, local_rank, world_size, device, device_type):
     synchronize = torch.cuda.synchronize if device_type == "cuda" else (lambda: None)
     loader_state = None   # updated each micro-step; persisted in every checkpoint meta
 
-    for step in range(start_step, total_steps + 1):
-        last_step = step == total_steps
+    for step in range(start_step, run_steps + 1):
+        last_step = step == run_steps
 
         # ── Validation (step 0, every eval_every steps, and the final step) ─
         if last_step or step % args.eval_every == 0:
@@ -218,8 +224,9 @@ def run_pretrain(args, rank, local_rank, world_size, device, device_type):
             if rank == 0:
                 tracker.log({"step": step, "val/bpb": val_bpb})
 
-        # ── Checkpoint (skip step == start_step: on resume it already exists) ─
-        if step > start_step and (step % args.checkpoint_every == 0 or last_step):
+        # ── Checkpoint (skip step == start_step: on resume it already exists;
+        #    skip entirely in --max-steps debug mode so we don't litter ckpt_dir) ─
+        if args.max_steps is None and step > start_step and (step % args.checkpoint_every == 0 or last_step):
             meta_data = {
                 "step": step,
                 "phase": "pretrain",
@@ -289,7 +296,8 @@ def run_pretrain(args, rank, local_rank, world_size, device, device_type):
                 f"tok/s {tok_per_sec:,.0f} | mfu {mfu:.1%}"
             )
 
-    print0(f"\ndone: pretrain d{args.depth}  ({total_steps} steps)")
+    print0(f"\ndone: pretrain d{args.depth}  ({run_steps} steps"
+           + (" — debug/--max-steps run" if args.max_steps is not None else "") + ")")
     tracker.finish()
 
 
