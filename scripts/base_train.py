@@ -78,6 +78,10 @@ def parse_args():
     p.add_argument("--max-steps", type=int, default=None,
                    help="Debug: stop after this many optimizer steps. Schedules still use "
                         "the full total_steps, and checkpoints are NOT written (pipeline smoke test).")
+    p.add_argument("--ckpt-dir", type=str, default=None,
+                   help="Where to write checkpoints (default: base_checkpoints/d{depth}). "
+                        "Set this for ArcherChat-trained runs so they don't collide with the "
+                        "Stage-1 nanochat oracle checkpoints.")
     p.add_argument("--device", type=str, default=None,
                    help="Force device type: cuda | cpu | mps (default: auto-detect)")
 
@@ -128,7 +132,7 @@ def run_pretrain(args, rank, local_rank, world_size, device, device_type):
         window_pattern = args.window_pattern,
     )
     base_dir = get_base_dir()
-    ckpt_dir = os.path.join(base_dir, "base_checkpoints", f"d{args.depth}")
+    ckpt_dir = args.ckpt_dir or os.path.join(base_dir, "base_checkpoints", f"d{args.depth}")
     start_step    = 0
     loader_resume = None
 
