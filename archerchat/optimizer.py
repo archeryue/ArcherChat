@@ -304,6 +304,12 @@ def _muon_update(
         (a) Nesterov momentum  (b) Polar Express  (c) NorMuon variance reduction
         (d) cautious weight decay + update
     """
+    # Cast the scalar hyperparams to the working dtype (nanochat does the same via 0-D
+    # tensors: momentum_t.to(grad.dtype), lr_t/wd_t/beta2_t.to(g.dtype)). Using Python
+    # floats instead lets `lr*wd` etc. compute in fp64, which seeds a ~1e-7 difference
+    # that the Muon momentum feedback amplifies on non-square shapes.
+    momentum = torch.as_tensor(momentum, dtype=stacked_grads.dtype, device=stacked_grads.device)
+
     # (a) Nesterov momentum — lerp_ is in-place on the grad stack
     momentum_buffer.lerp_(stacked_grads, 1 - momentum)
     g = stacked_grads.lerp_(momentum_buffer, momentum)
@@ -312,6 +318,7 @@ def _muon_update(
     g = polar_express(g, ns_steps)
 
     # (c) NorMuon variance reduction — this is what beta2 is for
+    beta2 = torch.as_tensor(beta2, dtype=g.dtype, device=g.device)
     v_mean = g.float().square().mean(dim=red_dim, keepdim=True)
     red_dim_size = g.size(red_dim)
     v_norm = (v_mean.sum(dim=(-2, -1), keepdim=True) * red_dim_size).sqrt()
@@ -322,6 +329,8 @@ def _muon_update(
     g = g * (step_size * (v_norm / v_norm_new.clamp_min(1e-10))).to(g.dtype)
 
     # (d) cautious weight decay + parameter update — decay only where g and p agree in sign
+    lr = torch.as_tensor(lr, dtype=g.dtype, device=g.device)
+    wd = torch.as_tensor(wd, dtype=g.dtype, device=g.device)
     mask = (g * stacked_params) >= 0
     stacked_params.sub_(lr * g + lr * wd * stacked_params * mask)
 
