@@ -11,6 +11,7 @@ import pickle
 import sys
 
 import pytest
+import torch
 
 import archerchat.sft as sft
 from archerchat.sft import build_example, make_sft_dataloader, render_conversation
@@ -26,10 +27,26 @@ CONVERSATION_3TURN = [
 
 
 class FakeTokenizer:
-    """render_conversation() is pure text; the loader only needs the BOS id."""
+    """render_conversation() is pure text; build_example() also needs encode() and
+    encode_special(). One-char-per-token encode keeps the mask arithmetic obvious.
+    """
+
+    _SPECIALS = [
+        "<|bos|>", "<|user_start|>", "<|user_end|>",
+        "<|assistant_start|>", "<|assistant_end|>",
+        "<|python_start|>", "<|python_end|>",
+        "<|output_start|>", "<|output_end|>",
+    ]
 
     def get_bos_token_id(self):
         return 0
+
+    def encode_special(self, s):
+        # Distinct high ids so specials never collide with content (ord < 0x110000).
+        return 2_000_000 + self._SPECIALS.index(s)
+
+    def encode(self, text):
+        return [ord(c) for c in text]  # one token per character, fully deterministic
 
 
 class TestRenderConversation:
@@ -128,25 +145,59 @@ class TestRenderConversation:
             assert oracle.decode(ids) == render_conversation(oracle, conversation)
 
 
-class TestSftDataloader:
-    # ---------------------------------------------------------------------
-    # build_example() is the student's homework and is still a stub. The two
-    # tests below pin that fact down; flip them into real tests (mask values,
-    # packing, progress/last_step) once build_example() lands.
-    # ---------------------------------------------------------------------
-    def test_build_example_is_not_implemented_yet(self):
-        with pytest.raises(NotImplementedError):
-            build_example(FakeTokenizer(), CONVERSATION_3TURN)
+class TestBuildExample:
+    def test_mask_is_assistant_only(self):
+        # 3-turn conv after system-merge → assistant content "4" (1 char) + <|assistant_end|>.
+        ids, mask = build_example(FakeTokenizer(), CONVERSATION_3TURN)
+        assert ids.dtype == torch.long
+        assert mask.dtype == torch.bool
+        assert ids.shape == mask.shape
+        assert not bool(mask[0])                    # BOS never supervised
+        # exactly the assistant content tokens (len("4")=1) plus one <|assistant_end|>
+        assert int(mask.sum()) == 1 + 1
 
-    def test_dataloader_propagates_build_example_stub(self, monkeypatch):
-        monkeypatch.setattr(sft, "build_sft_dataset", lambda split: [
-            {"messages": CONVERSATION_3TURN}
-        ] * 4)
-        loader = make_sft_dataloader(FakeTokenizer(), B=2, T=8, split="train", device="cpu")
-        with pytest.raises(NotImplementedError) as excinfo:
-            next(loader)
-        # The loader must go through build_example(), not reimplement it.
-        assert any(entry.name == "build_example" for entry in excinfo.traceback)
+    def test_mask_supervises_terminator_not_opener(self):
+        ids, mask = build_example(FakeTokenizer(), CONVERSATION_3TURN)
+        tok = FakeTokenizer()
+        assistant_start = tok.encode_special("<|assistant_start|>")
+        assistant_end = tok.encode_special("<|assistant_end|>")
+        # opener not supervised, terminator supervised
+        opener_pos = (ids == assistant_start).nonzero().flatten().tolist()
+        end_pos = (ids == assistant_end).nonzero().flatten().tolist()
+        assert opener_pos and all(not bool(mask[p]) for p in opener_pos)
+        assert end_pos and all(bool(mask[p]) for p in end_pos)
+
+    def test_tool_call_supervised_output_not(self):
+        conv = [
+            {"role": "user", "content": "2+2?"},
+            {"role": "assistant", "content": [
+                {"type": "text", "text": "hi"},
+                {"type": "python", "text": "2+2"},          # supervised (incl. delimiters)
+                {"type": "python_output", "text": "4"},     # NOT supervised
+                {"type": "text", "text": "done"},
+            ]},
+        ]
+        ids, mask = build_example(FakeTokenizer(), conv)
+        tok = FakeTokenizer()
+        out_start = tok.encode_special("<|output_start|>")
+        py_start = tok.encode_special("<|python_start|>")
+        assert all(not bool(mask[p]) for p in (ids == out_start).nonzero().flatten().tolist())
+        assert all(bool(mask[p]) for p in (ids == py_start).nonzero().flatten().tolist())
+
+
+class TestSftDataloader:
+    def test_dataloader_yields_real_batches(self, monkeypatch):
+        import torch
+        # short conversations so several pack into a row (T=32 → row_capacity 33)
+        conv = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "ok"}]
+        monkeypatch.setattr(sft, "build_sft_dataset", lambda split: [{"messages": conv}] * 8)
+        loader = make_sft_dataloader(FakeTokenizer(), B=2, T=32, split="train", device="cpu")
+        x, y, info = next(loader)
+        assert x.shape == (2, 32) and y.shape == (2, 32)
+        assert x.dtype == torch.long and y.dtype == torch.long
+        assert set(info) == {"progress", "epoch", "last_step"}
+        # mask plumbing: some targets are ignored (-1) and some are supervised assistant tokens
+        assert (y == -1).any() and (y != -1).any()
 
     def test_dataloader_rejects_bad_split(self):
         with pytest.raises(AssertionError):
