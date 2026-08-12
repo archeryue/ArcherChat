@@ -82,6 +82,19 @@ def _patch_missing_keys(model_data: dict, config) -> None:
         model_data["x0_lambdas"] = torch.zeros(config.n_layer)
 
 
+def _remap_nanochat_keys(key: str) -> str:
+    """Translate nanochat's module names to ArcherChat's so Stage-1 (nanochat-trained)
+    checkpoints load into our GPT under strict=True:
+        nanochat:   transformer.h.N.attn.c_proj  /  transformer.h.N.mlp.*
+        archerchat: transformer.h.N.attn.c_o      /  transformer.h.N.ffn.*
+    Idempotent — a checkpoint we saved ourselves already uses c_o/ffn, so both
+    replacements are no-ops on it.
+    """
+    key = key.replace(".attn.c_proj.", ".attn.c_o.")
+    key = key.replace(".mlp.", ".ffn.")
+    return key
+
+
 def save_checkpoint(
     checkpoint_dir: str,
     step: int,
@@ -234,6 +247,9 @@ def build_model(
                       for k, v in model_data.items()}
     # torch.compile prepends "_orig_mod." to every key if a compiled model was saved.
     model_data = {k.removeprefix("_orig_mod."): v for k, v in model_data.items()}
+    # Stage-1 checkpoints were saved by nanochat (attn.c_proj / block.mlp naming); remap
+    # to our attn.c_o / block.ffn so they load strict=True. No-op on our own checkpoints.
+    model_data = {_remap_nanochat_keys(k): v for k, v in model_data.items()}
 
     model_config_kwargs = dict(meta_data["model_config"])
     _patch_missing_config_keys(model_config_kwargs)
