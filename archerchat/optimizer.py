@@ -286,39 +286,40 @@ def polar_express(X: torch.Tensor, ns_steps: int = 5) -> torch.Tensor:
     return X
 
 
-@torch.no_grad()
-def _muon_update(
+# The Muon and AdamW steps are fused + `@torch.compile`d to match nanochat's bf16
+# kernel behavior EXACTLY. Eager and compiled diverge in bf16 (fusion keeps intermediates
+# in fp32 longer / different reduction order); over a full run that drift moves the
+# converged loss. Scalars are passed as 0-D CPU tensors and .fill_()'d each step so that
+# schedule-driven LR/momentum changes do NOT trigger a recompile (dynamic=False specializes
+# Python floats -> recompile every step). This mirrors nanochat/optim.py.
+
+
+@torch.compile(dynamic=False, fullgraph=True)
+def _muon_step_fused(
     stacked_grads: torch.Tensor,
     stacked_params: torch.Tensor,
     momentum_buffer: torch.Tensor,
     second_momentum_buffer: torch.Tensor,
-    momentum: float,
-    lr: float,
-    wd: float,
-    beta2: float,
+    momentum_t: torch.Tensor,
+    lr_t: torch.Tensor,
+    wd_t: torch.Tensor,
+    beta2_t: torch.Tensor,
     ns_steps: int,
     red_dim: int,
 ) -> None:
-    """
-    The four-stage Muon step, in-place on stacked_params (nanochat optim.py:110-148):
-        (a) Nesterov momentum  (b) Polar Express  (c) NorMuon variance reduction
-        (d) cautious weight decay + update
-    """
-    # Cast the scalar hyperparams to the working dtype (nanochat does the same via 0-D
-    # tensors: momentum_t.to(grad.dtype), lr_t/wd_t/beta2_t.to(g.dtype)). Using Python
-    # floats instead lets `lr*wd` etc. compute in fp64, which seeds a ~1e-7 difference
-    # that the Muon momentum feedback amplifies on non-square shapes.
-    momentum = torch.as_tensor(momentum, dtype=stacked_grads.dtype, device=stacked_grads.device)
-
-    # (a) Nesterov momentum — lerp_ is in-place on the grad stack
+    """The four-stage Muon step, in-place on stacked_params (nanochat optim.py:110-148):
+    (a) Nesterov momentum  (b) Polar Express  (c) NorMuon variance reduction
+    (d) cautious weight decay + update."""
+    # (a) Nesterov momentum
+    momentum = momentum_t.to(stacked_grads.dtype)
     momentum_buffer.lerp_(stacked_grads, 1 - momentum)
     g = stacked_grads.lerp_(momentum_buffer, momentum)
 
-    # (b) Polar Express orthogonalization
+    # (b) Polar Express — fullgraph compile inlines this into the fused kernel
     g = polar_express(g, ns_steps)
 
     # (c) NorMuon variance reduction — this is what beta2 is for
-    beta2 = torch.as_tensor(beta2, dtype=g.dtype, device=g.device)
+    beta2 = beta2_t.to(g.dtype)
     v_mean = g.float().square().mean(dim=red_dim, keepdim=True)
     red_dim_size = g.size(red_dim)
     v_norm = (v_mean.sum(dim=(-2, -1), keepdim=True) * red_dim_size).sqrt()
@@ -328,11 +329,36 @@ def _muon_update(
     v_norm_new = scaled_sq_sum.sum(dim=(-2, -1), keepdim=True).sqrt()
     g = g * (step_size * (v_norm / v_norm_new.clamp_min(1e-10))).to(g.dtype)
 
-    # (d) cautious weight decay + parameter update — decay only where g and p agree in sign
-    lr = torch.as_tensor(lr, dtype=g.dtype, device=g.device)
-    wd = torch.as_tensor(wd, dtype=g.dtype, device=g.device)
+    # (d) cautious weight decay + update — decay only where g and p agree in sign
+    lr = lr_t.to(g.dtype)
+    wd = wd_t.to(g.dtype)
     mask = (g * stacked_params) >= 0
     stacked_params.sub_(lr * g + lr * wd * stacked_params * mask)
+
+
+@torch.compile(dynamic=False, fullgraph=True)
+def _adamw_step_fused(
+    p: torch.Tensor,
+    grad: torch.Tensor,
+    exp_avg: torch.Tensor,
+    exp_avg_sq: torch.Tensor,
+    step_t: torch.Tensor,
+    lr_t: torch.Tensor,
+    beta1_t: torch.Tensor,
+    beta2_t: torch.Tensor,
+    eps_t: torch.Tensor,
+    wd_t: torch.Tensor,
+) -> None:
+    """Fused AdamW step (nanochat optim.py:21-50). Decoupled WD applied first; step is
+    1-indexed; eps is OUTSIDE the sqrt."""
+    p.mul_(1 - lr_t * wd_t)
+    exp_avg.lerp_(grad, 1 - beta1_t)
+    exp_avg_sq.lerp_(grad.square(), 1 - beta2_t)
+    bias1 = 1 - beta1_t ** step_t
+    bias2 = 1 - beta2_t ** step_t
+    denom = (exp_avg_sq / bias2).sqrt() + eps_t
+    step_size = lr_t / bias1
+    p.add_(exp_avg / denom, alpha=-step_size)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -432,11 +458,17 @@ class MuonAdamW(torch.optim.Optimizer):
         There is NO `nesterov` flag — Nesterov momentum is unconditional.
         """
         super().__init__(param_groups, defaults={})
+        # 0-D CPU tensors reused across steps: .fill_()'d each step so schedule-driven
+        # value changes don't recompile the fused kernels (nanochat optim.py:182-194).
+        z = lambda: torch.tensor(0.0, dtype=torch.float32, device="cpu")
+        self._adamw_step_t, self._adamw_lr_t = z(), z()
+        self._adamw_beta1_t, self._adamw_beta2_t = z(), z()
+        self._adamw_eps_t, self._adamw_wd_t = z(), z()
+        self._muon_momentum_t, self._muon_lr_t = z(), z()
+        self._muon_wd_t, self._muon_beta2_t = z(), z()
 
     def _step_adamw(self, group: dict) -> None:
         """AdamW update for each param in the group individually."""
-        beta1, beta2 = group["betas"]
-        lr, eps, wd = group["lr"], group["eps"], group["weight_decay"]
         for p in group["params"]:
             if p.grad is None:
                 continue
@@ -446,17 +478,18 @@ class MuonAdamW(torch.optim.Optimizer):
                 state["step"] = 0
                 state["exp_avg"] = torch.zeros_like(p)
                 state["exp_avg_sq"] = torch.zeros_like(p)
-            exp_avg, exp_avg_sq = state["exp_avg"], state["exp_avg_sq"]
             state["step"] += 1
-            step = state["step"]
-            # decoupled weight decay, LR-scaled, applied FIRST
-            p.mul_(1 - lr * wd)
-            exp_avg.lerp_(grad, 1 - beta1)
-            exp_avg_sq.lerp_(grad.square(), 1 - beta2)
-            bias1 = 1 - beta1 ** step
-            bias2 = 1 - beta2 ** step
-            denom = (exp_avg_sq / bias2).sqrt() + eps  # eps OUTSIDE the sqrt
-            p.add_(exp_avg / denom, alpha=-(lr / bias1))
+            self._adamw_step_t.fill_(state["step"])
+            self._adamw_lr_t.fill_(group["lr"])
+            self._adamw_beta1_t.fill_(group["betas"][0])
+            self._adamw_beta2_t.fill_(group["betas"][1])
+            self._adamw_eps_t.fill_(group["eps"])
+            self._adamw_wd_t.fill_(group["weight_decay"])
+            _adamw_step_fused(
+                p, grad, state["exp_avg"], state["exp_avg_sq"],
+                self._adamw_step_t, self._adamw_lr_t, self._adamw_beta1_t,
+                self._adamw_beta2_t, self._adamw_eps_t, self._adamw_wd_t,
+            )
 
     def _step_muon(self, group: dict) -> None:
         """Muon update for all params in the group (stacked by shape for efficiency)."""
@@ -480,11 +513,14 @@ class MuonAdamW(torch.optim.Optimizer):
         stacked_grads = torch.stack([p.grad for p in params])
         stacked_params = torch.stack(params)
         # per-group LR shape correction: FFN up-proj (4C, C) trains at 2x the nominal LR
-        lr = group["lr"] * max(1.0, shape[-2] / shape[-1]) ** 0.5
-        beta2 = group["beta2"] if group["beta2"] is not None else 0.0
-        _muon_update(
+        self._muon_momentum_t.fill_(group["momentum"])
+        self._muon_beta2_t.fill_(group["beta2"] if group["beta2"] is not None else 0.0)
+        self._muon_lr_t.fill_(group["lr"] * max(1.0, shape[-2] / shape[-1]) ** 0.5)
+        self._muon_wd_t.fill_(group["weight_decay"])
+        _muon_step_fused(
             stacked_grads, stacked_params, momentum_buffer, second_momentum_buffer,
-            group["momentum"], lr, group["weight_decay"], beta2, group["ns_steps"], red_dim,
+            self._muon_momentum_t, self._muon_lr_t, self._muon_wd_t, self._muon_beta2_t,
+            group["ns_steps"], red_dim,
         )
         torch._foreach_copy_(params, list(stacked_params.unbind(0)))
 
@@ -545,6 +581,12 @@ class DistMuonAdamW(torch.optim.Optimizer):
         # rank/world_size are read live from the process group in step(); the args are
         # kept only for signature compatibility with model.setup_optimizer's Factory call.
         super().__init__(param_groups, defaults={})
+        z = lambda: torch.tensor(0.0, dtype=torch.float32, device="cpu")
+        self._adamw_step_t, self._adamw_lr_t = z(), z()
+        self._adamw_beta1_t, self._adamw_beta2_t = z(), z()
+        self._adamw_eps_t, self._adamw_wd_t = z(), z()
+        self._muon_momentum_t, self._muon_lr_t = z(), z()
+        self._muon_wd_t, self._muon_beta2_t = z(), z()
 
     # ── AdamW (ZeRO-2 sharded) ──────────────────────────────────────────────
     def _reduce_adamw(self, group: dict, world_size: int) -> dict:
@@ -567,8 +609,11 @@ class DistMuonAdamW(torch.optim.Optimizer):
 
     def _compute_adamw(self, group: dict, info: dict, gather_list: list, rank: int, world_size: int) -> None:
         """Wait for reduce, run the AdamW update on this rank's slice, launch gathers."""
-        beta1, beta2 = group["betas"]
-        lr, eps, wd = group["lr"], group["eps"], group["weight_decay"]
+        self._adamw_lr_t.fill_(group["lr"])
+        self._adamw_beta1_t.fill_(group["betas"][0])
+        self._adamw_beta2_t.fill_(group["betas"][1])
+        self._adamw_eps_t.fill_(group["eps"])
+        self._adamw_wd_t.fill_(group["weight_decay"])
         param_infos = info["param_infos"]
         for p in group["params"]:
             pinfo = param_infos[p]
@@ -585,15 +630,12 @@ class DistMuonAdamW(torch.optim.Optimizer):
                 state["exp_avg"] = torch.zeros_like(p_slice)
                 state["exp_avg_sq"] = torch.zeros_like(p_slice)
             state["step"] += 1
-            step = state["step"]
-            exp_avg, exp_avg_sq = state["exp_avg"], state["exp_avg_sq"]
-            p_slice.mul_(1 - lr * wd)
-            exp_avg.lerp_(grad_slice, 1 - beta1)
-            exp_avg_sq.lerp_(grad_slice.square(), 1 - beta2)
-            bias1 = 1 - beta1 ** step
-            bias2 = 1 - beta2 ** step
-            denom = (exp_avg_sq / bias2).sqrt() + eps
-            p_slice.add_(exp_avg / denom, alpha=-(lr / bias1))
+            self._adamw_step_t.fill_(state["step"])
+            _adamw_step_fused(
+                p_slice, grad_slice, state["exp_avg"], state["exp_avg_sq"],
+                self._adamw_step_t, self._adamw_lr_t, self._adamw_beta1_t,
+                self._adamw_beta2_t, self._adamw_eps_t, self._adamw_wd_t,
+            )
             if not pinfo["is_small"]:
                 future = dist.all_gather_into_tensor(p, p_slice, async_op=True).get_future()
                 gather_list.append(dict(future=future, params=None))
@@ -636,12 +678,15 @@ class DistMuonAdamW(torch.optim.Optimizer):
         if num_owned > 0:
             owned_params = [params[start_idx + i] for i in range(num_owned)]
             stacked_owned = torch.stack(owned_params)
-            lr = group["lr"] * max(1.0, shape[-2] / shape[-1]) ** 0.5
-            beta2 = group["beta2"] if group["beta2"] is not None else 0.0
-            _muon_update(
+            self._muon_momentum_t.fill_(group["momentum"])
+            self._muon_beta2_t.fill_(group["beta2"] if group["beta2"] is not None else 0.0)
+            self._muon_lr_t.fill_(group["lr"] * max(1.0, shape[-2] / shape[-1]) ** 0.5)
+            self._muon_wd_t.fill_(group["weight_decay"])
+            _muon_step_fused(
                 grad_chunk[:num_owned], stacked_owned,
                 state["momentum_buffer"][:num_owned], state["second_momentum_buffer"][:num_owned],
-                group["momentum"], lr, group["weight_decay"], beta2, group["ns_steps"], red_dim,
+                self._muon_momentum_t, self._muon_lr_t, self._muon_wd_t, self._muon_beta2_t,
+                group["ns_steps"], red_dim,
             )
             updated_params[:num_owned].copy_(stacked_owned)
         if num_owned < chunk_size:
