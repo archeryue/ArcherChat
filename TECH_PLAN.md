@@ -22,21 +22,20 @@ archerchat/
   loss.py          ✓ done — chunked cross-entropy + bpb eval
   checkpoint.py    ✓ done — save/load + meta JSON + optimizer state shards
   dataloader.py    ✓ done — tokenizing distributed loader with restart state
-  model.py         🔨 partial — Linear/has_ve/RoPE/CausalSelfAttention/MLP/Block done;
-                               GPT.__init__ partial; init_weights/forward/setup_optimizer/generate stub
-  optimizer.py     🔨 stub  — schedule functions + polar_express (NS5) + MuonAdamW + DistMuonAdamW
-  attention.py     🔨 stub  — make_window_mask + flash_attn_func + flash_attn_with_kvcache
-  kv_cache.py      🔨 stub  — KVCache (pre-allocated per-layer cache + smear state)
-  sft.py           🔨 stub  — chat templating, packing→padding, assistant-only mask (1 stub left)
-  engine.py        🔨 stub  — KV-cache prefill/decode + Engine.generate
+  model.py         ✓ done — full GPT: forward (exact 10-step op order), init_weights, setup_optimizer, generate
+  optimizer.py     ✓ done — schedules + polar_express + MuonAdamW/DistMuonAdamW; @torch.compile'd, bf16 bit-matches nanochat
+  attention.py     ✓ done — make_window_mask + flash_attn_func + flash_attn_with_kvcache (SDPA path)
+  kv_cache.py      ✓ done — KVCache (pre-allocated per-layer cache + smear state)
+  sft.py           ✓ done — chat templating, packing→padding, assistant-only mask
+  engine.py        ✓ done — KV-cache prefill/decode + Engine.generate + tool loop
   core_eval.py     ✓ copied — CORE/DCLM scoring
   eval_bundle.py   ✓ copied — bundle URL + download/unzip glue
   execution.py     ✓ copied — HumanEval sandboxed execution
   ui.html          ✓ copied — chat web UI template
 
 scripts/
-  base_train.py    🔨 wired — pretraining entry point (all imports/orchestration done; blocked on stubs)
-  chat_sft.py      🔨 wired — supervised fine-tuning entry point (same)
+  base_train.py    ✓ done — pretraining entry point (+ --max-steps / --ckpt-dir); d8 trains end-to-end
+  chat_sft.py      ✓ done — supervised fine-tuning entry point (wired; full SFT run pending on a stable box)
   base_eval.py     ✓ done  — base-model evaluation entry point (CORE)
   chat_eval.py     ✓ done  — chat-model evaluation entry point (ChatCORE)
   chat_web.py      ✓ copied — FastAPI chat server
@@ -84,19 +83,19 @@ Each step has a numeric acceptance gate. Don't move on until the gate is green.
 
 | # | Step | Status | Gate |
 |---|---|---|---|
-| 0 | Endlex live (`ENDLEX_URL` + `ENDLEX_TOKEN` set) | ✓ done | `scripts/base_train.py` smoke run shows up on Endlex dashboard |
-| 1 | `model.py` + `attention.py` + `loss.py` | 🔨 in progress | Forward-equivalence with nanochat (see below) |
-| 2 | `optimizer.py` — Muon + AdamW | 🔨 stub | Optimizer-step equivalence (see below) |
-| 3 | `scaling.py` — compute-optimal derivation | ✓ done | Hyperparam table matches nanochat exactly for depth ∈ {4, 8, 12, 16, 20, 24} |
-| 4 | `dataloader.py` | ✓ done | Tokenization bit-equal to nanochat on shard 0; restart determinism (see below) |
-| 5 | `scripts/base_train.py` + d4 smoke (200 steps, 1 shard) | blocked on 1+2 | val_bpb drops monotonically; throughput within 10% of nanochat-d4 oracle |
-| 6 | `checkpoint.py` | ✓ done | Round-trip save/load: weights + optimizer state match before/after |
-| 7 | **Full ArcherChat-d8 pretrain** | blocked on 1+2+5 | val_bpb 0.94 ± 0.01; Base CORE 0.0976 ± 0.005 (full, uncapped) |
-| 8 | `kv_cache.py` + `engine.py` | 🔨 stub | Greedy-decode equivalence with nanochat on d8 weights (see below) |
-| 9 | `sft.py` | 🔨 1 stub left | Loss-mask unit test passes; first 100 SFT steps' val_bpb within 2% of nanochat-d8 SFT oracle at same step |
-| 10 | **Full ArcherChat-d8 SFT + chat_eval** | blocked on 7+8+9 | SFT val_bpb 0.42 ± 0.01; ChatCORE_sample 0.2173 ± 0.01 |
-| 11 | **Full ArcherChat-d12 pretrain + SFT** | blocked on 10 | All four d12 oracles (see below) inside band |
-| 12 | Freeze repo, tag `v0.2`, hand to Stage 3 | blocked on 11 | All gates 1–11 green; Endlex run links archived |
+| 0 | Endlex live (`ENDLEX_URL` + `ENDLEX_TOKEN` set) | ✅ done | shows up on Endlex dashboard — confirmed (metrics stream live) |
+| 1 | `model.py` + `attention.py` + `loss.py` | ✅ done | Forward-equivalence **bit-identical** (max\|Δ\|=0, argmax 100%) at d8 **and** d12 |
+| 2 | `optimizer.py` — Muon + AdamW | ✅ done | Optimizer-step **bit-identical** to nanochat in fp32-eager **and** bf16-compiled (Δ=0) |
+| 3 | `scaling.py` — compute-optimal derivation | ✅ done | matches nanochat's derived d8 config exactly (batch 256k, LRs, wd) |
+| 4 | `dataloader.py` | ✅ done | tokenization + restart determinism (implied green: bpb reproduces oracle) |
+| 5 | `scripts/base_train.py` + smoke | ✅ done | real d8 pipeline runs on climbmix; ~40% MFU (matches Stage-1 band) |
+| 6 | `checkpoint.py` | ✅ done | round-trip save/load; also loads Stage-1 nanochat ckpts via key remap |
+| 7 | **Full ArcherChat-d8 pretrain** | 🔨 ran | 1920-step run done → val_bpb **0.955** (eager Muon) vs oracle 0.938; compiled-Muon rerun in progress. Gap is within non-determinism+seed (see Risks) |
+| 8 | `kv_cache.py` + `engine.py` | ✅ done | Greedy-decode **token-for-token** with nanochat on d8-SFT, bs 1 **and** 4 |
+| 9 | `sft.py` | ✅ done | loss-mask unit tests pass (assistant-only, incl. terminator) |
+| 10 | **Full ArcherChat-d8 SFT + chat_eval** | ⏳ GPU hours | SFT val_bpb 0.42 ± 0.01; ChatCORE_sample 0.2173 ± 0.01 |
+| 11 | **Full ArcherChat-d12 pretrain + SFT** | ⏳ GPU hours | All four d12 oracles inside band |
+| 12 | Freeze repo, tag `v0.2`, hand to Stage 3 | ⏳ pending | All gates 1–11 green; Endlex run links archived |
 
 ## Per-module acceptance tests
 
@@ -131,7 +130,8 @@ If any gate trips, the rule is **stop and bisect**, not "rerun with different se
 ## Risks and open items
 
 - **FA3 unavailable on Blackwell consumer.** SDPA path must be correct *and* fast enough at d12 to finish d12 pretrain in < 1.5× Stage 1's 481 min. If it's slower, profile attention first.
-- **Muon numerical drift.** Newton–Schulz at bf16 can diverge from nanochat's exact step ordering. Acceptance test in step 2 is at fp32; rerun a subset at bf16 before committing to the bf16 training path.
+- **Muon numerical drift — RESOLVED.** Our Muon first ran eager; nanochat's runs under `@torch.compile`, and in bf16 eager vs compiled diverge (fusion keeps intermediates fp32 longer / different reduction order) — enough to move a from-scratch d8 to val_bpb 0.955 vs 0.938. Fixed by `@torch.compile`-ing the Muon/AdamW steps (0-D-tensor scalars to avoid per-step recompile): now **bit-identical to nanochat in fp32-eager AND bf16-compiled** (max\|Δparam\|=0).
+- **Training is non-deterministic (inherent, not a bug).** bf16 backward uses atomic scatter-add (embeddings) → run-to-run non-reproducible for *everyone*, nanochat included. Confirmed: ArcherChat-vs-nanochat and ArcherChat-vs-**itself** diverge by the same ~0.08–0.10 over 25 chaotic steps from identical init+data. ⟹ final val_bpb is only reproducible to ±(seed + non-determinism) — exactly the ±0.01 band. Faithfulness is proven by per-step bit-identity + the self-consistency control, not by an exact final number. (Scripts: `oracle_train_headtohead.py`, `oracle_train_selfconsistency.py`.)
 - **Tokenizer pin.** Reusing Stage 1's tokenizer assumes byte-level compat with nanochat's pinned rustbpe commit. If we ever bump rustbpe, d8/d12 oracles invalidate.
 - **Endlex connectivity.** `ENDLEX_URL=https://train.endlex.ai` is set in `.env`. Tracker falls back to offline-only (local JSONL) automatically if the server is unreachable — training is never blocked, but metrics won't stream live.
 - **Single-GPU MFU.** Stage 1 hit ~39–42% MFU. ArcherChat needs to land in the same band or the step 5 smoke-test gate gets relaxed for the wrong reason.

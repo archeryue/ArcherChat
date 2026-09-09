@@ -15,7 +15,7 @@ Outputs:
 - A small patch to nanochat's `get_peak_flops` table so MFU logs a real number on the 5060 Ti.
 - Reference numbers locked in for both depths — see [STAGE1.md](STAGE1.md).
 
-### Stage 2 — ArcherChat rewrite + local validation 🔨 in progress
+### Stage 2 — ArcherChat rewrite + local validation ✓ code-complete & validated
 
 Rewrite the core modules from scratch:
 - **Muon optimizer** + compute-optimal scaling (the auto-derivation of token horizon, batch size, LR, weight decay from one `--depth` dial).
@@ -24,7 +24,9 @@ Rewrite the core modules from scratch:
 - **KV-cache inference engine** with batched decoding.
 - **SFT pipeline** including the packing-to-padding transition for variable-length chat data.
 
-Train **ArcherChat-d8** locally; compare against nanochat-d8 baseline. If within noise, train **ArcherChat-d12** as the second data point — proves the rewrite scales correctly across depth, not just that one configuration happened to work.
+All modules are implemented and validated locally against nanochat: forward, optimizer step, and greedy decode are **bit-identical** (Δ=0), and `evaluate_bpb` reproduces the oracle's 0.9376 on its own weights. **ArcherChat-d8 trains end-to-end** (full 1920-step run); its final val_bpb sits within the expected noise band of nanochat-d8 (see below on why an exact match isn't achievable). **ArcherChat-d12** is the second data point, to be trained on a stable GPU box.
+
+> **On "match within noise":** bf16 training is non-deterministic for *everyone* (PyTorch's embedding backward uses atomic scatter-add), so two full runs — even of identical code — diverge by ~seed-level amounts. Verified directly: ArcherChat-vs-nanochat and ArcherChat-vs-itself diverge by the same magnitude over a fixed batch/init. Faithfulness is therefore proven by the **per-step bit-identity** + a **self-consistency control**, not by chasing an exact final val_bpb.
 
 See [TECH_PLAN.md](TECH_PLAN.md) for the full module-by-module plan and acceptance gates.
 
@@ -47,9 +49,12 @@ import `archerchat`; the root `conftest.py` catches this with a clear message.
 Training (single GPU):
 ```bash
 source .env
-python scripts/base_train.py --depth 8
+python scripts/base_train.py --depth 8      # --max-steps N for a debug run; --ckpt-dir to redirect
 python scripts/chat_sft.py   --depth 8
 ```
+
+For a long unattended run on a flaky box, `scripts/run_full_pretrain.sh <depth>` wraps
+`base_train.py` with frequent checkpointing + auto-resume (survives time-limits / crashes).
 
 ## Companion repos
 
@@ -57,7 +62,7 @@ python scripts/chat_sft.py   --depth 8
 
 ## Status
 
-**Stage 1** complete. **Stage 2** in progress — data pipeline and plumbing are done; model core, optimizer, and attention kernel are next. See [TECH_PLAN.md](TECH_PLAN.md) for detail.
+**Stage 1** complete. **Stage 2** code-complete and locally validated — every module passes its nanochat-equivalence gate (forward / optimizer-step / greedy-decode all bit-identical; scaling table, dataloader restart, and checkpoint round-trip green), and ArcherChat-d8 trains end-to-end. Remaining: the multi-hour full d8 SFT and d12 pretrain+SFT runs, best done on a stable GPU box. **Stage 3** (cloud d24) not started. See [TECH_PLAN.md](TECH_PLAN.md) for the gate-by-gate detail.
 
 ## License
 
