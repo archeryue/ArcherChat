@@ -8,7 +8,7 @@ set -u
 
 DEPTH="${1:?usage: run_full_pretrain.sh <depth> [args...]}"; shift || true
 HOME_DIR="$HOME"
-CKPT="$HOME_DIR/.cache/nanochat/base_checkpoints/d${DEPTH}_archer"
+CKPT="${CKPT_DIR:-$HOME_DIR/.cache/nanochat/base_checkpoints/d${DEPTH}_archer}"
 LOG="$HOME_DIR/ArcherChat/d${DEPTH}_full_run.log"
 RUN_NAME="${RUN_NAME:-archerchat-d${DEPTH}-pretrain}"   # Endlex run name (override via env)
 
