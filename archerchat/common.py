@@ -230,8 +230,15 @@ def init_tracker(
     return Tracker(project=project, name=name, config=config, url=url, token=token, **kwargs)
 
 def maybe_upload_checkpoint(run_name: str, step: int, ckpt_dir: str, rank: int) -> None:
-    """Async-upload a freshly saved checkpoint to Endlex (rank 0, only if ENDLEX_URL is set)."""
+    """Async-upload a freshly saved checkpoint to Endlex (rank 0, only if ENDLEX_URL is set).
+
+    Set ENDLEX_UPLOAD_CHECKPOINTS=0 to skip the upload (checkpoints already live on local
+    disk; pushing 300+ MB per checkpoint over a tunnel is slow/flaky). Metric streaming is
+    unaffected — this only gates the large checkpoint file transfer.
+    """
     if rank != 0 or not os.environ.get("ENDLEX_URL"):
+        return
+    if os.environ.get("ENDLEX_UPLOAD_CHECKPOINTS", "1") == "0":
         return
     candidates = {
         f"model_{step:06d}.pt":  os.path.join(ckpt_dir, f"model_{step:06d}.pt"),
