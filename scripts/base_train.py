@@ -39,7 +39,7 @@ from archerchat.scaling    import compute_scale
 from archerchat.optimizer  import get_lr_multiplier, get_muon_momentum, get_weight_decay
 from archerchat.loss       import evaluate_bpb
 from archerchat.dataloader import get_tokenizer, get_token_bytes, make_pretrain_dataloader
-from archerchat.checkpoint import save_checkpoint, load_checkpoint, build_model
+from archerchat.checkpoint import save_checkpoint, load_checkpoint, build_model, prune_checkpoints
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +75,11 @@ def parse_args():
                         "eval_tokens // (device_batch_size * T * world_size) (nanochat: 80*2^19)")
     p.add_argument("--checkpoint-every", type=int, default=1000,
                    help="Save checkpoint every N gradient steps")
+    p.add_argument("--keep-last", type=int, default=3,
+                   help="Retain only the N most recent checkpoints (866 MB each at d8). "
+                        "Intermediate checkpoints exist only to resume after a crash, so "
+                        "the older ones are dead weight. The final step prunes to 1. "
+                        "0 disables pruning.")
     p.add_argument("--max-steps", type=int, default=None,
                    help="Debug: stop after this many optimizer steps. Schedules still use "
                         "the full total_steps, and checkpoints are NOT written (pipeline smoke test).")
@@ -245,7 +250,13 @@ def run_pretrain(args, rank, local_rank, world_size, device, device_type):
                 meta_data=meta_data,
                 rank=rank,
             )
-            maybe_upload_checkpoint(run_name, step, ckpt_dir, rank)
+            # Intermediate checkpoints are crash-resume state and live on local disk;
+            # only the final one is worth pushing 321 MB over the Endlex tunnel.
+            if last_step:
+                maybe_upload_checkpoint(run_name, step, ckpt_dir, rank)
+            # A finished run needs exactly one checkpoint; a running one needs a couple
+            # of fallbacks in case the newest save was interrupted mid-write.
+            prune_checkpoints(ckpt_dir, 1 if last_step else args.keep_last, rank)
 
         if last_step:
             break

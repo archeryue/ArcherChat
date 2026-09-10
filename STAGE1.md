@@ -110,6 +110,56 @@ Scaling holds across every metric, with the biggest jumps on multiple-choice / c
 
 wandb run for d12: https://wandb.ai/archeryue7-hust/nanochat/runs/mvvunqy8
 
+## ⚠️ The d12 ChatCORE figures don't match this file's own per-task table
+
+Reported above for d12: ChatCORE **0.2578 / 0.1128** (sample / categorical). Recomputing from
+the six per-task accuracies listed in the same table — ChatCORE = mean over tasks of
+`(acc − baseline) / (1 − baseline)`, baseline 0.25 for ARC-E/ARC-C/MMLU and 0 for
+GSM8K/HumanEval/SpellingBee — gives **0.2449 / 0.1089**.
+
+That formula reproduces the **d8** reported categorical value (0.0734) *exactly* from its own
+three accuracies, so the formula is right and the d12 headline number appears to come from a
+different or differently-rounded measurement. Quote both when comparing, and prefer the
+recomputed value when the per-task table is what you are comparing against.
+
+## ⚠️ Reproducing these numbers — the corpus moved
+
+**The d8 baseline above is not reproducible from the current disk state without pinning
+the dataset back.** `runs/d8_local.sh` ran `dataset -n 10`, so d8 trained against 10 train
+shards; `runs/d12_local.sh` later ran `dataset -n 18` and grew
+`~/.cache/nanochat/base_data_climbmix/` in place. That silently changes what a *d8* rerun
+trains on:
+
+- Best-fit cropping discards ~35% of tokens, so d8's 503M-token budget must *read* ~774M.
+- Against 10 shards that exhausts the corpus and **wraps into epoch 2**, re-training on
+  shards 0-1. The d8 oracle checkpoint's `dataloader_state_dict` proves it: `epoch: 2`,
+  `pq_idx: 1`, `rg_idx: 22`.
+- Against 18 shards the same budget never wraps — it reads 11 fresh shards, ending at
+  `epoch: 1`. Same token count, **different data, different model**.
+
+Symptom if you get this wrong: val bpb looks nearly right (both runs' val shard is unseen)
+but *train* bpb is far worse, because the oracle saw shard 0 twice and your rerun saw it
+once. Measured: oracle train/val 0.9058/0.9436 (a 0.038 train advantage) vs an unpinned
+rerun's 0.9533/0.9530 (no train advantage at all).
+
+To reproduce d8, pin the corpus — `dataloader._artifact_dir()` prefers
+`~/.cache/archerchat/<name>` over the Stage-1 dir, so no code change is needed:
+
+```bash
+mkdir -p ~/.cache/archerchat/base_data_climbmix
+ln -s ~/.cache/nanochat/base_data_climbmix/shard_0000{0..9}.parquet \
+      ~/.cache/nanochat/base_data_climbmix/shard_06542.parquet \
+      ~/.cache/archerchat/base_data_climbmix/
+```
+
+Verify by diffing the final checkpoint's loader cursor against the oracle's — they should
+land on the same shard/row-group/epoch. **d12 is unaffected**: it used 18 shards, which is
+exactly what is on disk today.
+
+Also pin the eval config: these runs used `--eval-tokens=4194304` (128 batches at
+16x2048). The same weights read val bpb 0.9369 at 128 batches and 0.9394 at 320, so a
+rerun at a different `--eval-tokens` is not comparable to the table above.
+
 ## Targets for Stage 2 (ArcherChat)
 
 The numbers above are what ArcherChat needs to match (or beat) when reimplemented from scratch. Concretely, an ArcherChat-d8 trained on the same data/hyperparameters should land within noise of:

@@ -147,6 +147,37 @@ def save_checkpoint(
         logger.info(f"Saved optimizer state to: {optim_path}")
 
 
+def prune_checkpoints(checkpoint_dir: str, keep_last: int, rank: int = 0) -> None:
+    """
+    Delete every checkpoint except the `keep_last` most recent steps.
+
+    Checkpointing every N steps is ArcherChat's crash-resilience mechanism for a flaky
+    box (see scripts/run_full_pretrain.sh); nanochat only saves at the end and so never
+    needed this. But only the newest few are ever resumed from, and a full d8 run at
+    --checkpoint-every 100 otherwise leaves 33 GB on disk to produce an 866 MB result
+    (545 MB optimizer + 321 MB model per step).
+
+    keep_last <= 0 disables pruning. Mirrors save_checkpoint's rank split: rank 0 owns
+    model + meta, every rank owns its own optimizer shard.
+    """
+    if keep_last <= 0:
+        return
+    steps = sorted(int(os.path.basename(f).split("_")[-1].split(".")[0])
+                   for f in glob.glob(os.path.join(checkpoint_dir, "model_*.pt")))
+    for step in steps[:-keep_last]:
+        paths = [os.path.join(checkpoint_dir, _OPTIM_FILE.format(step=step, rank=rank))]
+        if rank == 0:
+            paths.append(os.path.join(checkpoint_dir, _MODEL_FILE.format(step=step)))
+            paths.append(os.path.join(checkpoint_dir, _META_FILE.format(step=step)))
+        removed = False
+        for path in paths:
+            if os.path.exists(path):
+                os.remove(path)
+                removed = True
+        if removed:
+            logger.info(f"Pruned checkpoint step {step:06d} from {checkpoint_dir}")
+
+
 def _atomic_torch_save(data, path: str) -> None:
     tmp_path = path + ".tmp"
     torch.save(data, tmp_path, _use_new_zipfile_serialization=True)

@@ -41,6 +41,7 @@ from archerchat.common import (
 )
 from archerchat.checkpoint import build_model
 from archerchat.engine     import Engine
+from archerchat.sft        import render_for_completion
 
 from tasks.arc         import ARC
 from tasks.gsm8k       import GSM8K
@@ -124,7 +125,7 @@ def run_generative_eval(task_object, tokenizer, model, engine, num_samples,
 
     for i in range(rank, num_problems, world_size):
         conversation = task_object[i]
-        encoded_prompt = tokenizer.render_for_completion(conversation)
+        encoded_prompt = render_for_completion(tokenizer, conversation)
         results, _ = engine.generate_batch(
             encoded_prompt,
             num_samples=num_samples,
@@ -167,7 +168,7 @@ def run_categorical_eval(task_object, tokenizer, model, batch_size, max_problems
     for i in range(rank, num_batches, world_size):
         i0, i1 = i * batch_size, min((i + 1) * batch_size, num_problems)
         conversations = [task_object[ii] for ii in range(i0, i1)]
-        prompt_ids = [tokenizer.render_for_completion(c) for c in conversations]
+        prompt_ids = [render_for_completion(tokenizer, c) for c in conversations]
         max_length = max(len(ids) for ids in prompt_ids)
         # The answer is predicted from the last real token of each (right-padded) prompt.
         answer_positions = [len(ids) - 1 for ids in prompt_ids]

@@ -241,6 +241,30 @@ def build_example(
     return torch.tensor(ids, dtype=torch.long), torch.tensor(mask, dtype=torch.bool)
 
 
+def render_for_completion(
+    tokenizer,
+    conversation: list[dict] | dict,
+    max_tokens: int = MAX_CONVERSATION_TOKENS,
+) -> list[int]:
+    """
+    Render a conversation primed for an assistant completion: drop the trailing assistant
+    message and append <|assistant_start|>, so the model generates that turn itself.
+    Returns ids only — no mask, since nothing here is trained on.
+
+    Used by scripts/chat_eval.py for the categorical (multiple-choice) tasks, where the
+    answer letter is read off the logits at the final prompt position.
+
+    nanochat hangs this off the tokenizer (tokenizer.py: RustBPETokenizer.render_for_completion).
+    ArcherChat keeps every chat-template concern in this module instead, so callers use
+    sft.render_for_completion(tokenizer, conv). Behaviour is identical: pop the last
+    assistant turn, render, append the assistant-start token.
+    """
+    messages = _normalize_messages(conversation)   # returns a fresh list; never mutates
+    assert messages[-1]["role"] == "assistant", "Last message must be from the Assistant"
+    ids, _ = build_example(tokenizer, messages[:-1], max_tokens=max_tokens)
+    return ids.tolist() + [tokenizer.encode_special("<|assistant_start|>")]
+
+
 _DATASET_CACHE: dict[str, object] = {}
 
 

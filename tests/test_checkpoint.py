@@ -14,6 +14,7 @@ from archerchat.checkpoint import (
     find_largest_model,
     find_last_step,
     load_checkpoint,
+    prune_checkpoints,
     save_checkpoint,
 )
 
@@ -165,3 +166,75 @@ class TestStage1Checkpoints:
             meta["model_config"]["vocab_size"], meta["model_config"]["n_embd"]
         )
         assert set(optim_data.keys()) == {"state", "param_groups"}
+
+
+class TestPruneCheckpoints:
+    """Retention: --checkpoint-every is crash-resilience, not an archive (866 MB/step)."""
+
+    def _save_steps(self, ckpt_dir, steps, rank=0):
+        for step in steps:
+            save_checkpoint(ckpt_dir, step, make_model_data(),
+                            make_optimizer_data(step), make_meta(step), rank=rank)
+
+    def _steps_on_disk(self, ckpt_dir):
+        return sorted(int(f.split("_")[-1].split(".")[0])
+                      for f in os.listdir(ckpt_dir) if f.startswith("model_"))
+
+    def test_keeps_only_the_newest(self, tmp_path):
+        ckpt_dir = str(tmp_path / "d8")
+        self._save_steps(ckpt_dir, [100, 200, 300, 400, 500])
+        prune_checkpoints(ckpt_dir, keep_last=2)
+        assert self._steps_on_disk(ckpt_dir) == [400, 500]
+
+    def test_removes_all_three_files_per_step(self, tmp_path):
+        ckpt_dir = str(tmp_path / "d8")
+        self._save_steps(ckpt_dir, [100, 200])
+        prune_checkpoints(ckpt_dir, keep_last=1)
+        assert sorted(os.listdir(ckpt_dir)) == [
+            "meta_000200.json", "model_000200.pt", "optim_000200_rank0.pt",
+        ]
+
+    def test_survivor_still_loads(self, tmp_path):
+        ckpt_dir = str(tmp_path / "d8")
+        self._save_steps(ckpt_dir, [100, 200, 300])
+        prune_checkpoints(ckpt_dir, keep_last=1)
+        assert find_last_step(ckpt_dir) == 300
+        _, optim, meta = load_checkpoint(ckpt_dir, None, device="cpu", load_optimizer=True)
+        assert meta["step"] == 300 and optim is not None
+
+    def test_keep_last_zero_disables(self, tmp_path):
+        ckpt_dir = str(tmp_path / "d8")
+        self._save_steps(ckpt_dir, [100, 200, 300])
+        prune_checkpoints(ckpt_dir, keep_last=0)
+        assert self._steps_on_disk(ckpt_dir) == [100, 200, 300]
+
+    def test_keep_last_exceeding_count_is_a_noop(self, tmp_path):
+        ckpt_dir = str(tmp_path / "d8")
+        self._save_steps(ckpt_dir, [100, 200])
+        prune_checkpoints(ckpt_dir, keep_last=10)
+        assert self._steps_on_disk(ckpt_dir) == [100, 200]
+
+    def test_nonzero_rank_prunes_only_its_own_optimizer_shard(self, tmp_path):
+        # Mirrors save_checkpoint's rank split: rank 0 owns model + meta, each rank
+        # owns optim_*_rank{r}.pt. A non-zero rank must not delete shared files.
+        ckpt_dir = str(tmp_path / "d8")
+        self._save_steps(ckpt_dir, [100, 200], rank=0)
+        self._save_steps(ckpt_dir, [100, 200], rank=1)
+        prune_checkpoints(ckpt_dir, keep_last=1, rank=1)
+        assert self._steps_on_disk(ckpt_dir) == [100, 200]        # rank 0's files untouched
+        assert not os.path.exists(os.path.join(ckpt_dir, "optim_000100_rank1.pt"))
+        assert os.path.exists(os.path.join(ckpt_dir, "optim_000100_rank0.pt"))
+
+    def test_tolerates_a_missing_optimizer_shard(self, tmp_path):
+        # A crash between the model save and the optimizer save leaves a partial step.
+        ckpt_dir = str(tmp_path / "d8")
+        self._save_steps(ckpt_dir, [100, 200])
+        os.remove(os.path.join(ckpt_dir, "optim_000100_rank0.pt"))
+        prune_checkpoints(ckpt_dir, keep_last=1)
+        assert self._steps_on_disk(ckpt_dir) == [200]
+
+    def test_empty_dir_is_a_noop(self, tmp_path):
+        ckpt_dir = str(tmp_path / "d8")
+        os.makedirs(ckpt_dir)
+        prune_checkpoints(ckpt_dir, keep_last=3)
+        assert os.listdir(ckpt_dir) == []

@@ -84,6 +84,10 @@ def parse_args():
     p.add_argument("--eval-tokens", type=int, default=40 * 524288,
                    help="Tokens per validation pass; eval batch count is derived as "
                         "eval_tokens // (device_batch_size * T * world_size) (nanochat: 40*2^19)")
+    p.add_argument("--ckpt-dir", type=str, default=None,
+                   help="Where to write SFT checkpoints (default: chatsft_checkpoints/d{depth}). "
+                        "Set this for ArcherChat-trained runs so they don't overwrite the "
+                        "Stage-1 nanochat oracle checkpoints.")
     p.add_argument("--device", type=str, default=None,
                    help="Force device type: cuda | cpu | mps (default: auto-detect)")
 
@@ -106,7 +110,7 @@ def sync_last_step(last_step, world_size, device):
 
 def run_sft(args, rank, local_rank, world_size, device, device_type):
     base_dir = get_base_dir()
-    ckpt_dir = os.path.join(base_dir, "chatsft_checkpoints", f"d{args.depth}")
+    ckpt_dir = args.ckpt_dir or os.path.join(base_dir, "chatsft_checkpoints", f"d{args.depth}")
 
     # ── Load pretrain weights ──────────────────────────────────────────
     pretrain_dir = args.init_from or os.path.join(base_dir, "base_checkpoints", f"d{args.depth}")
