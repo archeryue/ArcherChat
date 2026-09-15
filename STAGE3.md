@@ -344,10 +344,21 @@ print(len(d),'tensors, finite:',all(torch.isfinite(v.float()).all() for v in d.v
 
 ### If it goes wrong mid-run
 
-`run_full_pretrain.sh` auto-resumes from the last checkpoint — but it shells `python`
-directly, so it cannot launch DDP as written. At ws=8, relaunch the Phase 5.1 command with
-`--resume` added; `--keep-last 3` guarantees a recent checkpoint exists, and the loader
-state in `meta_*.json` restores the exact data position.
+`run_full_pretrain.sh` now launches DDP and auto-resumes, so prefer it over the raw
+Phase 5.1 command for the real run:
+
+```bash
+ssh $POD "cd $A && PYTHONPATH=$A NPROC=8 PYTHON=$V/bin/python RUN_NAME=archerchat-d24 \
+  CKPT_DIR=/root/.cache/nanochat/base_checkpoints/d24 \
+  nohup bash scripts/run_full_pretrain.sh 24 --target-param-data-ratio 8 \
+  --device-batch-size 16 --eval-every 200 --eval-tokens 4194304 \
+  --checkpoint-every 200 --keep-last 3 > /dev/null 2>&1 &"
+```
+
+It retries up to 30 times, adding `--resume` whenever a checkpoint exists; `--keep-last 3`
+guarantees one does, and the loader state in `meta_*.json` restores the exact data
+position. It uses `python -m torch.distributed.run` (not `torchrun`) and inserts the `--`
+separator — see the comments in the script for why both matter.
 
 ---
 

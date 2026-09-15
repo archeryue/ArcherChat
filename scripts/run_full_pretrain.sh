@@ -4,6 +4,7 @@
 #
 # Usage: run_full_pretrain.sh <depth> [extra base_train.py args...]
 #   e.g. run_full_pretrain.sh 8 --device-batch-size 8 --eval-tokens 10485760 --checkpoint-every 100
+#   multi-GPU: NPROC=8 PYTHON=/root/av/bin/python run_full_pretrain.sh 24 --device-batch-size 16
 set -u
 
 DEPTH="${1:?usage: run_full_pretrain.sh <depth> [args...]}"; shift || true
@@ -19,6 +20,24 @@ export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 # streaming is unaffected). Override with ENDLEX_UPLOAD_CHECKPOINTS=1 if you want archival.
 export ENDLEX_UPLOAD_CHECKPOINTS="${ENDLEX_UPLOAD_CHECKPOINTS:-0}"
 
+# NPROC>1 launches under torch.distributed.run. Two things are deliberate here:
+#   * `python -m torch.distributed.run`, NOT `torchrun`. The console script only exists if
+#     torch was pip-INSTALLED into the active venv. On a rented box we inherit torch via
+#     `venv --system-site-packages`, which shares packages but not console scripts, so
+#     $VENV/bin/torchrun does not exist. The module always does. (Same entry point:
+#     torch's `torchrun` is literally torch.distributed.run:main.) This is invisible
+#     locally, where uv installs torch into .venv and the script IS present.
+#   * a `--` before the script args. torch/distributed/run.py registers BOTH `--run-path`
+#     and `--run_path`, so argparse's abbreviation matching sees two candidates for our
+#     `--run` and dies with "ambiguous option". `--` forces the rest to positional.
+NPROC="${NPROC:-1}"
+PYTHON="${PYTHON:-.venv/bin/python}"
+if [ "$NPROC" -gt 1 ]; then
+    LAUNCH="$PYTHON -m torch.distributed.run --standalone --nproc_per_node=$NPROC scripts/base_train.py --"
+else
+    LAUNCH="$PYTHON scripts/base_train.py"
+fi
+
 mkdir -p "$CKPT"
 cd "$HOME_DIR/ArcherChat" || exit 1
 : > "$LOG"
@@ -26,7 +45,7 @@ cd "$HOME_DIR/ArcherChat" || exit 1
 for attempt in $(seq 1 30); do
     if ls "$CKPT"/model_*.pt >/dev/null 2>&1; then RESUME="--resume"; else RESUME=""; fi
     echo "===== attempt ${attempt}  resume=${RESUME:-none}  $(date -u +%H:%M:%S)Z =====" >> "$LOG"
-    .venv/bin/python scripts/base_train.py \
+    $LAUNCH \
         --depth "$DEPTH" --window-pattern L \
         --ckpt-dir "$CKPT" --run "$RUN_NAME" \
         "$@" $RESUME >> "$LOG" 2>&1
