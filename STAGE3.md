@@ -94,6 +94,7 @@ Not mistakes — findings. These were latent and would have surfaced at $25/hr.
 
 | gate | result |
 |---|---|
+| **sliding window (`SSSL`/`SSL`) vs nanochat** | **max\|Δlogit\|=0, argmax 100%, window tables identical** — closed a path that had *never* run (every prior run used `L`). Confirms the short window is **512**, not the 768 nanochat's own stale comment claims, and that the last layer is forced full |
 | `DistMuonAdamW` vs verified `MuonAdamW`, ws=4 | **max\|Δ\| 2.98e-08** across ZERO-RANK, remainder and even shard regimes — 300× inside tolerance |
 | per-rank optimizer checkpoint shards | `optim_001920_rank{0..3}.pt` written correctly |
 | DDP dataloader striping + `evaluate_bpb` all-reduce | **d8 full run: val_bpb 0.9307 vs oracle 0.9376, Δ −0.0069** (band ±0.01) |
@@ -141,11 +142,22 @@ python3 -c "b=1048576; print([(d, b//(d*2048*8)) for d in (8,16,32) if b%(d*2048
 # -> [(8, 8), (16, 4), (32, 2)]   # (device-batch-size, grad_accum) at ws=8
 ```
 
-**0.3 Wire FA3.** This is the single biggest cost lever, ~$70–100. `--window-pattern` defaults
-to `SSSL`; our `attention.py` is an SDPA shim that materialises a dense 2048×2048 mask per
-sliding layer. On Hopper, install `flash-attn` and switch the shim body — the call sites in
-`model.py` were written not to change. **Unverifiable until you are on H100**, so do the
-edit now and treat step 5.2's MFU as the test.
+**0.3 Wire FA3 — but note what is already settled.** Three separable things get conflated here:
+
+| | status |
+|---|---|
+| **SSSL mask correctness** (`make_window_mask`, `window_sizes`, the 512 short window) | ✅ **VERIFIED** — `scripts/oracle_window_check.py` is bit-identical to nanochat (max\|Δ\|=0, argmax 100%) on `L`, `SSSL` and `SSL`. Runs on any GPU; needs no flash-attn |
+| flash-attn **wrapper** correctness | ⏳ checkable wherever flash-attn installs (FA2 is SM 80+; Blackwell-consumer wheels are spotty) |
+| **FA3 kernel performance** | ⏳ genuinely Hopper-only (SM 90) |
+
+Only the third is unverifiable off Hopper. That matters because the mask is the part that
+can *silently void the run* — get it wrong and d24 trains with the wrong receptive field
+regardless of kernel. It is now a gate, and it was free.
+
+So: install `flash-attn` on the H100 box and switch the shim body — the call sites in
+`model.py` were written not to change — and treat step 5.3's MFU as the performance test.
+Worth attempting the FA2 build on a Blackwell box first; if it installs, re-run
+`oracle_window_check.py` there to validate the wrapper before Hopper.
 
 **0.4 Push the branch** you intend to run. The box clones from GitHub.
 
@@ -212,7 +224,15 @@ ssh $POD "cd $A && export PYTHONPATH=$A && \
   for NL in 6 3 12; do $V/bin/python scripts/oracle_ddp_check.py --world-size 8 --n-layer \$NL; done"
 ```
 
-Expected: three × `DDP-EQUIVALENCE: PASS ✅ ... max|Δ| ~3e-08`.
+Also run the sliding-window gate — d24 uses `SSSL`, which no run before Stage 3 exercised:
+
+```bash
+ssh $POD "cd $A && PYTHONPATH=$A $V/bin/python scripts/oracle_window_check.py --patterns L,SSSL"
+```
+
+Expected: three × `DDP-EQUIVALENCE: PASS ✅ ... max|Δ| ~3e-08`, then
+`SLIDING-WINDOW EQUIVALENCE: PASS ✅`. Re-run the window gate **after** flash-attn is wired —
+that is the check that the real kernel agrees with the SDPA shim validated locally.
 
 > **STOP IF** any gate exceeds 1e-5. That is `DistMuonAdamW` mis-sharding, and every
 > subsequent number would be garbage. Debugging here costs minutes; debugging it inside a
