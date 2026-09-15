@@ -34,9 +34,13 @@ Read the pre-flight checklist. Every line in it is there because it went wrong o
 - [ ] **Shard count sets the corpus, and the corpus is part of the experiment.**
       See [STAGE2.md](STAGE2.md) — a mismatched shard count silently changes what the model
       trains on and fails CORE with no error.
-- [ ] **Size the disk.** d24 checkpoints are ~10 GB each and DDP writes one optimizer shard
-      *per rank*. At `--keep-last 3` on 8 ranks that is substantial; the 5090 pod had only
-      30 GB, which would not have held d24 at all.
+- [ ] **Size the disk — this is bigger than it looks.** Measured/derived for d24:
+      model checkpoint **3.94 GiB**, optimizer **~10.7 GiB per rank**, and DDP writes one
+      optimizer shard *per rank* because `DistMuonAdamW` shards gradients but **replicates
+      momentum**. So **one save at ws=8 is ~89 GiB**, and `--keep-last 3` is **~268 GiB**.
+      Plus ~14 GiB of shards. **Provision ≥ 400 GB.** (The 5090 pod had 30 GB — it could not
+      have held a single d24 checkpoint.) The per-rank figure is derived from parameter
+      counts, not measured; Phase 5.5 measures it for real before the run commits.
 - [ ] **Ship `.env` (ENDLEX_URL / ENDLEX_TOKEN).** Forgotten on the rehearsal, so the run
       streamed no metrics and uploaded nothing — the tracker silently fell back to offline
       JSONL. On a 4-hour d24 run that means flying blind until you SSH in.
@@ -279,6 +283,19 @@ factor, so the printed number is trustworthy.
 
 **5.4 Sanity-check the horizon:** the log's header should read `steps total=5568`. Expected
 val_bpb at step 0 ≈ 3.16.
+
+**5.5 Measure the first real checkpoint, then do the disk arithmetic.** Set
+`--checkpoint-every 200`, so the first save lands ~7 min in. Do not trust the estimate above:
+
+```bash
+ssh $POD 'du -sh /root/.cache/nanochat/base_checkpoints/d24/; \
+          ls -la /root/.cache/nanochat/base_checkpoints/d24/ | head; df -h /'
+```
+
+> **STOP AND RETUNE IF** `one_save x keep_last + 14 GiB` exceeds free disk. Options, in
+> order of preference: raise `--checkpoint-every` (fewer saves, more lost work per crash),
+> drop to `--keep-last 2` (~179 GiB), or accept `--keep-last 1` (~89 GiB) only if you also
+> trust the box not to die mid-write. Running out of disk at hour 3 loses the run.
 
 ---
 
