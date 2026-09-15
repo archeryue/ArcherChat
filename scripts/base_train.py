@@ -35,6 +35,7 @@ from archerchat.common import (
     init_tracker, maybe_upload_checkpoint,
 )
 from archerchat.model      import GPT, GPTConfig
+from archerchat.attention  import ATTN_BACKEND
 from archerchat.scaling    import compute_scale
 from archerchat.optimizer  import get_lr_multiplier, get_muon_momentum, get_weight_decay
 from archerchat.loss       import evaluate_bpb
@@ -339,6 +340,9 @@ def main():
     print_banner()
     print0(f"phase=pretrain  depth={args.depth}  "
            f"world_size={world_size}  dtype={COMPUTE_DTYPE}")
+    # Never infer the attention backend from MFU — say it out loud. On Hopper this must
+    # read fa3; anything else means sliding-window layers are on the dense-mask SDPA path.
+    print0(f"attention  {ATTN_BACKEND}  window_pattern={args.window_pattern}")
 
     run_pretrain(args, rank, local_rank, world_size, device, device_type)
     compute_cleanup()

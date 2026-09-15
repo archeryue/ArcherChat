@@ -35,6 +35,7 @@ from archerchat.common import (
     init_tracker, maybe_upload_checkpoint,
 )
 from archerchat.model      import GPTConfig
+from archerchat.attention  import ATTN_BACKEND
 from archerchat.scaling    import compute_scale
 from archerchat.optimizer  import get_sft_lr_multiplier, get_sft_muon_momentum
 from archerchat.loss       import evaluate_bpb
@@ -313,6 +314,7 @@ def main():
     print_banner()
     print0(f"phase=sft  depth={args.depth}  "
            f"world_size={world_size}  dtype={COMPUTE_DTYPE}")
+    print0(f"attention  {ATTN_BACKEND}")
 
     run_sft(args, rank, local_rank, world_size, device, device_type)
     compute_cleanup()

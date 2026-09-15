@@ -158,10 +158,33 @@ Only the third is unverifiable off Hopper. That matters because the mask is the 
 can *silently void the run* — get it wrong and d24 trains with the wrong receptive field
 regardless of kernel. It is now a gate, and it was free.
 
-So: install `flash-attn` on the H100 box and switch the shim body — the call sites in
-`model.py` were written not to change — and treat step 5.3's MFU as the performance test.
-Worth attempting the FA2 build on a Blackwell box first; if it installs, re-run
-`oracle_window_check.py` there to validate the wrapper before Hopper.
+**The wiring is written.** `attention.py` now selects its backend at import: FA3 from the
+HF `kernels` hub (the same kernel nanochat uses), else a pip-installed `flash_attn`, else
+the SDPA shim. Gated on `sm90` because FA3 is Hopper-only — every RTX 50-series box reports
+`sm120` and correctly falls back.
+
+The adapter matters: real FA3 is `flash_attn_with_kvcache(q, k_cache, v_cache, k=, v=)` but
+our `model.py` calls `(q, k, v, k_cache, v_cache)`. Passing the new keys where the cache
+belongs **does not raise — it computes garbage**, so the re-ordering happens inside the
+wrapper and the model.py call site is untouched, as this file's contract promises.
+
+On the H100 box you therefore only need to *install* the kernel, not write code:
+
+```bash
+$V/bin/pip install kernels                      # then just run; the backend auto-selects
+ARCHERCHAT_ATTN=fa3 $V/bin/python -c "import archerchat.attention"   # asserts FA3 is live
+```
+
+`ARCHERCHAT_ATTN=fa3` **raises** rather than silently falling back — use it as a hard
+pre-flight assertion. `ARCHERCHAT_ATTN=sdpa` forces the fallback, so you can A/B the real
+kernel against the SDPA path that `oracle_window_check.py` proved bit-identical to nanochat.
+
+`base_train.py` and `chat_sft.py` print the backend at startup:
+
+```
+attention  fa3 (hf kernels)  window_pattern=SSSL      <- what you want on H100
+attention  sdpa (sm120 is not Hopper ...)             <- what you get anywhere else
+```
 
 **0.4 Push the branch** you intend to run. The box clones from GitHub.
 
@@ -276,10 +299,21 @@ sleep 30; ssh $POD 'nvidia-smi --query-gpu=index,utilization.gpu,memory.used --f
 **5.3 Read MFU at ~step 50. This is the FA3 test.** MFU now includes the `world_size`
 factor, so the printed number is trustworthy.
 
+First check the startup line — **do not infer the backend from MFU when the log states it**:
+
+```
+attention  fa3 (hf kernels)  window_pattern=SSSL
+```
+
+> **STOP IF** that reads `sdpa`. At d24 with `SSSL` the shim materialises a dense
+> 2048×2048 mask per sliding layer per batch; it is correct but roughly doubles the run.
+
+Then use MFU as the performance confirmation:
+
 | printed MFU | meaning |
 |---|---|
 | ~35–50% | FA3 working. Proceed. |
-| **< 20%** | **sliding-window is falling back to the dense-mask SDPA shim.** Kill it. Every hour costs $25 and you would roughly double the run. |
+| **< 20%** | something else is wrong even if the backend line says fa3. Investigate before burning hours. |
 
 **5.4 Sanity-check the horizon:** the log's header should read `steps total=5568`. Expected
 val_bpb at step 0 ≈ 3.16.

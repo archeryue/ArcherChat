@@ -66,6 +66,8 @@ window_size is (left, right); right = 0 for causal.
 
 from __future__ import annotations
 
+import os
+
 import torch
 import torch.nn.functional as F
 
@@ -244,4 +246,87 @@ class FlashAttnCompat:
 
 
 # Singleton — model.py does: from archerchat.attention import flash_attn
-flash_attn = FlashAttnCompat()
+# ─────────────────────────────────────────────────────────────────────────────
+# Backend selection: real FA3 when the hardware has it, SDPA otherwise
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ⚠️ THE TWO APIs ARE NOT THE SAME SHAPE. The real FA3 (and nanochat's wrapper)
+# take the cache FIRST and the new keys/values as KEYWORDS:
+#
+#     fa3.flash_attn_with_kvcache(q, k_cache, v_cache, k=k, v=v, cache_seqlens=...)
+#
+# ArcherChat's shim takes them positionally in the other order, and model.py calls it
+# that way:
+#
+#     flash_attn.flash_attn_with_kvcache(q, k, v, k_cache, v_cache, cache_seqlens=...)
+#
+# The module docstring promises the model.py call site does NOT change for Stage 3, so the
+# translation happens HERE. Swapping the backend without this adapter would silently pass
+# the new keys as the cache — which does not raise, it just computes garbage.
+
+
+def _load_fa3():
+    """FA3 kernels are compiled for Hopper (sm90) ONLY.
+
+    Ada (sm89) and Blackwell (sm100/sm120, including every RTX 50-series) must use SDPA.
+    nanochat fetches the kernel from the HF hub rather than pip (flash_attention.py:24-40);
+    we try that first so Stage 3 gets the same kernel the oracle would, then fall back to a
+    pip-installed `flash_attn` if one is present.
+    """
+    if not torch.cuda.is_available():
+        return None, "no cuda"
+    major, minor = torch.cuda.get_device_capability()
+    if major != 9:
+        return None, f"sm{major}{minor} is not Hopper (FA3 is sm90-only)"
+    try:
+        import os
+        os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+        from kernels import get_kernel
+        return get_kernel("varunneal/flash-attention-3").flash_attn_interface, "fa3 (hf kernels)"
+    except Exception as e:
+        first = f"hf kernels unavailable ({type(e).__name__})"
+    try:
+        import flash_attn
+        return flash_attn, "fa3 (pip flash_attn)"
+    except Exception as e:
+        return None, f"{first}; pip flash_attn unavailable ({type(e).__name__})"
+
+
+class FlashAttn3:
+    """Adapter onto the real FA3 kernels, preserving ArcherChat's call signature."""
+
+    def __init__(self, fa3):
+        self._fa3 = fa3
+
+    def flash_attn_func(self, q, k, v, causal=True, window_size=(-1, 0)):
+        return self._fa3.flash_attn_func(q, k, v, causal=causal, window_size=window_size)
+
+    def flash_attn_with_kvcache(self, q, k, v, k_cache, v_cache, cache_seqlens,
+                                causal=True, window_size=(-1, 0)):
+        # NOTE the re-ordering: ours is (q, k, v, k_cache, v_cache); FA3's is
+        # (q, k_cache, v_cache, k=, v=). See the warning above.
+        return self._fa3.flash_attn_with_kvcache(
+            q, k_cache, v_cache, k=k, v=v, cache_seqlens=cache_seqlens,
+            causal=causal, window_size=window_size,
+        )
+
+
+# ARCHERCHAT_ATTN=sdpa forces the fallback (useful for A/B-ing the kernels against the
+# SDPA path that scripts/oracle_window_check.py validated bit-identically vs nanochat).
+_forced = os.environ.get("ARCHERCHAT_ATTN", "auto").lower()
+if _forced == "sdpa":
+    flash_attn, ATTN_BACKEND = FlashAttnCompat(), "sdpa (forced by ARCHERCHAT_ATTN)"
+else:
+    _fa3, _why = _load_fa3()
+    if _fa3 is not None:
+        flash_attn, ATTN_BACKEND = FlashAttn3(_fa3), _why
+    else:
+        flash_attn, ATTN_BACKEND = FlashAttnCompat(), f"sdpa ({_why})"
+        if _forced == "fa3":
+            raise RuntimeError(f"ARCHERCHAT_ATTN=fa3 requested but unavailable: {_why}")
+
+# ⚠️ Sliding window on the SDPA path materialises a dense (Tq, Tk) bool mask per layer per
+# batch. It is CORRECT — oracle_window_check.py proves it bit-identical to nanochat — but
+# it is slow. On a non-Hopper box prefer --window-pattern L; at d24 on H100 the whole point
+# of Stage 3's cost model is that FA3 handles SSSL natively. base_train.py prints
+# ATTN_BACKEND at startup so this is never a guess.
