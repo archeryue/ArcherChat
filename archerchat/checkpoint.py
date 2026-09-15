@@ -162,8 +162,22 @@ def prune_checkpoints(checkpoint_dir: str, keep_last: int, rank: int = 0) -> Non
     """
     if keep_last <= 0:
         return
-    steps = sorted(int(os.path.basename(f).split("_")[-1].split(".")[0])
-                   for f in glob.glob(os.path.join(checkpoint_dir, "model_*.pt")))
+    # Derive the step list from THIS RANK'S OWN optimizer shards, never from model_*.pt.
+    # Under DDP every rank calls this concurrently and rank 0 deletes the model files, so a
+    # rank that globs model_*.pt after rank 0 has already pruned sees a shorter list,
+    # computes an empty stale set, and leaks its own shards forever. Observed on a 4-GPU
+    # run: step 1500's model/meta/rank0 pruned, rank1-3 shards left behind. At d24 on 8
+    # ranks that is ~7 x 10 GB leaking per save, which fills the disk and kills the run.
+    # Each rank owning its own file list makes this race-free.
+    steps = {int(os.path.basename(f).split("_")[1])
+             for f in glob.glob(os.path.join(checkpoint_dir, f"optim_*_rank{rank}.pt"))}
+    if rank == 0:
+        # Rank 0 also owns model+meta, and must still clean up a step whose optimizer
+        # shard is missing (a crash between the model save and the optimizer save).
+        # Safe for rank 0 to read model_*.pt: it is the only writer of those files.
+        steps |= {int(os.path.basename(f).split("_")[-1].split(".")[0])
+                  for f in glob.glob(os.path.join(checkpoint_dir, "model_*.pt"))}
+    steps = sorted(steps)
     for step in steps[:-keep_last]:
         paths = [os.path.join(checkpoint_dir, _OPTIM_FILE.format(step=step, rank=rank))]
         if rank == 0:

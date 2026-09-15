@@ -55,6 +55,12 @@ def parse_args():
                    help="Model depth. All hyperparams are derived via compute_scale().")
     p.add_argument("--total-batch-size",  type=int, default=None,
                    help="Override total tokens per gradient step")
+    p.add_argument("--target-param-data-ratio", type=int, default=12,
+                   help="Tokens-per-scaling-param training horizon (nanochat's "
+                        "--target-param-data-ratio). 12 = compute-optimal default used for "
+                        "the d8/d12 oracles; nanochat's 8xH100 speedrun uses 8. NOTE this "
+                        "moves ONLY the horizon: d_ref scales with the ratio too, so batch "
+                        "size, LRs and weight decay are ratio-invariant (matches nanochat).")
     p.add_argument("--device-batch-size", type=int, default=32,
                    help="Per-GPU micro-batch size in sequences. This is a VRAM knob, "
                         "NOT derived from scaling — grad accumulation makes up the "
@@ -98,7 +104,7 @@ def parse_args():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run_pretrain(args, rank, local_rank, world_size, device, device_type):
-    scale = compute_scale(args.depth)   # see archerchat/scaling.py for the math
+    scale = compute_scale(args.depth, args.target_param_data_ratio)   # see archerchat/scaling.py
 
     total_batch_tokens = args.total_batch_size or scale["batch_size"]
     B                  = args.device_batch_size
@@ -294,7 +300,11 @@ def run_pretrain(args, rank, local_rank, world_size, device, device_type):
 
         # ── Throughput / MFU (measures only the fwd/bwd/step section) ──
         tok_per_sec = total_batch_tokens / dt
-        mfu = flops_per_token * tok_per_sec / peak_flops if peak_flops < float("inf") else 0.0
+        # tok_per_sec is GLOBAL (total_batch_tokens spans all ranks), so the denominator
+        # must be the whole cluster's peak, not one GPU's. Without the world_size factor
+        # MFU reads world_size x too high under DDP (cf. nanochat base_train.py:554).
+        mfu = (flops_per_token * tok_per_sec / (peak_flops * world_size)
+               if peak_flops < float("inf") else 0.0)
 
         # ── Logging ───────────────────────────────────────────────────
         if rank == 0:

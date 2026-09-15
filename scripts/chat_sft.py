@@ -275,7 +275,11 @@ def run_sft(args, rank, local_rank, world_size, device, device_type):
             last_step = True
 
         tok_per_sec = total_batch_tokens / dt
-        mfu = flops_per_token * tok_per_sec / peak_flops if peak_flops < float("inf") else 0.0
+        # tok_per_sec is GLOBAL (total_batch_tokens spans all ranks), so the denominator
+        # must be the whole cluster's peak, not one GPU's. Without the world_size factor
+        # MFU reads world_size x too high under DDP (cf. nanochat base_train.py:554).
+        mfu = (flops_per_token * tok_per_sec / (peak_flops * world_size)
+               if peak_flops < float("inf") else 0.0)
 
         if rank == 0:
             tracker.log({

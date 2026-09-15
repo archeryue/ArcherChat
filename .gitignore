@@ -19,3 +19,4 @@ endlex_runs/
 
 # Local secrets — never commit
 .env
+pod_artifacts/

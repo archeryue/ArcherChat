@@ -102,3 +102,32 @@ class TestTrainingHorizon:
         assert num_iterations * batch_size == total_tokens
         # "Tokens : Scaling params ratio: 12.00" in both logs.
         assert total_tokens / scaling_params == pytest.approx(12.0, abs=5e-3)
+
+
+class TestNonDefaultRatio:
+    """Stage 3 runs d24 at --target-param-data-ratio 8 (nanochat's 8xH100 speedrun),
+    not the ratio 12 used for the d8/d12 oracles.
+
+    The subtlety: the ratio must move D_REF as well as the token budget. nanochat
+    builds both from the same ratio (base_train.py:269 target_tokens, :273 D_REF), so
+    n_tokens / D_REF is ratio-INVARIANT and batch size, LRs and weight decay do not
+    move. Scale the budget without scaling D_REF and ratio 8 silently derives a
+    different batch/LR/WD than the oracle would — a config bug with no error.
+    """
+
+    def test_ratio_moves_horizon_only(self):
+        from archerchat.scaling import compute_scale
+        r12, r8 = compute_scale(24, 12), compute_scale(24, 8)
+        # the horizon moves, proportionally
+        assert r8["n_tokens"] / r12["n_tokens"] == pytest.approx(8 / 12, abs=1e-6)
+        # ...and nothing else does
+        for k in ("batch_size", "lr", "embedding_lr", "unembedding_lr", "scalar_lr", "wd"):
+            assert r8[k] == pytest.approx(r12[k]), f"{k} moved with the ratio"
+
+    def test_d24_ratio8_speedrun_config(self):
+        from archerchat.scaling import compute_scale
+        sc = compute_scale(24, 8)
+        assert (sc["n_layers"], sc["n_embd"], sc["n_heads"]) == (24, 1536, 12)
+        assert sc["batch_size"] == 1_048_576
+        assert sc["n_tokens"] // sc["batch_size"] == 5_568        # optimizer steps
+        assert sc["n_tokens"] / (sc["n_tokens"] / 8) == pytest.approx(8.0)

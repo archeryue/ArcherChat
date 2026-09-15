@@ -238,3 +238,20 @@ class TestPruneCheckpoints:
         os.makedirs(ckpt_dir)
         prune_checkpoints(ckpt_dir, keep_last=3)
         assert os.listdir(ckpt_dir) == []
+
+    def test_ddp_ranks_prune_their_own_shards_without_racing(self, tmp_path):
+        """Regression: every rank must prune its own shards even though rank 0 deletes the
+        model files first. Deriving the stale-step list from model_*.pt made non-zero ranks
+        see an already-pruned directory, compute an empty stale set, and leak their shards.
+        Caught on a real 4-GPU run (optim_001500_rank{1,2,3}.pt survived)."""
+        ckpt_dir = str(tmp_path / "d8")
+        for step in (500, 1000):
+            for rank in range(4):
+                save_checkpoint(ckpt_dir, step, make_model_data(), make_optimizer_data(step),
+                                make_meta(step), rank=rank)
+        prune_checkpoints(ckpt_dir, keep_last=1, rank=0)      # rank 0 goes first...
+        for rank in (1, 2, 3):                                # ...others arrive after
+            prune_checkpoints(ckpt_dir, keep_last=1, rank=rank)
+        left = sorted(os.listdir(ckpt_dir))
+        assert left == ["meta_001000.json", "model_001000.pt"] + \
+                       [f"optim_001000_rank{r}.pt" for r in range(4)], left
