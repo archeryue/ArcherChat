@@ -163,10 +163,13 @@ HF `kernels` hub (the same kernel nanochat uses), else a pip-installed `flash_at
 the SDPA shim. Gated on `sm90` because FA3 is Hopper-only — every RTX 50-series box reports
 `sm120` and correctly falls back.
 
-The adapter matters: real FA3 is `flash_attn_with_kvcache(q, k_cache, v_cache, k=, v=)` but
-our `model.py` calls `(q, k, v, k_cache, v_cache)`. Passing the new keys where the cache
-belongs **does not raise — it computes garbage**, so the re-ordering happens inside the
-wrapper and the model.py call site is untouched, as this file's contract promises.
+**Our signature now matches FA3's exactly**, so the real kernel module is a literal
+drop-in for the shim and there is no adapter. This was a deliberate change: an earlier
+version kept a different positional order and translated in a wrapper, which is strictly
+worse — mis-ordering `(q, k, v, k_cache, v_cache)` against `(q, k_cache, v_cache, k=, v=)`
+**does not raise**, it silently attends over the wrong tensors and converges elsewhere.
+Deleting the adapter deletes that failure mode. `model.py`'s call site now reads exactly
+like nanochat `gpt.py:112`.
 
 On the H100 box you therefore only need to *install* the kernel, not write code:
 

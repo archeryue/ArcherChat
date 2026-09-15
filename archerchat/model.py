@@ -166,8 +166,11 @@ class CausalSelfAttention(nn.Module):
         else:
             # KV-cache path — see kv_cache.py for the cache contract.
             k_cache, v_cache = kv_cache.get_layer_cache(self.layer_idx)
+            # FA3's argument order: cache positional, new k/v as keywords. Matches
+            # nanochat gpt.py:112 so the real kernel drops in without an adapter.
             y = flash_attn.flash_attn_with_kvcache(
-                q, k, v, k_cache, v_cache, cache_seqlens = kv_cache.cache_seqlens, causal=True, window_size=window_size
+                q, k_cache, v_cache, k=k, v=v,
+                cache_seqlens=kv_cache.cache_seqlens, causal=True, window_size=window_size,
             )
             if self.layer_idx == kv_cache.n_layers - 1:
                 kv_cache.advance(T)
