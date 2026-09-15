@@ -175,6 +175,19 @@ If FA3 is unavailable on the box, the fallback is a genuine trade:
 | `SSSL` on SDPA | +34% wall-clock | faithful architecture, slow |
 | `L` on SDPA | fast (39.5% MFU) | ~10% more FLOPs, diverges from the reference |
 
+**The kernel is obtainable — verified.** The hub repo `varunneal/flash-attention-3` is
+public and ungated, and ships prebuilt kernels per `(torch, cuda, arch)`:
+
+```
+torch28:           cu126, cu128                 (x86_64)
+torch29:           cu126, cu128, cu130          <- our pin, 2.9.1+cu128
+torch210/211/212:  cu126, cu128, cu130
+```
+
+Both our pin and the torch 2.8+cu128 that cloud images typically ship are covered. But a
+*missing* combination fails silently into SDPA, so `stage3_pod_bootstrap.sh` now asserts the
+image's `(torch, cuda)` has a build **before** the run, and installs `kernels`.
+
 Three separable correctness questions, all settled independently of the above:
 
 | | status |

@@ -34,6 +34,8 @@ say "2. venv that INHERITS the preinstalled torch (downloads no torch)"
 [ -x "$VENV/bin/python" ] || python3 -m venv --system-site-packages "$VENV"
 "$VENV/bin/pip" install -q --no-cache-dir filelock tiktoken pyarrow python-dotenv
 "$VENV/bin/pip" install -q --no-cache-dir "endlex @ git+https://github.com/archeryue/Endlex"
+# FA3 comes from the HF kernels hub (same kernel nanochat uses), not pip flash-attn.
+"$VENV/bin/pip" install -q --no-cache-dir kernels
 "$VENV/bin/python" -c "import torch;print('venv torch',torch.__version__,'gpus',torch.cuda.device_count())"
 # NOTE: $VENV/bin/torchrun does NOT exist -- console scripts are not inherited, only
 # packages. Launch with: $VENV/bin/python -m torch.distributed.run
@@ -47,6 +49,24 @@ mkdir -p "$BASE"
 if [ "$(ls "$BASE/base_data_climbmix" 2>/dev/null | wc -l)" -lt "$SHARDS" ]; then
   (cd ~/nanochat && NANOCHAT_BASE_DIR="$BASE" "$VENV/bin/python" -m nanochat.dataset -n "$SHARDS")
 fi
+
+say "3b. FA3 availability"
+# The hub ships PREBUILT kernels per (torch, cuda, arch). If this image's combination has
+# no build, get_kernel() fails and you silently fall back to SDPA -- which for SSSL is 34%
+# SLOWER than no windowing at all (measured). Check before the run, not during it.
+"$VENV/bin/python" - <<'PY' || echo "!! FA3 unavailable -- see STAGE3.md 0.3 for the SSSL-vs-L trade"
+import torch, re, urllib.request, json
+tv = "torch" + "".join(torch.__version__.split("+")[0].split(".")[:2])
+cu = "cu" + (torch.version.cuda or "").replace(".", "")
+want = f"{tv}-cxx11-{cu}-x86_64-linux"
+url = "https://huggingface.co/api/models/varunneal/flash-attention-3/tree/main/build"
+have = {x["path"].split("/")[-1] for x in json.load(urllib.request.urlopen(url, timeout=30))}
+print(f"   this image: torch {torch.__version__} -> needs build {want}")
+print(f"   {'OK - prebuilt kernel exists' if want in have else 'MISSING - no prebuilt kernel for this combo'}")
+major, _ = torch.cuda.get_device_capability()
+print(f"   GPU is sm{major}x -> {'Hopper, FA3 usable' if major == 9 else 'NOT Hopper, FA3 will not load'}")
+raise SystemExit(0 if want in have else 1)
+PY
 
 say "4. pre-flight assertions"
 cd ~/ArcherChat
