@@ -175,6 +175,17 @@ If FA3 is unavailable on the box, the fallback is a genuine trade:
 | `SSSL` on SDPA | +34% wall-clock | faithful architecture, slow |
 | `L` on SDPA | fast (39.5% MFU) | ~10% more FLOPs, diverges from the reference |
 
+**PIN `kernels==0.11.7`. Do not loosen it.** This cost a rented H100 and an hour to
+learn. nanochat's loader is a bare `get_kernel('varunneal/flash-attention-3')`, and its
+lockfile pins **kernels 0.11.7**, where that call just works — no version, no trust flag,
+no HF token. From 0.17 the API changed under it in three stacking ways, each masking the
+next: `get_kernel()` requires `version=`/`revision=`; then it wants
+`trust_remote_code=True`; then it resolves through HF's *kernel registry*, where this repo
+is not registered (`/api/kernels/varunneal/flash-attention-3` → 404, while
+`/api/kernels/kernels-community/flash-attn3` → 200), so it 401s without a token and 404s
+with one. **The fix is the pin, not a rewritten call** — chasing the new API leads you to a
+different kernel repo than the oracle uses.
+
 **The kernel is obtainable — verified.** The hub repo `varunneal/flash-attention-3` is
 public and ungated, and ships prebuilt kernels per `(torch, cuda, arch)`:
 

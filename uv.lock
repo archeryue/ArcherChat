@@ -252,7 +252,8 @@ dependencies = [
     { name = "fastapi" },
     { name = "filelock" },
     { name = "jinja2" },
-    { name = "kernels" },
+    { name = "kernels", version = "0.11.7", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-10-archerchat-gpu'" },
+    { name = "kernels", version = "0.17.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
     { name = "psutil" },
     { name = "python-dotenv" },
     { name = "rustbpe" },
@@ -271,7 +272,7 @@ cpu = [
     { name = "torch", version = "2.9.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-10-archerchat-cpu') or (extra == 'extra-10-archerchat-cpu' and extra == 'extra-10-archerchat-gpu')" },
 ]
 gpu = [
-    { name = "kernels" },
+    { name = "kernels", version = "0.11.7", source = { registry = "https://pypi.org/simple" } },
     { name = "torch", version = "2.9.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" } },
 ]
 
@@ -293,7 +294,7 @@ requires-dist = [
     { name = "filelock", specifier = ">=3.13" },
     { name = "jinja2", specifier = ">=3.1" },
     { name = "kernels", specifier = ">=0.11.7" },
-    { name = "kernels", marker = "extra == 'gpu'", specifier = ">=0.17" },
+    { name = "kernels", marker = "extra == 'gpu'", specifier = "==0.11.7" },
     { name = "psutil", specifier = ">=7.1.0" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "rustbpe", specifier = ">=0.1.0" },
@@ -761,8 +762,8 @@ name = "cryptography"
 version = "48.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "platform_python_implementation != 'PyPy' or (extra == 'extra-10-archerchat-cpu' and extra == 'extra-10-archerchat-gpu')" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-10-archerchat-cpu' and extra == 'extra-10-archerchat-gpu')" },
+    { name = "cffi", marker = "(platform_python_implementation != 'PyPy' and extra == 'extra-10-archerchat-cpu') or (platform_python_implementation != 'PyPy' and extra != 'extra-10-archerchat-gpu') or (extra == 'extra-10-archerchat-cpu' and extra == 'extra-10-archerchat-gpu')" },
+    { name = "typing-extensions", marker = "(python_full_version < '3.11' and extra == 'extra-10-archerchat-cpu') or (python_full_version < '3.11' and extra != 'extra-10-archerchat-gpu') or (extra == 'extra-10-archerchat-cpu' and extra == 'extra-10-archerchat-gpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/12/45/870e7f4bef50e5f53b9f51d4428aee5290eedf58ba443f16b1ebb7ab8e66/cryptography-48.0.1.tar.gz", hash = "sha256:266f4ee051abb2f725b74ef8072b521ce1feacf685a3364fa6a6b45548db791a", size = 832989, upload-time = "2026-06-09T22:32:31.8Z" }
 wheels = [
@@ -914,8 +915,8 @@ name = "email-validator"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "dnspython" },
-    { name = "idna" },
+    { name = "dnspython", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "idna", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f5/22/900cb125c76b7aaa450ce02fd727f452243f2e91a61af068b40adba60ea9/email_validator-2.3.0.tar.gz", hash = "sha256:9fc05c37f2f6cf439ff414f8fc46d917929974a82244c20eb10231ba60c54426", size = 51238, upload-time = "2025-08-26T13:09:06.831Z" }
 wheels = [
@@ -1263,7 +1264,7 @@ name = "id"
 version = "1.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "urllib3" },
+    { name = "urllib3", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/6d/04/c2156091427636080787aac190019dc64096e56a23b7364d3c1764ee3a06/id-1.6.1.tar.gz", hash = "sha256:d0732d624fb46fd4e7bc4e5152f00214450953b9e772c182c1c22964def1a069", size = 18088, upload-time = "2026-02-04T16:19:41.26Z" }
 wheels = [
@@ -1473,16 +1474,69 @@ wheels = [
 
 [[package]]
 name = "kernels"
+version = "0.11.7"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.14' and sys_platform == 'win32'",
+    "python_full_version >= '3.14' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'win32'",
+    "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version == '3.11.*' and sys_platform == 'win32'",
+    "python_full_version == '3.11.*' and sys_platform == 'emscripten'",
+    "python_full_version == '3.11.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version < '3.11'",
+]
+dependencies = [
+    { name = "huggingface-hub", marker = "extra == 'extra-10-archerchat-gpu'" },
+    { name = "packaging", marker = "extra == 'extra-10-archerchat-gpu'" },
+    { name = "pyyaml", marker = "extra == 'extra-10-archerchat-gpu'" },
+    { name = "tomli", marker = "(python_full_version < '3.11' and extra == 'extra-10-archerchat-gpu') or (extra == 'extra-10-archerchat-cpu' and extra == 'extra-10-archerchat-gpu')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d6/c8/2d4fea16366d34069af6d4c4f61218f55e5d0daea5d4c24d58849e9fd626/kernels-0.11.7.tar.gz", hash = "sha256:99c3aa518965518902f4dc26053d6051f06abc904ae33d9486c28674a2ea0fa5", size = 50282, upload-time = "2026-01-08T15:41:57.383Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ab/49/e62183353374ec71306ef354781233ac8d12fdfd1cf3d47c875055a99603/kernels-0.11.7-py3-none-any.whl", hash = "sha256:1421791b1e501fcb0a7f0a4d763c5385591756d9d6ed12ed8baa1e0d71bcd21a", size = 46501, upload-time = "2026-01-08T15:41:55.784Z" },
+]
+
+[[package]]
+name = "kernels"
 version = "0.17.0"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.14' and sys_platform == 'win32' and extra == 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version >= '3.14' and sys_platform == 'emscripten' and extra == 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version >= '3.14' and sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'win32' and extra == 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'emscripten' and extra == 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version == '3.11.*' and sys_platform == 'win32' and extra == 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version == '3.11.*' and sys_platform == 'emscripten' and extra == 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version < '3.11' and sys_platform != 'darwin' and extra == 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version >= '3.14' and sys_platform == 'darwin' and extra == 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'darwin' and extra == 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version == '3.11.*' and sys_platform == 'darwin' and extra == 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version < '3.11' and sys_platform == 'darwin' and extra == 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version >= '3.14' and sys_platform == 'win32' and extra != 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version >= '3.14' and sys_platform == 'emscripten' and extra != 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'win32' and extra != 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'emscripten' and extra != 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version == '3.11.*' and sys_platform == 'win32' and extra != 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version == '3.11.*' and sys_platform == 'emscripten' and extra != 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version == '3.11.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+    "python_full_version < '3.11' and extra != 'extra-10-archerchat-cpu' and extra != 'extra-10-archerchat-gpu'",
+]
 dependencies = [
-    { name = "huggingface-hub" },
-    { name = "packaging" },
-    { name = "pyyaml" },
-    { name = "sigstore" },
-    { name = "tomli", marker = "python_full_version < '3.11' or (extra == 'extra-10-archerchat-cpu' and extra == 'extra-10-archerchat-gpu')" },
-    { name = "tomlkit" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-10-archerchat-cpu' and extra == 'extra-10-archerchat-gpu')" },
+    { name = "huggingface-hub", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "packaging", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "pyyaml", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "sigstore", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "tomli", marker = "(python_full_version < '3.11' and extra == 'extra-10-archerchat-cpu') or (python_full_version < '3.11' and extra != 'extra-10-archerchat-gpu') or (extra == 'extra-10-archerchat-cpu' and extra == 'extra-10-archerchat-gpu')" },
+    { name = "tomlkit", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "typing-extensions", marker = "(python_full_version < '3.11' and extra == 'extra-10-archerchat-cpu') or (python_full_version < '3.11' and extra != 'extra-10-archerchat-gpu') or (extra == 'extra-10-archerchat-cpu' and extra == 'extra-10-archerchat-gpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ce/30/84ef4ce36cb08cabd5c43315970d7315c684883c006579a34651e5a403ab/kernels-0.17.0.tar.gz", hash = "sha256:28cc712bd7f76165a67364ab1171b6896996355d57f3ec9d1c40ea2ead770bfc", size = 332930, upload-time = "2026-09-14T09:19:56.706Z" }
 wheels = [
@@ -3143,7 +3197,7 @@ wheels = [
 
 [package.optional-dependencies]
 email = [
-    { name = "email-validator" },
+    { name = "email-validator", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
 ]
 
 [[package]]
@@ -3285,7 +3339,7 @@ name = "pyjwt"
 version = "2.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-10-archerchat-cpu' and extra == 'extra-10-archerchat-gpu')" },
+    { name = "typing-extensions", marker = "(python_full_version < '3.11' and extra == 'extra-10-archerchat-cpu') or (python_full_version < '3.11' and extra != 'extra-10-archerchat-gpu') or (extra == 'extra-10-archerchat-cpu' and extra == 'extra-10-archerchat-gpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/3b/81/58d0ac84e1ef3a3843791d6954d94c0b33d526c75eeb1efbce9d0a4c4077/pyjwt-2.13.0.tar.gz", hash = "sha256:41571c89ca91598c79e8ef18a2d07367d4810fbbd6f637794879baf1b7703423", size = 107515, upload-time = "2026-05-21T19:54:36.618Z" }
 wheels = [
@@ -3297,8 +3351,8 @@ name = "pyopenssl"
 version = "26.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-10-archerchat-cpu' and extra == 'extra-10-archerchat-gpu')" },
+    { name = "cryptography", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "typing-extensions", marker = "(python_full_version < '3.13' and extra == 'extra-10-archerchat-cpu') or (python_full_version < '3.13' and extra != 'extra-10-archerchat-gpu') or (extra == 'extra-10-archerchat-cpu' and extra == 'extra-10-archerchat-gpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1a/51/27a5ad5f939d08f690a326ef9582cda7140555180db71695f6fb747d6a36/pyopenssl-26.2.0.tar.gz", hash = "sha256:8c6fcecd1183a7fc897548dfe388b0cdb7f37e018200d8409cf33959dbe35387", size = 182195, upload-time = "2026-05-04T23:06:09.72Z" }
 wheels = [
@@ -3640,7 +3694,7 @@ name = "rfc3161-client"
 version = "1.0.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography" },
+    { name = "cryptography", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/66/a7/be3b086133a87d595e7b11564931d5e5283edeeabba05dfee636a34b4dab/rfc3161_client-1.0.6.tar.gz", hash = "sha256:9969262fe6c08ecce39f9fe3996cf412187793834a022a643803090db5aae6b4", size = 106710, upload-time = "2026-04-08T14:15:05.66Z" }
 wheels = [
@@ -3777,21 +3831,21 @@ name = "sigstore"
 version = "4.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography" },
-    { name = "id" },
-    { name = "importlib-resources", marker = "python_full_version < '3.11' or (extra == 'extra-10-archerchat-cpu' and extra == 'extra-10-archerchat-gpu')" },
-    { name = "platformdirs" },
-    { name = "pyasn1" },
-    { name = "pydantic" },
-    { name = "pyjwt" },
-    { name = "pyopenssl" },
-    { name = "requests" },
-    { name = "rfc3161-client" },
-    { name = "rfc8785" },
-    { name = "rich" },
-    { name = "sigstore-models" },
-    { name = "sigstore-rekor-types" },
-    { name = "tuf" },
+    { name = "cryptography", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "id", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "importlib-resources", marker = "(python_full_version < '3.11' and extra == 'extra-10-archerchat-cpu') or (python_full_version < '3.11' and extra != 'extra-10-archerchat-gpu') or (extra == 'extra-10-archerchat-cpu' and extra == 'extra-10-archerchat-gpu')" },
+    { name = "platformdirs", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "pyasn1", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "pydantic", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "pyjwt", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "pyopenssl", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "requests", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "rfc3161-client", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "rfc8785", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "rich", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "sigstore-models", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "sigstore-rekor-types", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "tuf", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/d6/63/1e44d9964d4f47617e641bdf6ce1b883b893d95b29ff07f97a8901df6b1c/sigstore-4.3.0.tar.gz", hash = "sha256:3c4b566bddfcc53e73d3adc06acf4311d72be0d907a167133abdc815a472a59b", size = 90550, upload-time = "2026-06-03T16:08:58.503Z" }
 wheels = [
@@ -3803,8 +3857,8 @@ name = "sigstore-models"
 version = "0.0.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pydantic" },
-    { name = "typing-extensions" },
+    { name = "pydantic", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "typing-extensions", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c6/ed/5c0ff809f90b19f4e971e17c1ed11f4df60082c6010b32a82054087e91e0/sigstore_models-0.0.6.tar.gz", hash = "sha256:c766c09470c2a7e8a4a333c893f07e2001c56a3ff1757b1a246119f53169a849", size = 7037, upload-time = "2025-11-26T19:18:12.61Z" }
 wheels = [
@@ -3816,7 +3870,7 @@ name = "sigstore-rekor-types"
 version = "0.0.18"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pydantic", extra = ["email"] },
+    { name = "pydantic", extra = ["email"], marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b4/54/102e772445c5e849b826fbdcd44eb9ad7b3d10fda17b08964658ec7027dc/sigstore_rekor_types-0.0.18.tar.gz", hash = "sha256:19aef25433218ebf9975a1e8b523cc84aaf3cd395ad39a30523b083ea7917ec5", size = 15687, upload-time = "2024-11-22T13:59:54.009Z" }
 wheels = [
@@ -4333,8 +4387,8 @@ name = "tuf"
 version = "7.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "securesystemslib" },
-    { name = "urllib3" },
+    { name = "securesystemslib", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
+    { name = "urllib3", marker = "extra == 'extra-10-archerchat-cpu' or extra != 'extra-10-archerchat-gpu'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/aa/40/25ceaf7f02e18b0d99150d94e200929351a542479c54abb7b92e1fd74b10/tuf-7.0.0.tar.gz", hash = "sha256:9d2e6723538e0d5a3e482b6de805fcfe64481448d5853039ba6b06ba541efd7f", size = 272032, upload-time = "2026-05-18T08:28:57.408Z" }
 wheels = [

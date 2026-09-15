@@ -268,7 +268,7 @@ class FlashAttnCompat:
 # the wrong tensors, trains happily, and converges somewhere else.
 
 
-FA3_REPO = "kernels-community/flash-attn3"
+FA3_REPO = "varunneal/flash-attention-3"   # same repo nanochat uses
 
 
 def _load_fa3():
@@ -287,23 +287,20 @@ def _load_fa3():
     try:
         os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
         from kernels import get_kernel
-        # Repo MUST be one registered in HF's kernel registry (/api/kernels/...).
-        # nanochat uses "varunneal/flash-attention-3", which is a plain MODEL repo and is
-        # NOT registered: kernels>=0.17 then 404s on /api/kernels/... no matter what auth
-        # or revision you pass. Verified by probing the endpoint directly:
-        #     /api/kernels/kernels-community/flash-attn3   -> 200
-        #     /api/kernels/varunneal/flash-attention-3     -> 404
-        # An HF_TOKEN is also required (without one the same call 401s before it can 404).
-        # Order matters: on torch 2.9.1+cu128, version=1 / revision=main resolve to a
-        # cu128 build while version=2 resolves to cu126. Prefer the exact CUDA match.
-        for kwargs in ({"version": 1}, {"revision": "main"}, {"version": 2}):
-            try:
-                mod = get_kernel(FA3_REPO, **kwargs)
-                fa = getattr(mod, "flash_attn_interface", mod)
-                return fa, f"fa3 ({FA3_REPO} {kwargs})"
-            except Exception:
-                continue
-        raise RuntimeError(f"no loadable version of {FA3_REPO}")
+        # Identical to nanochat/flash_attention.py:35-36 — same repo, same bare call.
+        #
+        # ⚠️ PINNED TO kernels==0.11.7 (see pyproject). Do NOT loosen it. From 0.17 the API
+        # changed under this call in three stacking ways, each masking the next:
+        #   1. get_kernel() started REQUIRING version= or revision=   -> ValueError
+        #   2. then it wants trust_remote_code=True                   -> trust error
+        #   3. then it resolves via HF's KERNEL REGISTRY, and this is a plain model repo:
+        #        /api/kernels/varunneal/flash-attention-3    -> 404
+        #        /api/kernels/kernels-community/flash-attn3  -> 200
+        #      so it 401s without a token and 404s with one.
+        # At 0.11.7 none of that exists: no version, no trust flag, no registry, no HF
+        # token. nanochat pins 0.11.7 in its lockfile, which is why the speedrun works for
+        # everyone. Matching the pin is the fix; rewriting the call is not.
+        return get_kernel(FA3_REPO).flash_attn_interface, f"fa3 ({FA3_REPO})"
     except Exception as e:
         first = f"hf kernels unavailable ({type(e).__name__}: {str(e)[:60]})"
     try:
