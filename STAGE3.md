@@ -146,7 +146,36 @@ python3 -c "b=1048576; print([(d, b//(d*2048*8)) for d in (8,16,32) if b%(d*2048
 # -> [(8, 8), (16, 4), (32, 2)]   # (device-batch-size, grad_accum) at ws=8
 ```
 
-**0.3 Wire FA3 — but note what is already settled.** Three separable things get conflated here:
+**0.3 Wire FA3 — and know what it is actually worth.** MEASURED, not estimated (d8, same
+batch, SDPA path):
+
+| pattern | flops/token | attention share | throughput | MFU |
+|---|---|---|---|---|
+| `L` | 5.285e9 | 17.1% | **106,405 tok/s** | 39.5% |
+| `SSSL` | 4.775e9 (−9.6%) | 8.3% | **70,589 tok/s** | 22.0% |
+
+**On the SDPA path, `SSSL` is 34% SLOWER than `L` despite doing 9.6% fewer FLOPs** — the
+dense mask costs more than the sparsity saves. So FA3's value is:
+
+- vs running `L` on SDPA: ~**$7–10** (SSSL's 9.6% FLOP saving, if the kernel exploits it)
+- vs running `SSSL` on SDPA: ~**$25–35** (avoids the 34% penalty)
+
+An earlier version of this file claimed $70–100. That was unmeasured and wrong: attention is
+only 8–17% of d24's compute, so no attention kernel can be worth a third of the run.
+
+**The real reason to want FA3 is fidelity, not speed.** nanochat's speedrun trains with
+`SSSL`, and the CORE ≥ 0.2565 threshold was established on that architecture. Falling back
+to `L` trains a *different* model — full receptive field everywhere, ~10% more compute —
+which is not obviously worse but is no longer the reference config.
+
+If FA3 is unavailable on the box, the fallback is a genuine trade:
+
+| option | cost | consequence |
+|---|---|---|
+| `SSSL` on SDPA | +34% wall-clock | faithful architecture, slow |
+| `L` on SDPA | fast (39.5% MFU) | ~10% more FLOPs, diverges from the reference |
+
+Three separable correctness questions, all settled independently of the above:
 
 | | status |
 |---|---|
@@ -327,7 +356,8 @@ Then use MFU as the performance confirmation:
 
 | printed MFU | meaning |
 |---|---|
-| ~35–50% | FA3 working. Proceed. |
+| ~35–50% | healthy. Proceed. |
+| **~22%** | the signature of `SSSL` running on the SDPA shim — **measured** at d8, not guessed |
 | **< 20%** | something else is wrong even if the backend line says fa3. Investigate before burning hours. |
 
 **5.4 Sanity-check the horizon:** the log's header should read `steps total=5568`. Expected
