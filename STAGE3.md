@@ -83,6 +83,31 @@ to work.*
 
 ---
 
+## Mistakes made during the H100 sessions
+
+| # | mistake | cost | fix |
+|---|---|---|---|
+| 9 | Installed `kernels` **unpinned** → ≥0.17, whose changed API broke FA3 loading. I then "fixed" our loader to match the new API — pointing at a different kernel repo and requiring an HF token — instead of checking what nanochat pins | ~40 min + a rented H100 | **nanochat's lockfile pins `kernels 0.11.7`**, where its bare call just works. The oracle was one directory away the whole time. Pin, don't rewrite |
+| 10 | Chased a **401** as an auth problem. Got a token; it became a **404** | the token was never needed | The 401 was the *symptom*; the cause was the version. When an error looks like auth, still check the reference's pin first |
+| 11 | Claimed FA3 was "unverifiable off Hopper" and wrote `oracle_attn_backend_check.py` to skip on non-Hopper — then concluded it couldn't be tested locally | days of false blocker | **Loading a kernel and running it are different things.** The entire `get_kernel` diagnosis ran locally on a 5060 Ti for $0 |
+| 12 | Debugged a defective instance for **20 min** instead of throwing it away | ~$3 | Health-check with `get_device_capability()` within 60 s; terminate and relaunch on failure. On the good machine this took **5 seconds** |
+| 13 | Used `torch.cuda.device_count()` as a liveness check | reported "CUDA is up" twice when it wasn't | It does not trigger a full CUDA init. Probe with `get_device_capability()` |
+| 14 | Wrote the blanket rule "never download torch on a rented box" from RunPod's 1 MB/s | nearly skipped the torch install that FA3 requires | **Measure the link.** Lambda does 32 MB/s; our pin installs in ~2 min |
+| 15 | Ran the d24 smoke with `--max-steps 3` when the logger prints every 10 steps | one wasted run | Only step 0 printed, which is compile-polluted. Use ≥12 steps for a throughput number |
+
+### The pattern, stated once
+
+Every one of these is the same error: **I verified a component and inferred the whole.**
+Probed gloo's collectives but not the async pattern the code uses. Read `speedrun.sh` for
+flags but not its `--` separator. Read `flash_attention.py` for the call but not the
+version pinned beside it. Checked a repo existed but not that it resolved. Counted GPUs
+instead of initialising CUDA.
+
+This project's entire method is *compare against the oracle*. It was applied rigorously to
+every number — bit-identical forward, optimizer, dataloader — and abandoned the moment a
+problem looked like tooling rather than numerics. **The oracle checkout answers tooling
+questions too.**
+
 ## Code bugs the rehearsal found
 
 Not mistakes — findings. These were latent and would have surfaced at $25/hr.
@@ -114,6 +139,48 @@ Sharding coverage does **not** require 8 GPUs — it requires the right `K` (mat
 shape group) relative to world_size. `oracle_ddp_check.py --n-layer` sets `K` directly, so
 `--n-layer 6 --world-size 4` reproduces d12-at-ws=8's exact regime. See that script's
 docstring for the table.
+
+---
+
+## MEASURED on 2×H100 (smoke test, $1.37)
+
+Everything below is measured on real Hopper, not extrapolated. This replaces the earlier
+planning estimates, which assumed 35% MFU.
+
+| gate | result |
+|---|---|
+| CUDA health | `get_device_capability()` → `(9, 0)` in **5 s** after SSH |
+| image torch | **2.7.0** — no FA3 build; bootstrap installs 2.9.1+cu128 (~2 min at 32 MB/s) |
+| **FA3 loads** | **`fa3 (varunneal/flash-attention-3)`** — nanochat's repo, nanochat's bare call, `kernels==0.11.7`, **no HF token** |
+| **FA3 correctness** | vs our SDPA reference (bit-identical to nanochat): full-causal **9.77e-04**, **sliding-window (256) 3.91e-03** — bf16 rounding, not logic |
+| d24 builds + trains | 1384.1M params, flops/token 4.78e9, `done: pretrain d24` clean |
+| **VRAM @ `--device-batch-size 16`** | **61 GB / 80 GB** — comfortable headroom |
+| config resolution | 5568 steps, batch 1 048 576, lr 0.0283, wd 0.0597 — as designed |
+| **throughput (post-compile)** | **207 979 → 208 138 tok/s, 50.2% MFU**, stable across steps 10 and 20 |
+
+**50.2% MFU with FA3 + SSSL.** For contrast, SSSL on the SDPA shim measured **22%** locally,
+and `L` on SDPA measured 39.5% — so FA3 is worth substantially more than the earlier
+FLOP-ratio argument suggested, because it removes the dense-mask penalty *and* exploits the
+window.
+
+### Revised d24 cost and time — from measurement, not assumption
+
+Assuming the 2→8 GPU scaling holds (NVLink on a full node, comms were 0.9% of step time):
+
+| phase | time | cost @ $31.92/hr |
+|---|---|---|
+| pretrain (5.84 B tokens) | **1.95 h** | **$62** |
+| SFT (~509 M tokens) | 0.17 h | $5 |
+| base_eval + chat_eval | ~0.2 h | $6 |
+| **total** | **~2.3 h** | **~$74** |
+
+Earlier planning said 2.8 h / $89 for pretrain alone at an assumed 35% MFU. The measured
+50.2% makes the whole pipeline cheaper than the old pretrain-only figure. Budget ~$100 to
+absorb a restart; the 8×H100 is $31.92/hr, so an idle hour costs more than the entire
+smoke test that produced these numbers.
+
+⚠️ The 2→8 extrapolation is the one unmeasured step. Comms grow with world size, so treat
+1.95 h as optimistic and re-read MFU at step 50 of the real run (Phase 5.3).
 
 ---
 
