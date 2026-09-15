@@ -32,10 +32,21 @@ say "2. venv that INHERITS the preinstalled torch (downloads no torch)"
 # --system-site-packages: we get the image's torch/CUDA; only the small pure-python deps
 # are fetched. Also sidesteps PEP 668, which blocks `pip install` into the system python.
 [ -x "$VENV/bin/python" ] || python3 -m venv --system-site-packages "$VENV"
+# Lambda's H100 image ships torch 2.7.0, for which the FA3 hub has NO build (2.8-2.12
+# only). PyPI on Lambda runs ~32 MB/s so installing our pin costs ~2 min and is worth it;
+# skip if the image already has a version with a build.
+TV=$("$VENV/bin/python" -c "import torch;print('.'.join(torch.__version__.split('+')[0].split('.')[:2]))" 2>/dev/null || echo 0.0)
+case "$TV" in 2.8|2.9|2.10|2.11|2.12) echo "   image torch $TV has an FA3 build, keeping it";;
+  *) echo "   image torch $TV has NO FA3 build -> installing 2.9.1+cu128"
+     "$VENV/bin/pip" install -q --no-cache-dir torch==2.9.1 --index-url https://download.pytorch.org/whl/cu128;; esac
 "$VENV/bin/pip" install -q --no-cache-dir filelock tiktoken pyarrow python-dotenv
 "$VENV/bin/pip" install -q --no-cache-dir "endlex @ git+https://github.com/archeryue/Endlex"
 # FA3 comes from the HF kernels hub (same kernel nanochat uses), not pip flash-attn.
-"$VENV/bin/pip" install -q --no-cache-dir kernels
+# PINNED to 0.11.7 -- the version nanochat locks. Unpinned you get >=0.17, whose
+# get_kernel() requires version=/trust_remote_code= and resolves through HF's kernel
+# registry where nanochat's repo is NOT registered: 401 without a token, 404 with one.
+# Loosening this pin silently disables FA3. See STAGE3.md 0.3.
+"$VENV/bin/pip" install -q --no-cache-dir "kernels==0.11.7"
 "$VENV/bin/python" -c "import torch;print('venv torch',torch.__version__,'gpus',torch.cuda.device_count())"
 # NOTE: $VENV/bin/torchrun does NOT exist -- console scripts are not inherited, only
 # packages. Launch with: $VENV/bin/python -m torch.distributed.run
