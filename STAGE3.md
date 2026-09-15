@@ -434,6 +434,58 @@ print(len(d),'tensors, finite:',all(torch.isfinite(v.float()).all() for v in d.v
 
 ---
 
+### CUDA error 802 "system not yet initialized" on a fresh H100 box
+
+Hit this on a Lambda `gpu_2x_h100_sxm5` and lost ~$3 to it. Signature:
+
+```
+nvidia-smi                      -> both H100s visible, healthy
+nvidia-smi -q | grep -A2 Fabric -> State : In Progress     (never reaches Completed)
+systemctl start nvidia-fabricmanager
+  -> "Detected Pre-NVL5 system"
+  -> "query NVSwitch device information ... failed: WARNING Nothing to do [NV_WARN_NOTHING_TO_DO]"
+ls /dev/nvidia-nvswitch*        -> only nvidia-nvswitchctl, no nvswitch0
+python -c "import torch; torch.cuda.get_device_capability()"  -> RuntimeError 802
+```
+
+**Cause.** On NVSwitch systems CUDA will not initialise until Fabric Manager registers the
+GPUs and fabric state reaches `Completed`. In a GPU-**passthrough VM** the NVSwitches are
+often not exposed to the guest, so FM has nothing to query, fabric never completes, and
+every CUDA init fails. This is a documented limitation of passthrough virtualisation, not
+a driver or version problem — ours had driver and FM both at 580.105.08.
+
+**Implication for instance choice.** This is a hazard of *sliced* instances
+(`gpu_1x/2x/4x_h100_sxm5`), which are carved out of an 8-GPU NVSwitch node. A full
+`gpu_8x_h100_sxm5` owns its NVSwitches, so the instance type Stage 3 actually needs is the
+least exposed. Prefer the full node; treat slices as unreliable for multi-GPU CUDA.
+
+**Triage order** (I skipped the middle two and terminated too early):
+
+1. `nvidia-smi -q | grep -A2 Fabric` — if `In Progress`, wait ~2 min; it can be transient.
+2. `sudo systemctl restart nvidia-fabricmanager; tail /var/log/fabricmanager.log`
+   — the log says more than `journalctl` does.
+3. `sudo nvidia-smi -r` (GPU reset), then restart fabricmanager.
+4. Reboot / restart the instance.
+5. **Terminate and relaunch** — on a cloud VM you cannot fix the hypervisor's NVSwitch
+   exposure, so a different host is usually the only real remedy.
+
+⚠️ **`torch.cuda.device_count()` IS NOT A LIVENESS CHECK.** It returned `2` throughout,
+because it does not trigger a full CUDA init. It fooled my polling loop into reporting
+success. Always probe with something that calls `_lazy_init()`:
+
+```bash
+python -c "import torch; print(torch.cuda.get_device_capability())"
+```
+
+**Also learned here:** Lambda's H100 image ships **torch 2.7.0**, for which the FA3 kernel
+hub has **no build** (2.8/2.9/2.10/2.11/2.12 only). The Phase-3b assert caught it in
+seconds. PyPI on Lambda runs at **32 MB/s** (vs RunPod's 1 MB/s), so installing our exact
+pin — `pip install torch==2.9.1 --index-url https://download.pytorch.org/whl/cu128` — costs
+~2 minutes and is the right move. The earlier blanket rule "never download torch on a
+rented box" was over-generalised from one slow host: **measure the link, then decide.**
+
+---
+
 ### If it goes wrong mid-run
 
 `run_full_pretrain.sh` now launches DDP and auto-resumes, so prefer it over the raw
