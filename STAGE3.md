@@ -112,7 +112,209 @@ docstring for the table.
 
 ---
 
-## d24 run sequence
+## Step-by-step: d24 on 8×H100
+
+Every step has an **expected output** and a **STOP IF**. Do not proceed past a failed
+assertion — that is the whole point of having them. Times assume 8×H100 SXM at ~$25/hr.
+
+Shell variables used throughout:
+
+```bash
+POD="root@<ip> -p <port> -i ~/.ssh/id_rsa"     # adjust to your provider's form
+V=/root/av                                     # the venv created in step 4
+A=/root/ArcherChat
+```
+
+---
+
+### Phase 0 — before you rent (free, ~30 min)
+
+**0.1 Decide the horizon.** `--target-param-data-ratio 8` (nanochat's speedrun, aimed at
+the GPT-2 threshold) ⇒ 5.84 B tokens, **5 568 steps**, batch 1 048 576, matrix_lr 0.028284,
+wd 0.059738. Ratio 12 is our compute-optimal default and costs ~1.5×.
+
+**0.2 Confirm the world size divides the batch.** The batch is 2^20, so **world_size must be
+a power of two**. 8 ✅, 4 ✅, **7 ✗, 6 ✗** — `base_train.py:118` asserts and dies at startup.
+
+```bash
+python3 -c "b=1048576; print([(d, b//(d*2048*8)) for d in (8,16,32) if b%(d*2048*8)==0])"
+# -> [(8, 8), (16, 4), (32, 2)]   # (device-batch-size, grad_accum) at ws=8
+```
+
+**0.3 Wire FA3.** This is the single biggest cost lever, ~$70–100. `--window-pattern` defaults
+to `SSSL`; our `attention.py` is an SDPA shim that materialises a dense 2048×2048 mask per
+sliding layer. On Hopper, install `flash-attn` and switch the shim body — the call sites in
+`model.py` were written not to change. **Unverifiable until you are on H100**, so do the
+edit now and treat step 5.2's MFU as the test.
+
+**0.4 Push the branch** you intend to run. The box clones from GitHub.
+
+---
+
+### Phase 1 — provision (~5 min)
+
+**1.1** 8×H100 **SXM** (not PCIe — NVLink makes comms 0.9% of step time instead of 21%),
+**80 GB** per GPU, and **≥ 500 GB disk**: d24 checkpoints are ~10 GB and DDP writes one
+optimizer shard *per rank*.
+
+**1.2** Authorise your key, then:
+
+```bash
+ssh $POD 'nvidia-smi --query-gpu=name,memory.total --format=csv,noheader; df -h /; \
+          python3 -c "import torch;print(torch.__version__, torch.cuda.device_count())"'
+```
+
+> **STOP IF** fewer than 8 GPUs, < 400 GB free, or no preinstalled torch.
+
+**1.3 Watchdog before workload.** Never let your session's liveness be the only thing
+between you and a running meter:
+
+```bash
+ssh $POD 'nohup sh -c "sleep 28800; shutdown -h now" >/dev/null 2>&1 &'   # hard 8h cap
+```
+
+---
+
+### Phase 2 — ship artifacts (~2 min)
+
+```bash
+ssh $POD 'mkdir -p /root/.cache/nanochat/tokenizer'          # rsync will NOT create parents
+rsync -az -e "ssh -p <port> -i ~/.ssh/id_rsa" \
+      ~/.cache/nanochat/tokenizer/ $POD:/root/.cache/nanochat/tokenizer/ \
+      && echo OK || echo "RSYNC FAILED"                       # <-- check, do not assume
+rsync -az ... ~/.cache/nanochat/eval_bundle/ $POD:/root/.cache/nanochat/eval_bundle/
+rsync -az ... ~/ArcherChat/.env            $POD:/root/ArcherChat/.env
+```
+
+> **Ship the tokenizer, never retrain it** — a different vocab voids every oracle number.
+> **Ship `.env`** or Endlex runs offline and you are blind for four hours.
+
+---
+
+### Phase 3 — bootstrap (~5 min, dominated by the 170-shard fetch at ~18 MB/s)
+
+```bash
+ssh $POD 'cd /root && BRANCH=main SHARDS=170 nohup bash stage3_pod_bootstrap.sh > /root/boot.log 2>&1 &'
+ssh $POD 'tail -f /root/boot.log'
+```
+
+Expected tail: `train shards: 170   val: ['shard_06542.parquet']` and `tokenizer vocab: 32768`.
+
+> **STOP IF** shard count < 170, vocab ≠ 32768, or the tokenizer assertion fires.
+> **Do not run `uv sync --extra gpu`** — see the pre-flight checklist.
+
+---
+
+### Phase 4 — gates before the expensive run (~5 min, saves hours)
+
+```bash
+ssh $POD "cd $A && export PYTHONPATH=$A && \
+  for NL in 6 3 12; do $V/bin/python scripts/oracle_ddp_check.py --world-size 8 --n-layer \$NL; done"
+```
+
+Expected: three × `DDP-EQUIVALENCE: PASS ✅ ... max|Δ| ~3e-08`.
+
+> **STOP IF** any gate exceeds 1e-5. That is `DistMuonAdamW` mis-sharding, and every
+> subsequent number would be garbage. Debugging here costs minutes; debugging it inside a
+> 3-hour run costs the run.
+
+`--n-layer` sets K (matrices per Muon shape group) directly, which is what determines the
+sharding regime — `6` gives ZERO-RANK + remainder, `3` gives three ZERO-RANK groups, `12`
+gives plain remainder. At ws=8 this covers d24's own `K=12 → 1+4` split.
+
+---
+
+### Phase 5 — d24 pretrain (~2.5–4.4 h)
+
+**5.1 Launch.** Note the `--` separator: `--run` is a prefix of the launcher's `--run-path`
+and argparse will refuse it otherwise.
+
+```bash
+ssh $POD "cd $A && export PYTHONPATH=$A && nohup $V/bin/python -m torch.distributed.run \
+  --standalone --nproc_per_node=8 scripts/base_train.py -- \
+  --depth 24 --target-param-data-ratio 8 --device-batch-size 16 \
+  --window-pattern SSSL --eval-every 200 --eval-tokens 4194304 \
+  --checkpoint-every 200 --keep-last 3 \
+  --ckpt-dir /root/.cache/nanochat/base_checkpoints/d24 --run archerchat-d24 \
+  > /root/d24.log 2>&1 &"
+```
+
+**5.2 Verify it actually started — within 30 seconds.** Two silent launch failures during
+the rehearsal went unnoticed because the check was a filtered grep after a sleep:
+
+```bash
+sleep 30; ssh $POD 'nvidia-smi --query-gpu=index,utilization.gpu,memory.used --format=csv,noheader; \
+                    tail -20 /root/d24.log'      # RAW tail, not a grep
+```
+
+> **STOP IF** GPU utilisation is 0 — read the raw log, the error will be there.
+
+**5.3 Read MFU at ~step 50. This is the FA3 test.** MFU now includes the `world_size`
+factor, so the printed number is trustworthy.
+
+| printed MFU | meaning |
+|---|---|
+| ~35–50% | FA3 working. Proceed. |
+| **< 20%** | **sliding-window is falling back to the dense-mask SDPA shim.** Kill it. Every hour costs $25 and you would roughly double the run. |
+
+**5.4 Sanity-check the horizon:** the log's header should read `steps total=5568`. Expected
+val_bpb at step 0 ≈ 3.16.
+
+---
+
+### Phase 6 — evaluate (~15 min on 8 GPUs)
+
+```bash
+# cheap confidence check BEFORE teardown -- ~1 min, proves the checkpoint is not garbage
+ssh $POD "cd $A && PYTHONPATH=$A $V/bin/python -m torch.distributed.run --standalone \
+  --nproc_per_node=8 scripts/base_eval.py -- --depth 24 --max-per-task 50 \
+  --init-from /root/.cache/nanochat/base_checkpoints/d24 --device-batch-size 16"
+
+# the real number, uncapped
+... --max-per-task -1 ...        # <-- THE VERDICT: CORE >= 0.2565 clears GPT-2
+```
+
+Then SFT and chat_eval, same launcher, same `--`:
+
+```bash
+... scripts/chat_sft.py -- --depth 24 --device-batch-size 16 --eval-every 200 \
+      --eval-tokens 4194304 --init-from <base d24> --ckpt-dir <d24_sft> --run archerchat-d24-sft
+... scripts/chat_eval.py -- --depth 24 --init-from <d24_sft> --max-problems 200
+```
+
+---
+
+### Phase 7 — bring it home, then kill it (~5 min)
+
+```bash
+# weights by rsync, NOT Endlex: 21 MB/s measured, and Endlex's chunked upload was throwing
+# SSL: SSLV3_ALERT_BAD_RECORD_MAC. Only model+meta are needed for eval; optimizer shards
+# are the larger half and exist only for resume.
+rsync -az --info=progress2 $POD:/root/.cache/nanochat/base_checkpoints/d24/model_*.pt   ./d24/
+rsync -az $POD:/root/.cache/nanochat/base_checkpoints/d24/meta_*.json ./d24/
+rsync -az $POD:/root/.cache/nanochat/chatsft_checkpoints/d24_sft/     ./d24_sft/
+rsync -az $POD:/root/ArcherChat/endlex_runs/ ./pod_artifacts/endlex_runs/   # metrics
+rsync -az $POD:/root/d24.log ./pod_artifacts/
+
+# verify locally BEFORE terminating
+python3 -c "import torch;d=torch.load('d24/model_005568.pt',map_location='cpu',weights_only=True);\
+print(len(d),'tensors, finite:',all(torch.isfinite(v.float()).all() for v in d.values()))"
+```
+
+> **TERMINATE THE INSTANCE.** Nothing of value lives on it once the above verifies.
+
+---
+
+### If it goes wrong mid-run
+
+`run_full_pretrain.sh` auto-resumes from the last checkpoint — but it shells `python`
+directly, so it cannot launch DDP as written. At ws=8, relaunch the Phase 5.1 command with
+`--resume` added; `--keep-last 3` guarantees a recent checkpoint exists, and the loader
+state in `meta_*.json` restores the exact data position.
+
+---
+
+## Appendix — condensed command list
 
 ```bash
 # 0. watchdog FIRST

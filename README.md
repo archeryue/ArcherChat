@@ -54,7 +54,7 @@ All modules are implemented and validated locally against nanochat: forward, opt
 
 See [TECH_PLAN.md](TECH_PLAN.md) for the full module-by-module plan and acceptance gates.
 
-### Stage 3 — Cloud d24 speedrun
+### Stage 3 — Cloud d24 speedrun (DDP path validated, ready to run)
 
 Rent 8×H100, run the ArcherChat speedrun script, target the [nanochat leaderboard's GPT-2 threshold](https://github.com/karpathy/nanochat#time-to-gpt-2-leaderboard) (0.2565 CORE). Final weights + metrics sync from cloud to home box via [Endlex](https://github.com/archeryue/Endlex). The cloud instance can be torn down the moment training finishes — nothing of value lives on it.
 
@@ -103,7 +103,18 @@ match on a generative task.
 Full results, the equivalence-gate table, the corpus trap that invalidated the first d8 attempt,
 and the five latent bugs found by actually running the pipeline: **[STAGE2.md](STAGE2.md)**.
 
-**Stage 3** (cloud d24) not started. See [TECH_PLAN.md](TECH_PLAN.md) for gate-by-gate detail.
+**Stage 3** — the distributed path is validated and the run is scripted, not started.
+A ~$3 rehearsal on 4×5090 exercised everything Stage 2 could not (all of it was single-GPU):
+`DistMuonAdamW` matches the verified single-process optimizer to **2.98e-08**, per-rank
+checkpoint shards work, and a full d8 at `world_size=4` landed **val_bpb 0.9307 vs the
+oracle's 0.9376**. It also found two multi-GPU bugs invisible at ws=1 — a `prune_checkpoints`
+race that leaked optimizer shards, and MFU reading `world_size`× too high.
+
+**[STAGE3.md](STAGE3.md) is the runbook**: a step-by-step d24 procedure with an expected
+output and a STOP-IF at every phase, a pre-flight checklist where each line exists because
+something went wrong once, and the eight operational mistakes from the rehearsal.
+
+See [TECH_PLAN.md](TECH_PLAN.md) for gate-by-gate detail.
 
 ## License
 

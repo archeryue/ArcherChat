@@ -1,55 +1,62 @@
 #!/usr/bin/env bash
-# Bootstrap a fresh multi-GPU pod for ArcherChat DDP validation.
+# Bootstrap a rented multi-GPU box for ArcherChat. Runs ON THE BOX, on the meter.
 #
-# Everything here runs ON THE POD, on the meter — so it does exactly one thing per line
-# and nothing interactive. Run it once, then drive the gates by hand.
+#   BRANCH=main SHARDS=170 bash stage3_pod_bootstrap.sh
 #
-#   BRANCH=claude/stage2-verification-d8-d12 SHARDS=20 bash stage3_pod_bootstrap.sh
-#
-# Expects (rsync these in FIRST, they are small):
+# Ship these in FIRST (see STAGE3.md step 2) — they are small and must not be regenerated:
 #   ~/.cache/nanochat/tokenizer/{tokenizer.pkl,token_bytes.pt}   540 KB
-#   .env with ENDLEX_URL / ENDLEX_TOKEN                          (optional)
+#   ~/ArcherChat/.env  (ENDLEX_URL / ENDLEX_TOKEN)               <1 KB
+#
+# Deliberately does NOT run `uv sync --extra gpu`. On a rented box that re-downloads
+# ~3 GB of torch + CUDA libs from PyPI, which measured 1 MB/s on RunPod and burned 14
+# minutes of a 30 minute budget. These images ship a working CUDA torch; we inherit it.
 set -euo pipefail
 
-BRANCH="${BRANCH:-claude/stage2-verification-d8-d12}"
-SHARDS="${SHARDS:-10}"          # 10 == exactly what runs/d8_local.sh used, so a fresh pod
-                                # reproduces the d8 ORACLE CORPUS with no pinning needed
-                                # (d12 would need ~20; d24 ~170)
+BRANCH="${BRANCH:-main}"
+SHARDS="${SHARDS:-170}"        # d24 @ ratio 8 = 5.84B tokens; cropping reads ~9B => ~170
 BASE="$HOME/.cache/nanochat"
+VENV="${VENV:-/root/av}"
 
-echo "=== 1. repo ==="
-[ -d ~/ArcherChat ] || git clone -b "$BRANCH" https://github.com/archeryue/ArcherChat.git ~/ArcherChat
-cd ~/ArcherChat && git checkout "$BRANCH" && git pull --ff-only
+say() { echo; echo "=== $* ==="; }
 
-echo "=== 2. python env ==="
-command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh
-export PATH="$HOME/.local/bin:$PATH"
-uv sync --extra gpu
-
-echo "=== 3. dataset ==="
-# ArcherChat has no dataset downloader of its own — dataloader._artifact_dir() only LOOKS
-# for base_data_climbmix under ~/.cache/{archerchat,nanochat}. nanochat owns the fetcher,
-# so we borrow it and write into the directory ArcherChat already falls back to.
-mkdir -p "$BASE"
-[ -d ~/nanochat ] || git clone https://github.com/karpathy/nanochat.git ~/nanochat
-cd ~/nanochat
-NANOCHAT_BASE_DIR="$BASE" uv run python -m nanochat.dataset -n "$SHARDS"
-
-echo "=== 4. sanity ==="
-cd ~/ArcherChat
-ls "$BASE/tokenizer" || { echo "!! tokenizer missing — rsync it before running"; exit 1; }
+say "0. what the image already has"
+python3 -c "import torch;print('torch',torch.__version__,'| cuda',torch.version.cuda,'| gpus',torch.cuda.device_count())"
 nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader
-.venv/bin/python -c "
+df -h / | tail -1
+
+say "1. repo"
+[ -d ~/ArcherChat ] || git clone -b "$BRANCH" https://github.com/archeryue/ArcherChat.git ~/ArcherChat
+cd ~/ArcherChat && git fetch -q origin && git checkout -q "$BRANCH" && git pull -q --ff-only
+
+say "2. venv that INHERITS the preinstalled torch (downloads no torch)"
+# --system-site-packages: we get the image's torch/CUDA; only the small pure-python deps
+# are fetched. Also sidesteps PEP 668, which blocks `pip install` into the system python.
+[ -x "$VENV/bin/python" ] || python3 -m venv --system-site-packages "$VENV"
+"$VENV/bin/pip" install -q --no-cache-dir filelock tiktoken pyarrow python-dotenv
+"$VENV/bin/pip" install -q --no-cache-dir "endlex @ git+https://github.com/archeryue/Endlex"
+"$VENV/bin/python" -c "import torch;print('venv torch',torch.__version__,'gpus',torch.cuda.device_count())"
+# NOTE: $VENV/bin/torchrun does NOT exist -- console scripts are not inherited, only
+# packages. Launch with: $VENV/bin/python -m torch.distributed.run
+
+say "3. dataset"
+# ArcherChat has no downloader of its own: dataloader._artifact_dir() only LOOKS under
+# ~/.cache/{archerchat,nanochat}. nanochat owns the fetcher, so borrow it and write into
+# the directory ArcherChat already falls back to. HF runs ~18 MB/s; this is not the bottleneck.
+mkdir -p "$BASE"
+[ -d ~/nanochat ] || git clone -q https://github.com/karpathy/nanochat.git ~/nanochat
+if [ "$(ls "$BASE/base_data_climbmix" 2>/dev/null | wc -l)" -lt "$SHARDS" ]; then
+  (cd ~/nanochat && NANOCHAT_BASE_DIR="$BASE" "$VENV/bin/python" -m nanochat.dataset -n "$SHARDS")
+fi
+
+say "4. pre-flight assertions"
+cd ~/ArcherChat
+[ -f "$BASE/tokenizer/tokenizer.pkl" ] || { echo "!! tokenizer missing -- rsync it, do NOT retrain"; exit 1; }
+[ -f .env ] || echo "!! WARNING: no .env -- Endlex will run offline, you will be blind to progress"
+PYTHONPATH=~/ArcherChat "$VENV/bin/python" - <<'PY'
 from archerchat.dataloader import list_parquet_files, get_tokenizer
-tr, va = list_parquet_files('train'), list_parquet_files('val')
-print(f'train shards: {len(tr)}   val: {[p.split(\"/\")[-1] for p in va]}')
-t = get_tokenizer(); print('tokenizer vocab:', t.get_vocab_size())
-"
-echo
-echo "ready. next:"
-echo "  .venv/bin/python scripts/oracle_ddp_check.py --world-size 8     # gate 1, ~2 min"
-echo "  torchrun --standalone --nproc_per_node=8 scripts/base_train.py \\"
-echo "     --depth 8 --window-pattern L --device-batch-size 16 \\"
-echo "     --eval-every 200 --eval-tokens 4194304 --checkpoint-every 1920 \\"
-echo "     --ckpt-dir \$HOME/.cache/nanochat/base_checkpoints/d8_ddp --run archerchat-d8-ddp"
-echo "     # target: val_bpb 0.9376 (oracle) / 0.9449 (our single-GPU v3), band +/-0.01"
+tr, va = list_parquet_files("train"), list_parquet_files("val")
+print(f"train shards: {len(tr)}   val: {[p.split('/')[-1] for p in va]}")
+print("tokenizer vocab:", get_tokenizer().get_vocab_size())
+PY
+
+say "READY -- next: the DDP gates, then d24. See STAGE3.md."
