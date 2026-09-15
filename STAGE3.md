@@ -257,9 +257,21 @@ Also run the sliding-window gate — d24 uses `SSSL`, which no run before Stage 
 ssh $POD "cd $A && PYTHONPATH=$A $V/bin/python scripts/oracle_window_check.py --patterns L,SSSL"
 ```
 
+And — **this one only means anything on Hopper** — hold the FA3 kernel accountable to the
+SDPA path we proved bit-identical to nanochat:
+
+```bash
+ssh $POD "cd $A && PYTHONPATH=$A $V/bin/python scripts/oracle_attn_backend_check.py --patterns L,SSSL"
+```
+
 Expected: three × `DDP-EQUIVALENCE: PASS ✅ ... max|Δ| ~3e-08`, then
-`SLIDING-WINDOW EQUIVALENCE: PASS ✅`. Re-run the window gate **after** flash-attn is wired —
-that is the check that the real kernel agrees with the SDPA shim validated locally.
+`SLIDING-WINDOW EQUIVALENCE: PASS ✅`, then `FA3-vs-SDPA AGREEMENT: PASS ✅`.
+
+> **STOP IF** FA3 disagrees. We do not own the FA3 kernel and cannot change it — but we do
+> own a reference that is proven correct, so a disagreement means *our wiring* is wrong,
+> most likely the `(q, k, v, k_cache, v_cache)` → `(q, k_cache, v_cache, k=, v=)`
+> re-ordering. That mis-order does not raise; it computes garbage, trains happily, and
+> converges somewhere else.
 
 > **STOP IF** any gate exceeds 1e-5. That is `DistMuonAdamW` mis-sharding, and every
 > subsequent number would be garbage. Debugging here costs minutes; debugging it inside a
