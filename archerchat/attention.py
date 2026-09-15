@@ -268,6 +268,9 @@ class FlashAttnCompat:
 # the wrong tensors, trains happily, and converges somewhere else.
 
 
+FA3_REPO = "kernels-community/flash-attn3"
+
+
 def _load_fa3():
     """FA3 kernels are compiled for Hopper (sm90) ONLY.
 
@@ -282,12 +285,27 @@ def _load_fa3():
     if major != 9:
         return None, f"sm{major}{minor} is not Hopper (FA3 is sm90-only)"
     try:
-        import os
         os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
         from kernels import get_kernel
-        return get_kernel("varunneal/flash-attention-3").flash_attn_interface, "fa3 (hf kernels)"
+        # Repo MUST be one registered in HF's kernel registry (/api/kernels/...).
+        # nanochat uses "varunneal/flash-attention-3", which is a plain MODEL repo and is
+        # NOT registered: kernels>=0.17 then 404s on /api/kernels/... no matter what auth
+        # or revision you pass. Verified by probing the endpoint directly:
+        #     /api/kernels/kernels-community/flash-attn3   -> 200
+        #     /api/kernels/varunneal/flash-attention-3     -> 404
+        # An HF_TOKEN is also required (without one the same call 401s before it can 404).
+        # Order matters: on torch 2.9.1+cu128, version=1 / revision=main resolve to a
+        # cu128 build while version=2 resolves to cu126. Prefer the exact CUDA match.
+        for kwargs in ({"version": 1}, {"revision": "main"}, {"version": 2}):
+            try:
+                mod = get_kernel(FA3_REPO, **kwargs)
+                fa = getattr(mod, "flash_attn_interface", mod)
+                return fa, f"fa3 ({FA3_REPO} {kwargs})"
+            except Exception:
+                continue
+        raise RuntimeError(f"no loadable version of {FA3_REPO}")
     except Exception as e:
-        first = f"hf kernels unavailable ({type(e).__name__})"
+        first = f"hf kernels unavailable ({type(e).__name__}: {str(e)[:60]})"
     try:
         import flash_attn
         return flash_attn, "fa3 (pip flash_attn)"
