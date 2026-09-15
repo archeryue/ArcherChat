@@ -1,5 +1,25 @@
 # Stage 3 — d24 on 8×H100: runbook and pre-flight
 
+> **Starting fresh? Read this box, then jump to [Step-by-step](#step-by-step-d24-on-8h100).**
+>
+> **Goal:** train ArcherChat d24 on 8×H100 and clear GPT-2's CORE threshold of **0.2565**.
+> **Measured cost: ~2.3 h, ~$74** at $31.92/hr. Budget ~$100.
+>
+> **State:** everything is pre-flighted. Stage 2 is verified at d8 and d12 (see
+> [STAGE2.md](STAGE2.md)); the DDP path is validated; FA3 is confirmed working on real
+> Hopper; d24 has been built, trained for 22 steps, and measured at **50.2% MFU**.
+> Nothing below is an estimate unless it says so.
+>
+> **The five things that will bite you**, each of which cost real money to learn:
+> 1. **`kernels==0.11.7` is pinned. Do not loosen it.** ≥0.17 silently disables FA3 → ~34% slower, no error.
+> 2. **Capacity vanishes in minutes.** Never check-then-launch; use the retry loop in Phase 1.3.
+> 3. **Health-check with `get_device_capability()`**, never `device_count()` — the latter reports healthy on a dead machine.
+> 4. **`python -m torch.distributed.run`, not `torchrun`** (absent from a `--system-site-packages` venv), and **put `--` before the script args** (argparse eats `--run`).
+> 5. **Terminating is not instant.** Confirm the instance list is empty; "terminating" is still billing.
+>
+> **Prereqs on the local box:** `~/.ssh/id_rsa`, a Lambda API key, `~/.cache/nanochat/{tokenizer,eval_bundle}`, and the nanochat checkout at `~/nanochat` (the oracle — consult it for *tooling* questions too, not just numbers; that lesson cost a rented H100).
+
+
 Stage 3 rents expensive hardware, so everything here exists to keep discovery off the
 meter. It is written from a **4×5090 rehearsal on RunPod** that cost ~$3 and found five
 things that would each have cost far more at $25/hr.
@@ -315,27 +335,96 @@ attention  sdpa (sm120 is not Hopper ...)             <- what you get anywhere e
 
 ### Phase 1 — provision (~5 min)
 
-**1.1** 8×H100 **SXM** (not PCIe — NVLink makes comms 0.9% of step time instead of 21%),
-**80 GB** per GPU, and **≥ 500 GB disk**: d24 checkpoints are ~10 GB and DDP writes one
-optimizer shard *per rank*.
+Needs a Lambda API key: `export LK=<lambda api key>`. All calls are HTTP Basic with the key
+as the username.
 
-**1.2** Authorise your key, then:
-
-```bash
-ssh $POD 'nvidia-smi --query-gpu=name,memory.total --format=csv,noheader; df -h /; \
-          python3 -c "import torch;print(torch.__version__, torch.cuda.device_count())"'
-```
-
-> **STOP IF** fewer than 8 GPUs, < 400 GB free, or no preinstalled torch.
-
-**1.3 Watchdog before workload.** Never let your session's liveness be the only thing
-between you and a running meter:
+**1.1 Register your SSH key (once).**
 
 ```bash
-ssh $POD 'nohup sh -c "sleep 28800; shutdown -h now" >/dev/null 2>&1 &'   # hard 8h cap
+curl -s -u "$LK:" -H "Content-Type: application/json" \
+  -d "$(python3 -c "import json;print(json.dumps({'name':'archerchat-agent','public_key':open('$HOME/.ssh/id_rsa.pub').read().strip()}))")" \
+  https://cloud.lambdalabs.com/api/v1/ssh-keys
 ```
 
----
+**1.2 Check capacity — but do not trust it.**
+
+```bash
+curl -s -u "$LK:" https://cloud.lambdalabs.com/api/v1/instance-types | python3 -c "
+import json,sys
+d=json.load(sys.stdin)['data']
+for n,i in sorted(d.items()):
+    if 'h100' in n:
+        r=[x['name'] for x in i.get('regions_with_capacity_available',[])]
+        print(f\"{n:<24} \${i['instance_type']['price_cents_per_hour']/100:>6.2f}/hr  {', '.join(r) or '— none —'}\")"
+```
+
+⚠️ **Capacity vanishes within minutes.** `gpu_8x_h100_sxm5` appeared and disappeared twice
+in one night, and three separate check-then-launch attempts lost the race. **Do not check
+then launch — loop.**
+
+**1.3 Retry-launch loop** (this is how the 2×H100 was finally obtained, on attempt ~8):
+
+```bash
+for i in $(seq 1 240); do                      # ~1 h of polling
+  for REGION in us-south-2 us-south-3 us-southeast-1 us-east-1 us-west-1; do
+    R=$(curl -s -u "$LK:" -H "Content-Type: application/json" \
+      -d "{\"region_name\":\"$REGION\",\"instance_type_name\":\"gpu_8x_h100_sxm5\",
+           \"ssh_key_names\":[\"archerchat-agent\"],\"quantity\":1,\"name\":\"archer-d24\"}" \
+      https://cloud.lambdalabs.com/api/v1/instance-operations/launch)
+    ID=$(echo "$R" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d['data']['instance_ids'][0] if 'data' in d else '')")
+    [ -n "$ID" ] && { echo "GOT $ID in $REGION"; echo "$ID" > /tmp/_inst; break 2; }
+  done
+  sleep 15
+done
+```
+
+**1.4 Wait for `active`, get the IP.**
+
+```bash
+ID=$(cat /tmp/_inst)
+for i in $(seq 1 30); do
+  IP=$(curl -s -u "$LK:" https://cloud.lambdalabs.com/api/v1/instances/$ID \
+     | python3 -c "import json,sys;d=json.load(sys.stdin)['data'];print(d.get('ip') or '' if d['status']=='active' else '')")
+  [ -n "$IP" ] && break; sleep 10
+done; echo "IP=$IP"
+```
+
+**1.5 CUDA HEALTH CHECK — do this before anything else.** On a good machine it answers in
+~5 seconds; on a bad one it never will. **Terminate immediately rather than debugging** —
+20 minutes was wasted on a defective box that a 5-second check would have condemned.
+
+```bash
+ssh -i ~/.ssh/id_rsa ubuntu@$IP \
+  'python3 -c "import torch;print(torch.cuda.get_device_capability(0))"'
+# expect: (9, 0)
+```
+
+> ⚠️ **NOT `torch.cuda.device_count()`** — it returns 2 on a machine whose CUDA is dead,
+> because it does not trigger a full init. It reported "healthy" twice on a broken box.
+>
+> **STOP IF** this errors with `802 system not yet initialized` → terminate (1.6) and
+> relaunch. See the CUDA-802 section below; on a *sliced* instance the fabric may never
+> initialise. A full 8×GPU node owns its NVSwitches and should not hit this.
+
+**1.6 Terminate (use this any time, and at the end).**
+
+```bash
+curl -s -u "$LK:" -H "Content-Type: application/json" -d "{\"instance_ids\":[\"$ID\"]}" \
+  https://cloud.lambdalabs.com/api/v1/instance-operations/terminate
+# then CONFIRM — 'terminating' is not 'gone':
+curl -s -u "$LK:" https://cloud.lambdalabs.com/api/v1/instances | python3 -c "
+import json,sys;d=json.load(sys.stdin).get('data',[]);print('CLEAR — \$0/hr' if not d else d)"
+```
+
+**1.7 Watchdog before workload.** Never let session liveness be the only thing between you
+and a running meter:
+
+```bash
+ssh -i ~/.ssh/id_rsa ubuntu@$IP 'nohup sh -c "sleep 14400; sudo shutdown -h now" >/dev/null 2>&1 &'
+```
+
+Instance requirements: **8×H100 SXM** (not PCIe — NVLink keeps comms at ~0.9% of step
+time), 80 GB/GPU, **≥400 GB disk** (see the disk note in the checklist).
 
 ### Phase 2 — ship artifacts (~2 min)
 
@@ -406,7 +495,7 @@ gives plain remainder. At ws=8 this covers d24's own `K=12 → 1+4` split.
 
 ---
 
-### Phase 5 — d24 pretrain (~2.5–4.4 h)
+### Phase 5 — d24 pretrain (~2 h measured; budget 3 h)
 
 **5.1 Launch.** Note the `--` separator: `--run` is a prefix of the launcher's `--run-path`
 and argparse will refuse it otherwise.
